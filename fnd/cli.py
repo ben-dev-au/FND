@@ -77,7 +77,27 @@ def _rewrite_default_command(argv: list[str]) -> list[str]:
 
 def main() -> None:
     """Console-script entry point: rewrite argv, then dispatch to Typer."""
+    _migrate_config()
     app(args=_rewrite_default_command(sys.argv[1:]))
+
+
+def _migrate_config() -> None:
+    """Bring the config file up to the current shape once, before anything
+    reads it. A failure here must not stop the app starting — the config is
+    still loadable in its old shape, and the recovery screen handles the rest.
+    """
+    from fnd.config import ensure_current
+    from fnd.config_migrations import ConfigTooNewError
+
+    try:
+        applied = ensure_current()
+    except ConfigTooNewError as e:
+        typer.echo(f"fnd: {e}", err=True)
+        raise SystemExit(1) from e
+    except Exception:
+        return
+    for step in applied:
+        typer.echo(f"fnd: config updated — {step.lower()}", err=True)
 
 
 # ── Top-level commands ────────────────────────────────────────────────────
@@ -490,7 +510,7 @@ def config_path() -> None:
 @config_app.command("edit")
 def config_edit() -> None:
     """Open the config TOML in $EDITOR; create from template if missing."""
-    from fnd.config import CONFIG_TEMPLATE, app_data_dir, default_config_path
+    from fnd.config import app_data_dir, default_config_path, starter_config
 
     path = default_config_path()
     if not path.exists():
@@ -500,7 +520,7 @@ def config_edit() -> None:
             # Fallback path was returned; create primary instead.
             path = app_data_dir() / "config.toml"
             path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+        path.write_text(starter_config(), encoding="utf-8")
         typer.echo(f"wrote starter template to {path}")
 
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"

@@ -2117,15 +2117,15 @@ class FNDApp(App[None]):
         import subprocess
 
         from fnd.config import (
-            CONFIG_TEMPLATE,
             default_config_path,
             load,
+            starter_config,
         )
 
         path = default_config_path()
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+            path.write_text(starter_config(), encoding="utf-8")
         # Close any settings screens so the editor takes over the terminal
         # cleanly; otherwise Textual's screen_stack restoration can flash a
         # half-painted menu over the freshly-loaded TUI.

@@ -94,7 +94,7 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
     Three keyed actions:
       1 / e   Open the file in ``$EDITOR``; re-validate on return.
       2 / r   Reset to defaults (current file is renamed to a timestamped
-              backup; a fresh ``CONFIG_TEMPLATE`` is written in its place).
+              backup; a fresh starter config is written in its place).
       3 / q   Dismiss (back to caller). At TUI startup the standalone
               :class:`ConfigRecoveryApp` exits the process; in-session
               the main app stays open and the user lands back where they
@@ -161,9 +161,9 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
         editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
         self._config_path.parent.mkdir(parents=True, exist_ok=True)
         if not self._config_path.exists():
-            from fnd.config import CONFIG_TEMPLATE
+            from fnd.config import starter_config
 
-            self._config_path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+            self._config_path.write_text(starter_config(), encoding="utf-8")
         with self.app.suspend():
             subprocess.call([editor, str(self._config_path)])
         try:
@@ -184,14 +184,14 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
     def _on_reset_confirmed(self, confirmed: bool | None) -> None:
         if not confirmed:
             return
-        from fnd.config import CONFIG_TEMPLATE, load
+        from fnd.config import load, starter_config
 
         backup = _backup_name(self._config_path)
         try:
             if self._config_path.exists():
                 self._config_path.rename(backup)
             self._config_path.parent.mkdir(parents=True, exist_ok=True)
-            self._config_path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+            self._config_path.write_text(starter_config(), encoding="utf-8")
             load(self._config_path)
         except Exception as e:
             self._error_text = f"Reset failed: {e}"

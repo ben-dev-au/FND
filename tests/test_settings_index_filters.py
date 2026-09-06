@@ -368,12 +368,12 @@ async def test_clearing_the_default_tags_does_not_reinstate_them(
 ) -> None:
     """Deleting the key lets ``DefaultFilters``' own default resurrect, so
     "clear all" handed back an exclusion the user had just removed."""
-    from fnd.config import CONFIG_TEMPLATE, load
+    from fnd.config import load, starter_config
     from fnd.tui.menu import _open_filter_browser
     from fnd.tui.settings_screen import FilterBrowserScreen
 
     cfg_path = tmp_path / "config.toml"
-    cfg_path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+    cfg_path.write_text(starter_config(), encoding="utf-8")
     monkeypatch.setattr("fnd.config.default_config_path", lambda: cfg_path)
 
     app = FNDApp(index_dir=built_index, config=load(cfg_path))
