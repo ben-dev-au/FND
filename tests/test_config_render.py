@@ -5,7 +5,9 @@ from __future__ import annotations
 import datetime as dt
 import inspect
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
@@ -70,7 +72,7 @@ def _maximal() -> conf.Config:
     A sample that sets only the fields the renderer happens to handle proves
     nothing; this one fails the moment a field is added and not rendered.
     """
-    filters = {
+    filters: dict[str, Any] = {
         "respect_gitignore": False,
         "respect_fndignore": False,
         "include_tags": ["keep"],
@@ -388,7 +390,9 @@ class TestWritersStayCanonical:
             lambda p: conf.delete_collection(config_path=p, name="notes"),
         ],
     )
-    def test_every_writer_leaves_the_file_in_canonical_form(self, write, tmp_path: Path) -> None:
+    def test_every_writer_leaves_the_file_in_canonical_form(
+        self, write: Callable[[Path], object], tmp_path: Path
+    ) -> None:
         path = tmp_path / "config.toml"
         path.write_text(render_config(_sample(), preserved="# kept"), encoding="utf-8")
         write(path)
