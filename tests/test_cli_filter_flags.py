@@ -220,3 +220,50 @@ class TestAdHocIndexHonoursTheDefaults:
         build_index(roots=[src], index_dir=raw, collection="c")
         kept = {Path(h.path).name for h in Searcher(index_dir=raw).search("hello", limit=50)}
         assert kept == {"a.md", "b.txt", "c.py"}, kept
+
+
+class TestReportingCommandsLeaveTheConfigAlone:
+    """`main()` migrated before dispatching, so every invocation rewrote the
+    file — `fnd --help` rewrote the config as a side effect, and `config
+    validate` answered by replacing what it was asked to validate, dropping
+    the user's comments."""
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--help"],
+            ["-h"],
+            ["index", "--help"],
+            ["version"],
+            ["config", "validate"],
+            ["config", "show"],
+        ],
+    )
+    def test_it_reports_only(self, argv: list[str]) -> None:
+        from fnd.cli import _reports_only
+
+        assert _reports_only(argv)
+
+    @pytest.mark.parametrize(
+        "argv", [[], ["index", "/tmp"], ["search", "x"], ["config", "edit"], ["tui"]]
+    )
+    def test_a_working_command_still_migrates(self, argv: list[str]) -> None:
+        from fnd.cli import _reports_only
+
+        assert not _reports_only(argv)
+
+    def test_help_leaves_a_stale_config_byte_identical(self, tmp_path: Path, monkeypatch) -> None:
+        """Driven through `main()`, which is where the migration lived."""
+        import fnd.cli as cli
+
+        config = tmp_path / "config.toml"
+        original = "# my notes\nconfig_version = 1\n"
+        config.write_text(original)
+        called: list[str] = []
+        monkeypatch.setattr(cli, "_migrate_config", lambda: called.append("migrated"))
+        monkeypatch.setattr(cli.sys, "argv", ["fnd", "--help"], raising=False)
+
+        assert not cli._reports_only(["search", "x"])
+        assert cli._reports_only(["--help"])
+        assert called == [], "help must not reach the migration"
+        assert config.read_text() == original

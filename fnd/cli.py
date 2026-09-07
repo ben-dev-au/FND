@@ -75,11 +75,27 @@ def _rewrite_default_command(argv: list[str]) -> list[str]:
     return ["tui", *argv]
 
 
+#: Invocations that only report. Migrating on these rewrote the file the user
+#: was asking about — `fnd --help` rewrote the config as a side effect, and
+#: `config validate` answered by replacing what it was validating.
+_REPORT_ONLY = frozenset({"--help", "-h", "--version", "--show-completion"})
+
+
+def _reports_only(argv: list[str]) -> bool:
+    """Whether this invocation must leave the config file alone."""
+    if any(arg in _REPORT_ONLY for arg in argv):
+        return True
+    return argv[:1] == ["version"] or argv[:2] in (["config", "validate"], ["config", "show"])
+
+
 def main() -> None:
     """Console-script entry point: rewrite argv, then dispatch to Typer."""
+    import sys
+
     from pydantic import ValidationError
 
-    _migrate_config()
+    if not _reports_only(sys.argv[1:]):
+        _migrate_config()
     try:
         app(args=_rewrite_default_command(sys.argv[1:]))
     except ValidationError as e:
