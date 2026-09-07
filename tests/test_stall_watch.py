@@ -198,3 +198,27 @@ def test_the_sample_key_survives_windows_path_separators() -> None:
 
     # Frames outside our code are dropped on both, so the key stays readable.
     assert stack_key(_stack((r"C:\Python\Lib\asyncio\events.py", "_run"))) == ""
+
+
+@pytest.mark.asyncio
+async def test_a_blocked_loop_that_burns_nothing_reports_almost_no_cpu() -> None:
+    """The other half of the figure: without this, replacing StallWatch's
+    process_time with perf_counter leaves the whole file green."""
+    app = _FakeApp()
+    watch = StallWatch(app, threshold_ms=150)  # type: ignore[arg-type]
+    watch.start()
+    await asyncio.sleep(0.1)
+    # time.sleep, not asyncio.sleep: `late` measures loop lateness, so a
+    # non-blocking sleep yields to the watch and never trips the threshold.
+    time.sleep(0.45)
+    await asyncio.sleep(0.15)
+    watch.stop()
+
+    stalls = [line for line in app.lines if line.startswith("STALL")]
+    assert stalls, f"a 450ms blocked loop went unreported: {app.lines}"
+    cpu_ms = float(stalls[0].split("cpu=", 1)[1].split("ms", 1)[0])
+    # An upper bound, so contention can only push the figure further under it.
+    assert cpu_ms < 50, (
+        f"a loop that slept for 450ms reported {cpu_ms}ms of CPU — the figure "
+        f"cannot separate a blocked loop from real work: {stalls[0]}"
+    )
