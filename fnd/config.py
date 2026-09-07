@@ -1037,7 +1037,9 @@ def _refuse_lossy(rendered: str, expected: Config, source: dict[str, Any] | None
         ]
         raise ValueError(f"refusing to write a config that does not round-trip: {differing}")
     if source is not None:
-        dropped = sorted(set(source) - set(raw))
+        # Only a table that held something: an emptied `[collections]` renders
+        # as nothing, and deleting the last collection is a legitimate write.
+        dropped = sorted(k for k in set(source) - set(raw) if source[k])
         if dropped:
             # The models ignore what they do not know, so a hand-added table
             # would round-trip as equal and vanish from the file.

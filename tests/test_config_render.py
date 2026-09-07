@@ -400,6 +400,12 @@ class TestPreservedBlock:
         text = f"{PRESERVE_BEGIN}\n# mine\n[defaults]\nresult_limit = 9\n{PRESERVE_END}"
         assert extract_preserved(text) == "# mine"
 
+    def test_a_missing_end_marker_stops_at_the_generated_prose(self) -> None:
+        """Running to end of file swallowed fnd's own comments, which were then
+        preserved forever: 206 lines became 392 and grew on every write."""
+        text = f"{PRESERVE_BEGIN}\n# mine\n\n# ── Defaults ──\n\nresult_limit = 5\n# after\n"
+        assert extract_preserved(text) == "# mine\n\n# ── Defaults ──"
+
     def test_a_missing_end_marker_keeps_the_block(self) -> None:
         """Returning nothing deleted whatever the user had written."""
         assert extract_preserved(f"{PRESERVE_BEGIN}\n# kept\n") == "# kept"
@@ -501,6 +507,15 @@ class TestMigration:
             }
         )
         assert "frontmatter_filter" in render_config(config)
+
+    def test_deleting_the_last_collection_is_allowed(self, tmp_path: Path) -> None:
+        """An emptied table renders as nothing, which the drop guard read as
+        losing it. Deleting your only collection then failed with no handler."""
+        path = tmp_path / "config.toml"
+        path.write_text('[[collections.only.sources]]\npath = "~/N"\n', encoding="utf-8")
+        conf.ensure_current(path)
+        conf.delete_collection(config_path=path, name="only")
+        assert conf.load(path).collections == {}
 
     def test_ensure_current_is_a_no_op_on_a_current_file(self, tmp_path: Path) -> None:
         path = tmp_path / "config.toml"

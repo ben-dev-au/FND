@@ -129,8 +129,9 @@ REMOVES: dict[str, tuple[Any, str | None]] = {
 
 
 def _walked(root: Path, filters: DefaultFilters, source: SourceFilters | None = None) -> set[str]:
-    """Through the same seam the app uses: Config resolves the source's filters
-    against the defaults and stamps the result onto the source."""
+    """Stamps the resolved filters the way Config does. This covers
+    `resolve_filters` and the walk; that Config performs the stamping is
+    covered by TestConfigStampsResolvedFilters below."""
     src = SourceConfig(path=root, filters=source)
     src._resolved_filters = resolve_filters(source, filters)
     return {p.name for p in walk_sources(sources=[src])}
@@ -310,3 +311,29 @@ class TestDateFieldsFilter:
         after = _walked(tmp_path, wide, SourceFilters.model_validate({field: value}))
         assert removed not in after, f"source {field} did not remove {removed}"
         assert "keep.md" in after
+
+
+class TestConfigStampsResolvedFilters:
+    """`_walked` stamps `_resolved_filters` itself, so on its own it would not
+    notice Config failing to. The walk reads only what Config stamped."""
+
+    def test_loading_resolves_each_source_against_the_defaults(self, tmp_path: Path) -> None:
+        from fnd.config import Config
+
+        config = Config.model_validate(
+            {
+                "defaults": {"filters": {"kinds": ["md"], "max_size": 10}},
+                "collections": {
+                    "c": {
+                        "sources": [
+                            {"path": str(tmp_path), "filters": {"max_size": 99}},
+                            {"path": str(tmp_path)},
+                        ]
+                    }
+                },
+            }
+        )
+        overridden, inherited = config.collections["c"].sources
+        assert overridden.effective_filters.max_size == 99
+        assert overridden.effective_filters.kinds == ["md"], "defaults were not merged in"
+        assert inherited.effective_filters.max_size == 10

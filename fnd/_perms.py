@@ -23,6 +23,7 @@ owner, which provides the equivalent protection."""
 from __future__ import annotations
 
 import contextlib
+import itertools
 import os
 from pathlib import Path
 
@@ -63,6 +64,10 @@ def secure_mkdir(path: Path, *, anchor: Path | None = None) -> Path:
     return path
 
 
+#: Distinguishes concurrent writers inside one process.
+_TMP_SEQ = itertools.count()
+
+
 def secure_write_text(path: Path, text: str, *, atomic: bool = False) -> None:
     """Write ``text`` to ``path`` as UTF-8 with 0o600 perms.
 
@@ -71,12 +76,20 @@ def secure_write_text(path: Path, text: str, *, atomic: bool = False) -> None:
     """
     path = path.expanduser()
     if atomic:
-        # Per-process name: a fixed ".tmp" is shared, so two writers race and
-        # the loser's os.replace hits a path the winner already renamed.
-        tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")
-        tmp.write_text(text, encoding="utf-8")
-        _chmod_quiet(tmp, 0o600)
-        os.replace(tmp, path)
+        # A unique sibling: a fixed ".tmp" is shared, so two writers race and
+        # the loser's os.replace hits a path the winner already renamed. The
+        # name carries pid and a counter, which covers threads in one process
+        # as well as separate processes.
+        tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.{next(_TMP_SEQ)}.tmp")
+        try:
+            tmp.write_text(text, encoding="utf-8")
+            _chmod_quiet(tmp, 0o600)
+            os.replace(tmp, path)
+        except BaseException:
+            # Leaving it behind litters the config directory, and a stale one
+            # is never reused now that the name is unique.
+            tmp.unlink(missing_ok=True)
+            raise
         _chmod_quiet(path, 0o600)
     else:
         path.write_text(text, encoding="utf-8")

@@ -86,11 +86,19 @@ def extract_preserved(text: str) -> str:
     if start < 0:
         return ""
     end = text.find(PRESERVE_END, start)
-    # No end marker: the rest of the file is evidently the block. Returning
-    # nothing would delete whatever the user had written there.
-    body = (
-        text[start + len(PRESERVE_BEGIN) :] if end < 0 else text[start + len(PRESERVE_BEGIN) : end]
-    )
+    if end < 0:
+        # No end marker: take the comment run that follows and stop at the
+        # first line that is neither blank nor a comment. Running to end of
+        # file swallows the generated prose below, which is then preserved
+        # forever and grows the file on every write.
+        rest = text[start + len(PRESERVE_BEGIN) :].split("\n")
+        stop = next(
+            (i for i, ln in enumerate(rest) if ln.strip() and not ln.lstrip().startswith("#")),
+            len(rest),
+        )
+        body = "\n".join(rest[:stop])
+    else:
+        body = text[start + len(PRESERVE_BEGIN) : end]
     if body.startswith("\n"):
         body = body[1:]
     if body.endswith("\n"):
