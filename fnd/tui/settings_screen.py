@@ -2841,9 +2841,10 @@ class AddCollectionWizard(Screen[None]):
     AddCollectionWizard > #settings_box {
         height: auto;
         max-height: 90%;
-        width: auto;
-        min-width: 72;
-        max-width: 100;
+        /* Fixed, not auto: the edit bar lives inside the panel so it travels
+           with it, and an auto width jumped to max the moment it opened. */
+        width: 76;
+        max-width: 100%;
         border: round $primary 50%;
         padding: 0 1;
     }
@@ -2851,6 +2852,7 @@ class AddCollectionWizard(Screen[None]):
     AddCollectionWizard #frontmatter_sample {
         height: 6; border: round $primary 50%; padding: 0 1;
     }
+
     AddCollectionWizard #frontmatter_sample:focus { border: round $accent; }
     AddCollectionWizard .form_separator { color: $text-muted; padding: 1 0 0 0; }
     AddCollectionWizard #match_status { color: $text-muted; }
@@ -2891,7 +2893,10 @@ class AddCollectionWizard(Screen[None]):
             yield Static("(no sample)", id="match_status")
             yield Static("", id="wizard_error", classes="-hidden")
             yield DetailStrip()
-        yield EditBar()
+            # Inside the panel: this one is centred with an auto width, so a
+            # screen-docked bar painted at the far left, detached from the row
+            # it was editing.
+            yield EditBar()
         yield Static("", id="footer_hints")
 
     def _show_error(self, message: str) -> None:

@@ -501,3 +501,31 @@ async def test_save_with_missing_name_shows_inline_error(
         assert "required" in rendered
         # The widget is no longer hidden after the error fires.
         assert "-hidden" not in err.classes
+
+
+@pytest.mark.asyncio
+async def test_the_wizard_editor_stays_inside_its_panel(built_index: Path) -> None:
+    """It docked to the screen while the panel is centred, so it painted at
+    the terminal's left edge, detached from the row it was editing."""
+    from textual.widgets import Input
+
+    from fnd.tui import FNDApp
+    from fnd.tui.settings_screen import AddCollectionWizard, SettingsList
+
+    app = FNDApp(index_dir=built_index)
+    async with app.run_test(size=(94, 26)) as pilot:
+        await pilot.pause()
+        app.push_screen(AddCollectionWizard())
+        for _ in range(20):
+            await pilot.pause()
+        wizard = app.screen
+        panel = wizard.query_one("#settings_box")
+        closed_width = panel.region.width
+        wizard.query_one(SettingsList).cursor_index = 0
+        await pilot.press("enter")
+        for _ in range(8):
+            await pilot.pause()
+        editor = wizard.query_one("#editor_input", Input)
+        assert editor.has_focus
+        assert panel.region.contains_region(editor.region), "the editor left its panel"
+        assert panel.region.width == closed_width, "the panel resized as editing began"

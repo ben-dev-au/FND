@@ -181,6 +181,10 @@ class ToggleTree(Tree[dict[str, Any]]):
             it.id for g in self._by_id.values() if g.mode == "actions" for it in g.items
         }
         self._rebuild(expanded or set())
+        if self.cursor_line < 0:
+            # A tree opens with no cursor, so the first ⏎ or ↓ is spent making
+            # one and appears to do nothing.
+            self.cursor_line = 0
 
     @property
     def selected(self) -> frozenset[str]:

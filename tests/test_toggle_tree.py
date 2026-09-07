@@ -446,3 +446,15 @@ async def test_one_tag_under_two_sources_counts_once() -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         assert "1 excluded" in _labels(app.query_one("#tt", ToggleTree))["tags"]
+
+
+@pytest.mark.asyncio
+async def test_a_tree_opens_with_a_cursor() -> None:
+    """It opened with `cursor_line = -1`, so the first ⏎ or ↓ was spent making
+    a cursor and looked like a dead key."""
+    app = _Nested()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.query_one("#tt", ToggleTree)
+        assert tree.cursor_line == 0
+        assert tree.cursor_node is not None
