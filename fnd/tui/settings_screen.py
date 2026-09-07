@@ -1699,11 +1699,12 @@ class PickerScreen(Screen[None]):
     """Sub-screen for a KIND_PICKER item.
 
     Single-select: Enter writes immediately and pops. Multi-select:
-    Enter toggles ``✓``; Esc commits and pops.
+    Enter toggles ``✓``, ``^S`` commits, Esc cancels.
     """
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
+        Binding("ctrl+s", "save_close", show=False),
         Binding("enter", "activate", show=False),
         Binding("up,k", "cursor(-1)", show=False),
         Binding("down,j", "cursor(1)", show=False),
@@ -1748,13 +1749,18 @@ class PickerScreen(Screen[None]):
         else:
             self._selected = {current} if current not in (None, "") else set()
         self._render_options()
-        self.query_one("#picker_list", OptionList).focus()
+        options = self.query_one("#picker_list", OptionList)
+        options.focus()
+        if options.option_count and options.highlighted is None:
+            # Nothing is highlighted on open, so the first ⏎ selects nothing
+            # and reads as a dead key.
+            options.highlighted = 0
         self._render_footer()
 
     def _render_footer(self) -> None:
         app: FNDApp = self.app  # type: ignore[assignment]
         hints: tuple[tuple[str, str], ...] = (
-            (("⏎", "Toggle"), ("Esc", "Save"))
+            (("⏎", "Toggle"), ("^S", "Save"), ("Esc", "Cancel"))
             if self._item.multi
             else (("⏎", "Select"), ("Esc", "Cancel"))
         )
@@ -1804,6 +1810,15 @@ class PickerScreen(Screen[None]):
         return t
 
     def action_back(self) -> None:
+        """Esc cancels, on a multi picker too.
+
+        It used to commit here and cancel on the single-select row beside it —
+        one key, opposite meanings, and no way to back out of a multi picker
+        at all. `^S` saves, as on every other screen that edits something.
+        """
+        self.app.pop_screen()
+
+    def action_save_close(self) -> None:
         if self._item.multi:
             self._commit(self._selected)
         self.app.pop_screen()
@@ -2019,7 +2034,8 @@ def _includes_groups() -> list[ToggleGroup]:
 class TreePickerScreen(Screen[None]):
     """Nested category→item multi-select for a picker item that supplies a
     ``groups_provider``. Reuses the shared :class:`ToggleTree`, so it toggles,
-    cascades, and repaints exactly like the file-type filter. Esc commits."""
+    cascades, and repaints exactly like the file-type filter. Changes apply as
+    they are toggled, so Esc simply leaves."""
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape", "back", "Back", show=False),
@@ -2055,7 +2071,7 @@ class TreePickerScreen(Screen[None]):
         tree.set_model(groups, selected, expanded={g.id for g in groups})
         tree.focus()
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎/Space", "Toggle"), ("←/→", "Collapse/Expand"), ("Esc", "Save")))
+            _hint_bar(app, (("⏎/Space", "Toggle"), ("←/→", "Collapse/Expand"), ("Esc", "Done")))
         )
 
     @on(ToggleTree.SelectionChanged)

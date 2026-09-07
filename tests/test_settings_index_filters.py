@@ -955,3 +955,61 @@ class TestUnsavedFilterWork:
                 await pilot.pause()
             assert isinstance(app.screen, FilterBrowserScreen)
             assert app.screen._spec.kinds == ("md",)
+
+
+class TestEscMeansOneThing:
+    """It committed on a multi-select picker and cancelled on the single-select
+    row beside it — one key, opposite meanings, and no way to back out of a
+    multi picker at all."""
+
+    @staticmethod
+    def _item(multi: bool, sink: list[Any]) -> Any:
+        from fnd.tui.menu import KIND_PICKER, ChoiceOption, MenuItem
+
+        return MenuItem(
+            id="probe",
+            label="Probe",
+            kind=KIND_PICKER,
+            multi=multi,
+            choices_provider=lambda _app: [
+                ChoiceOption(value="a", label="A"),
+                ChoiceOption(value="b", label="B"),
+            ],
+            picker_getter=lambda _app: [] if multi else "",
+            picker_setter=lambda _app, v: sink.append(v),
+        )
+
+    @pytest.mark.asyncio
+    async def test_esc_discards_a_multi_selection(self, built_index: Path) -> None:
+        from fnd.tui.settings_screen import PickerScreen
+
+        sink: list[Any] = []
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.push_screen(PickerScreen(self._item(True, sink)))
+            for _ in range(12):
+                await pilot.pause()
+            await pilot.press("enter")
+            await pilot.press("escape")
+            for _ in range(8):
+                await pilot.pause()
+        assert sink == [], "Esc must not commit"
+
+    @pytest.mark.asyncio
+    async def test_ctrl_s_commits_it(self, built_index: Path) -> None:
+        from fnd.tui.settings_screen import PickerScreen
+
+        sink: list[Any] = []
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.push_screen(PickerScreen(self._item(True, sink)))
+            for _ in range(12):
+                await pilot.pause()
+            await pilot.press("enter")
+            await pilot.press("ctrl+s")
+            for _ in range(8):
+                await pilot.pause()
+        assert sink, "^S must commit"
+        assert sink[-1] == ["a"], sink
