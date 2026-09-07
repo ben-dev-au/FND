@@ -510,6 +510,7 @@ def config_path() -> None:
 @config_app.command("edit")
 def config_edit() -> None:
     """Open the config TOML in $EDITOR; create from template if missing."""
+    from fnd._perms import secure_write_text
     from fnd.config import app_data_dir, default_config_path, starter_config
 
     path = default_config_path()
@@ -520,7 +521,7 @@ def config_edit() -> None:
             # Fallback path was returned; create primary instead.
             path = app_data_dir() / "config.toml"
             path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(starter_config(), encoding="utf-8")
+        secure_write_text(path, starter_config())
         typer.echo(f"wrote starter template to {path}")
 
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"

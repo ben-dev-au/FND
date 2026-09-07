@@ -548,14 +548,12 @@ class RankingProfileConfig(_ConfigModel):
     for the proximity boost."""
 
     bm25_k1: float | None = None
-    """BM25 term-frequency saturation. Unset uses the engine default; raise
-    to reward repeated terms more, lower to flatten their effect."""
-
-    """Forward-compat; ignored, as tantivy hardcodes these."""
+    """BM25 term-frequency saturation. Accepted for forward compatibility
+    and currently ignored, as tantivy hardcodes it."""
 
     bm25_b: float | None = None
-    """BM25 length normalisation. Unset uses the engine default; 0 ignores
-    document length, 1 normalises fully."""
+    """BM25 length normalisation. Accepted for forward compatibility and
+    currently ignored, as tantivy hardcodes it."""
 
 
 class AppConfig(_ConfigModel):
@@ -956,9 +954,12 @@ def ensure_current(config_path: Path | None = None) -> list[str]:
     rendered = render_config(config, preserved=extract_preserved(text), version=version)
     if rendered == text:
         return []
+    _refuse_lossy(rendered, config, raw)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    p.with_name(f"{p.name}.bak-{stamp}").write_text(text, encoding="utf-8")
-    secure_write_text(p, rendered)
+    # The backup carries the same source paths and filter expressions as the
+    # live file, so it gets the same 0600, not whatever the umask allows.
+    secure_write_text(p.with_name(f"{p.name}.bak-{stamp}"), text)
+    secure_write_text(p, rendered, atomic=True)
     return applied or ["Adopt the canonical layout"]
 
 
@@ -966,12 +967,13 @@ def starter_config() -> str:
     """The file a fresh install gets: the canonical rendering of the defaults
     with one example collection. Generated, so it cannot drift from the models.
     """
+    from fnd.config_migrations import CONFIG_VERSION
     from fnd.config_render import render_config
 
     config = Config(
         collections={"default": CollectionConfig(sources=[SourceConfig(path=Path("~/Documents"))])}
     )
-    return render_config(config)
+    return render_config(config, version=CONFIG_VERSION)
 
 
 def _rewrite(config_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Config:
@@ -990,12 +992,45 @@ def _rewrite(config_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Con
     version, _applied = migrate(raw)
     mutate(raw)
     config = Config.model_validate(raw)
+    rendered = render_config(config, preserved=extract_preserved(text), version=version)
+    _refuse_lossy(rendered, config, raw)
     secure_mkdir(config_path.parent)
     secure_write_text(
         config_path,
-        render_config(config, preserved=extract_preserved(text), version=version),
+        rendered,
+        atomic=True,
     )
     return config
+
+
+def _refuse_lossy(rendered: str, expected: Config, source: dict[str, Any] | None = None) -> None:
+    """Refuse to publish output that does not read back as what we rendered.
+
+    Every writer replaces the whole file, so a value the renderer cannot
+    express would be silently dropped or the file left unparseable. Failing
+    the save keeps the previous config intact.
+    """
+    from fnd.config_migrations import check_version
+
+    try:
+        raw = tomllib.loads(rendered)
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"refusing to write a config that does not parse: {e}") from e
+    check_version(raw)
+    reloaded = Config.model_validate(raw)
+    if reloaded != expected:
+        differing = [
+            name
+            for name in Config.model_fields
+            if getattr(reloaded, name) != getattr(expected, name)
+        ]
+        raise ValueError(f"refusing to write a config that does not round-trip: {differing}")
+    if source is not None:
+        dropped = sorted(set(source) - set(raw))
+        if dropped:
+            # The models ignore what they do not know, so a hand-added table
+            # would round-trip as equal and vanish from the file.
+            raise ValueError(f"refusing to write a config that drops: {', '.join(dropped)}")
 
 
 def _source_mapping(source: SourceConfig) -> dict[str, Any]:

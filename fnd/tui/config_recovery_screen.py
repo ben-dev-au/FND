@@ -161,9 +161,10 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
         editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
         self._config_path.parent.mkdir(parents=True, exist_ok=True)
         if not self._config_path.exists():
+            from fnd._perms import secure_write_text
             from fnd.config import starter_config
 
-            self._config_path.write_text(starter_config(), encoding="utf-8")
+            secure_write_text(self._config_path, starter_config())
         with self.app.suspend():
             subprocess.call([editor, str(self._config_path)])
         try:
@@ -184,6 +185,7 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
     def _on_reset_confirmed(self, confirmed: bool | None) -> None:
         if not confirmed:
             return
+        from fnd._perms import secure_write_text
         from fnd.config import load, starter_config
 
         backup = _backup_name(self._config_path)
@@ -191,7 +193,7 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
             if self._config_path.exists():
                 self._config_path.rename(backup)
             self._config_path.parent.mkdir(parents=True, exist_ok=True)
-            self._config_path.write_text(starter_config(), encoding="utf-8")
+            secure_write_text(self._config_path, starter_config())
             load(self._config_path)
         except Exception as e:
             self._error_text = f"Reset failed: {e}"

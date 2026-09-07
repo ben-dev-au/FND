@@ -54,7 +54,21 @@ def test_every_commented_key_can_be_uncommented_and_still_load(tmp_path: Path) -
         cfg.write_text("\n".join([*lines[:n], body, *lines[n + 1 :]]), encoding="utf-8")
         load(cfg)  # raises if the key landed in the wrong table
         checked += 1
-    assert checked > 20, f"only {checked} commented keys exercised"
+    # Derived, not a fixed floor: a renderer that stopped emitting commented
+    # examples would still clear an arbitrary number. A field defaulting to
+    # None renders as a bare `# key =`, which is not uncommentable, so only
+    # fields with a value count. `filters` is a table, not a key.
+    from fnd.config import DefaultFilters, Defaults
+
+    def with_values(model: type) -> int:
+        return sum(
+            1
+            for name, info in model.model_fields.items()
+            if name != "filters" and info.get_default(call_default_factory=True) is not None
+        )
+
+    expected = with_values(Defaults) + with_values(DefaultFilters)
+    assert checked >= expected, f"only {checked} commented keys exercised, expected {expected}"
 
 
 def test_a_byte_size_is_written_with_digit_groups(tmp_path: Path) -> None:

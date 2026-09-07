@@ -86,10 +86,19 @@ def extract_preserved(text: str) -> str:
     if start < 0:
         return ""
     end = text.find(PRESERVE_END, start)
-    if end < 0:
-        return ""
-    body = text[start + len(PRESERVE_BEGIN) : end]
-    return body.strip("\n")
+    # No end marker: the rest of the file is evidently the block. Returning
+    # nothing would delete whatever the user had written there.
+    body = (
+        text[start + len(PRESERVE_BEGIN) :] if end < 0 else text[start + len(PRESERVE_BEGIN) : end]
+    )
+    if body.startswith("\n"):
+        body = body[1:]
+    if body.endswith("\n"):
+        body = body[:-1]
+    # Live TOML in the block is real config: it is parsed and re-rendered in
+    # its own table, so keeping the text here would declare that table twice.
+    kept = [ln for ln in body.split("\n") if not ln.strip() or ln.lstrip().startswith("#")]
+    return "\n".join(kept)
 
 
 def _live_fields(model: type[BaseModel]) -> set[str]:
@@ -136,9 +145,8 @@ def toml_value(value: Any) -> str:
     if isinstance(value, dict):
         if not value:
             return "{}"
-        return "{ " + ", ".join(f"{k} = {toml_value(v)}" for k, v in value.items()) + " }"
-    text = str(value).replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{text}"'
+        return "{ " + ", ".join(f"{key(k)} = {toml_value(v)}" for k, v in value.items()) + " }"
+    return _quoted(str(value))
 
 
 def path_value(path: Path) -> str:
@@ -153,10 +161,35 @@ def path_value(path: Path) -> str:
     return toml_value(str(path))
 
 
+_ESCAPES = {
+    "\\": "\\\\",
+    '"': '\\"',
+    "\b": "\\b",
+    "\t": "\\t",
+    "\n": "\\n",
+    "\f": "\\f",
+    "\r": "\\r",
+}
+
+
+def _quoted(text: str) -> str:
+    """A TOML basic string. A raw newline or control character would end the
+    string early and leave the file unparseable."""
+    out = []
+    for ch in text:
+        if ch in _ESCAPES:
+            out.append(_ESCAPES[ch])
+        elif ch < " " or ch == "\x7f":
+            out.append(f"\\u{ord(ch):04X}")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
+
+
 def key(name: str) -> str:
     """A table or key name as TOML: bare where it can be, quoted otherwise;
     a collection may be called "Soft Eng Textbooks"."""
-    if name and all(c.isalnum() or c in "-_" for c in name):
+    if name and all(c.isascii() and (c.isalnum() or c in "-_") for c in name):
         return name
     return toml_value(name)
 
@@ -206,19 +239,24 @@ def _model_body(model: BaseModel, names: tuple[str, ...]) -> list[str]:
 
 def _set_fields(model: BaseModel, order: tuple[str, ...] = ()) -> list[str]:
     """Only what differs from the default; repeated tables stay readable."""
+    # Declaration order, never a set: set iteration follows the hash seed, so
+    # the rendered order changed per process and ensure_current saw a diff and
+    # rewrote the file, with a backup, on every launch.
     # Deprecated fields are advertised nowhere but still written when set: a
     # missing migration must not silently delete a rule the user relies on.
-    fields = set(type(model).model_fields)
-    names = [*(n for n in order if n in fields), *(n for n in fields if n not in order)]
+    declared = list(type(model).model_fields)
+    names = [*(n for n in order if n in declared), *(n for n in declared if n not in order)]
     out: list[str] = []
     for name in names:
         value = getattr(model, name, None)
-        if isinstance(value, BaseModel) or value in (None, [], (), {}):
+        # `None` is absent; an explicit `[]` is an override to nothing, which
+        # `SourceFilters` uses to opt a source out of an inherited rule.
+        if value is None or isinstance(value, BaseModel):
             continue
         # Nested models get their own tables, emitted by the caller.
-        if isinstance(value, (list, tuple)) and isinstance(value[0], BaseModel):
+        if isinstance(value, (list, tuple)) and value and isinstance(value[0], BaseModel):
             continue
-        if value == _default_of(type(model), name) and name != "path":
+        if name != "path" and value == _default_of(type(model), name):
             continue
         out.append(f"{name} = {toml_value(value)}")
     return out

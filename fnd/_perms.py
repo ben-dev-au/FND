@@ -71,7 +71,9 @@ def secure_write_text(path: Path, text: str, *, atomic: bool = False) -> None:
     """
     path = path.expanduser()
     if atomic:
-        tmp = path.with_suffix(path.suffix + ".tmp")
+        # Per-process name: a fixed ".tmp" is shared, so two writers race and
+        # the loser's os.replace hits a path the winner already renamed.
+        tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")
         tmp.write_text(text, encoding="utf-8")
         _chmod_quiet(tmp, 0o600)
         os.replace(tmp, path)

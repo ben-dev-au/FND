@@ -286,7 +286,7 @@ def _quiet_preview_load_paths() -> Generator[None]:  # pyright: ignore[reportUnu
     the background worker. Pydantic v2 caches validators at class
     definition, so flipping ``model_fields[..].default`` needs
     ``model_rebuild(force=True)`` to take effect."""
-    from fnd.config import Defaults
+    from fnd.config import Config, Defaults
 
     debounce_field = Defaults.model_fields["preview_load_debounce_ms"]
     prefetch_field = Defaults.model_fields["preview_prefetch_count"]
@@ -294,10 +294,15 @@ def _quiet_preview_load_paths() -> Generator[None]:  # pyright: ignore[reportUnu
     prefetch_original = prefetch_field.default
     debounce_field.default = 0
     prefetch_field.default = 0
+    # Config caches its own core schema with the original defaults, so
+    # rebuilding only Defaults leaves a directly-built Defaults disagreeing
+    # with one validated inside a Config.
     Defaults.model_rebuild(force=True)
+    Config.model_rebuild(force=True)
     try:
         yield
     finally:
         debounce_field.default = debounce_original
         prefetch_field.default = prefetch_original
         Defaults.model_rebuild(force=True)
+        Config.model_rebuild(force=True)

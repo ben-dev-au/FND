@@ -15,8 +15,11 @@ from pydantic import BaseModel
 from fnd import config as conf
 from fnd.config_migrations import CONFIG_VERSION, ConfigTooNewError, migrate
 from fnd.config_render import (
+    _SOURCE_ORDER,
     DEFAULT_GROUPS,
     PRESERVE_BEGIN,
+    PRESERVE_END,
+    _set_fields,
     extract_preserved,
     key,
     path_value,
@@ -37,10 +40,8 @@ def _models() -> list[tuple[str, type[BaseModel]]]:
 
 def _sample() -> conf.Config:
     return conf.Config(
-        # The autouse conftest rewrites two preview defaults but rebuilds only
-        # Defaults, not Config, so a nested Defaults still validates with the
-        # original. Set them explicitly rather than read a default that differs
-        # by construction path.
+        # Set explicitly rather than inherited: the autouse conftest rewrites
+        # these two defaults, so a fixture reading them proves less.
         defaults=conf.Defaults(
             result_limit=50,
             fuzzy_enabled=False,
@@ -204,13 +205,17 @@ class TestDocumentationCannotDrift:
     """The gates that make "every key arrives explained" true, not aspirational."""
 
     def test_every_field_carries_a_description(self) -> None:
+        """The exemption is SourceFilters alone, which mirrors DefaultFilters
+        field for field. Keying it on the field name exempted that name in
+        every model, and exempted DefaultFilters from itself."""
         missing: list[str] = []
         for name, model in _models():
-            for field in model.model_fields:
-                if not conf.DefaultFilters.model_fields.get(field) and not (
-                    model.model_fields[field].description
-                ):
-                    missing.append(f"{name}.{field}")
+            for field, info in model.model_fields.items():
+                if info.description:
+                    continue
+                if model is conf.SourceFilters and field in conf.DefaultFilters.model_fields:
+                    continue
+                missing.append(f"{name}.{field}")
         assert not missing, f"undocumented fields reach a user's config: {missing}"
 
     def test_no_description_is_a_paragraph(self) -> None:
@@ -265,6 +270,48 @@ class TestRoundTrip:
         assert "max_size = 50_000_000" in render_config(_sample())
 
 
+class TestDeterminism:
+    """`ensure_current` compares its render against the file and rewrites, with
+    a backup, on any difference. Anything hash-ordered means that fires on
+    every launch."""
+
+    def test_fields_render_in_declaration_order(self) -> None:
+        """Eleven fields, so hash order cannot coincide with declaration order.
+        With four it could, roughly one seed in twenty-four."""
+        spec = conf.SourceFilters(
+            respect_gitignore=False,
+            respect_fndignore=False,
+            include_tags=["keep"],
+            exclude_tags=["drop"],
+            kinds=["md"],
+            min_size=1,
+            max_size=5,
+            created_after=dt.date(2020, 1, 1),
+            modified_after=dt.date(2021, 1, 1),
+            frontmatter="a == 'b'",
+            expression="file.size > 1",
+        )
+        rendered = [line.split(" =")[0] for line in _set_fields(spec)]
+        assert len(rendered) >= 10
+        assert rendered == [n for n in conf.SourceFilters.model_fields if n in rendered]
+
+    def test_a_source_orders_named_fields_first_then_declaration_order(self) -> None:
+        """`app_for` and `app_params` sit outside _SOURCE_ORDER, so they take
+        the branch that was hash-ordered. A source using only ordered fields
+        never reaches it, which is why the first version of this test could
+        not fail."""
+        source = conf.SourceConfig(
+            path=Path("~/N"),
+            includes=["**/*.md"],
+            follow_symlinks=True,
+            app_for={"md": "obsidian"},
+            app_params={"vault": "Main"},
+        )
+        rendered = [line.split(" =")[0] for line in _set_fields(source, _SOURCE_ORDER)]
+        assert rendered[0] == "path"
+        assert rendered[-2:] == ["app_for", "app_params"]
+
+
 class TestPortability:
     def test_a_home_path_is_written_back_as_a_tilde(self) -> None:
         """The model expands ~ on load; without re-tilding every generated
@@ -281,6 +328,57 @@ class TestPortability:
         tomllib.loads(render_config(_sample()))  # would raise if unquoted
 
 
+class TestValueShapes:
+    """Every writer replaces the whole file, so a value the renderer cannot
+    express is dropped or corrupts it. `_maximal` gates field *names*; these
+    gate the shapes those fields can hold, which is where the losses were."""
+
+    def _round_trip(self, config: conf.Config) -> conf.Config:
+        return conf.Config.model_validate(tomllib.loads(render_config(config)))
+
+    def _with_notes(self, notes: str) -> conf.Config:
+        return conf.Config(
+            apps={"x": conf.AppConfig(display_name="X", handles=["md"], argv=["open"], notes=notes)}
+        )
+
+    def test_an_explicit_empty_list_survives(self) -> None:
+        """`None` inherits, `[]` overrides to nothing. Dropping `[]` made
+        unticking an inherited tag for one source a silent no-op."""
+        config = conf.Config(
+            collections={
+                "n": conf.CollectionConfig(
+                    sources=[
+                        conf.SourceConfig(
+                            path=Path("~/N"), filters=conf.SourceFilters(exclude_tags=[])
+                        )
+                    ]
+                )
+            }
+        )
+        source = self._round_trip(config).collections["n"].sources[0]
+        assert source.filters is not None
+        assert source.filters.exclude_tags == []
+
+    @pytest.mark.parametrize(
+        "notes", ["one\ntwo", "a\tb", 'quote" here', "back\\slash", "bell\x07"]
+    )
+    def test_an_awkward_string_survives(self, notes: str) -> None:
+        """A raw newline ended the string early and left the file unparseable."""
+        assert self._round_trip(self._with_notes(notes)).apps["x"].notes == notes
+
+    def test_an_inline_table_key_needing_quotes_survives(self) -> None:
+        """`key` quotes a table header; the inline-table branch did not use it."""
+        config = conf.Config(
+            collections={
+                "n": conf.CollectionConfig(
+                    sources=[conf.SourceConfig(path=Path("~/N"), app_params={"my key": "v"})]
+                )
+            }
+        )
+        source = self._round_trip(config).collections["n"].sources[0]
+        assert source.app_params == {"my key": "v"}
+
+
 class TestPreservedBlock:
     def test_the_notes_block_survives_a_write(self, tmp_path: Path) -> None:
         path = tmp_path / "config.toml"
@@ -295,6 +393,21 @@ class TestPreservedBlock:
         conf.write_setting(config_path=path, dotted_path="defaults.result_limit", value=25)
         assert "# stray note" not in path.read_text(encoding="utf-8")
 
+    def test_live_toml_in_the_block_is_not_echoed_back(self) -> None:
+        """It is real config: it parses into the model and renders in its own
+        table, so keeping the text here declared that table twice and the file
+        stopped loading."""
+        text = f"{PRESERVE_BEGIN}\n# mine\n[defaults]\nresult_limit = 9\n{PRESERVE_END}"
+        assert extract_preserved(text) == "# mine"
+
+    def test_a_missing_end_marker_keeps_the_block(self) -> None:
+        """Returning nothing deleted whatever the user had written."""
+        assert extract_preserved(f"{PRESERVE_BEGIN}\n# kept\n") == "# kept"
+
+    def test_a_blank_line_inside_the_block_survives(self) -> None:
+        text = f"{PRESERVE_BEGIN}\n# one\n\n# two\n{PRESERVE_END}"
+        assert extract_preserved(text) == "# one\n\n# two"
+
     def test_extract_ignores_a_file_without_markers(self) -> None:
         assert extract_preserved("# nothing here\nresult_limit = 5\n") == ""
 
@@ -302,7 +415,34 @@ class TestPreservedBlock:
         assert PRESERVE_BEGIN in render_config(_sample())
 
 
+class TestRefusingBadOutput:
+    def test_a_render_that_does_not_round_trip_is_refused(self, tmp_path: Path) -> None:
+        """Every writer replaces the whole file, so publishing output that
+        reads back differently would lose the difference silently."""
+        import fnd.config_render as module
+
+        path = tmp_path / "config.toml"
+        path.write_text(render_config(_sample()), encoding="utf-8")
+        before = path.read_text(encoding="utf-8")
+        original = module.render_config
+
+        def lossy(config: object, **kw: object) -> str:
+            return original(config, **kw).replace("result_limit = 50", "")  # type: ignore[arg-type]
+
+        module.render_config = lossy
+        try:
+            with pytest.raises(ValueError, match="round-trip"):
+                conf.write_setting(config_path=path, dotted_path="defaults.debounce_ms", value=99)
+        finally:
+            module.render_config = original
+        assert path.read_text(encoding="utf-8") == before, "the old config was not kept"
+
+
 class TestMigration:
+    def test_the_starter_carries_the_current_version(self) -> None:
+        """Hardcoding 1 would make a later migration re-run on a fresh file."""
+        assert tomllib.loads(conf.starter_config())["config_version"] == CONFIG_VERSION
+
     def test_a_fresh_config_is_stamped_with_the_current_version(self) -> None:
         raw: dict[str, object] = {}
         version, applied = migrate(raw)
