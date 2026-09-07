@@ -525,3 +525,50 @@ async def test_a_branch_without_a_full_label_is_unchanged() -> None:
         )
         await pilot.pause()
         assert _labels(tree)["pair"] == "●  Pair"
+
+
+class TestCountingWhatTheUserCanTellApart:
+    """The dedup keyed on the label, but a tag row's label carries its file
+    count — so the same tag seen 1 and 2 times looked like two tags. And the
+    noun never singularised: "only 1 tags"."""
+
+    @staticmethod
+    def _tree(counts: tuple[int, int]) -> ToggleTree:
+        tree = ToggleTree("F")
+        group = ToggleGroup(
+            "tags",
+            "Tags",
+            (),
+            mode="cycle",
+            noun="tags",
+            groups=(
+                ToggleGroup(
+                    "tags:os",
+                    "System",
+                    (ToggleItem("tag:os:x", f"x  ({counts[0]})", "x"),),
+                ),
+                ToggleGroup(
+                    "tags:fm",
+                    "Note",
+                    (ToggleItem("tag:frontmatter:x", f"x  ({counts[1]})", "x"),),
+                ),
+            ),
+        )
+        tree._by_id = {g.id: g for g in group.walk()}
+        tree._selected = set()
+        tree._excluded = {"tag:os:x", "tag:frontmatter:x"}
+        return tree
+
+    def test_one_tag_counts_once_whatever_its_counts(self) -> None:
+        for counts in ((2, 2), (1, 2), (5, 1)):
+            tree = self._tree(counts)
+            label = tree._group_label(tree._by_id["tags"])
+            assert "1 excluded" in label, f"counts {counts} gave {label}"
+
+    def test_the_noun_agrees_with_the_number(self) -> None:
+        tree = self._tree((1, 2))
+        tree._selected = {"tag:os:x", "tag:frontmatter:x"}
+        tree._excluded = set()
+        label = tree._group_label(tree._by_id["tags"])
+        assert "only 1 tag" in label
+        assert "1 tags" not in label, label

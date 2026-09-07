@@ -11,9 +11,34 @@ from fnd.filters.scan import SourceSample
 from fnd.filters.tree_model import apply_selection, selection_for, spec_branches
 
 
-def _round_trip(spec: FilterSpec, also_select: set[str] | None = None) -> FilterSpec:
+def _offered(spec: FilterSpec, sample: object | None = None) -> set[str]:
+    """The kind ids the tree would actually show for ``spec``."""
+    from fnd.filters.tree_model import spec_branches
+
+    return {
+        item[0]
+        for branch in spec_branches(spec, sample)  # type: ignore[arg-type]
+        if branch.id == "kinds"
+        for group in branch.groups
+        for item in group.items
+    }
+
+
+def _round_trip(
+    spec: FilterSpec,
+    also_select: set[str] | None = None,
+    sample: object | None = None,
+) -> FilterSpec:
+    """As the screen does it, INCLUDING `offered`.
+
+    Passing no offered set left the all-ticked collapse unreachable, so the
+    one defect this file exists to catch — a real rule silently discarded —
+    could not fire in any test here.
+    """
     selected, excluded = selection_for(spec, gitignore=True, fndignore=True)
-    back, _git, _fnd = apply_selection(spec, selected | (also_select or set()), excluded)
+    back, _git, _fnd = apply_selection(
+        spec, selected | (also_select or set()), excluded, _offered(spec, sample)
+    )
     return back
 
 
@@ -118,3 +143,35 @@ class TestTheCustomRowMeansItsLabel:
             FilterSpec(max_size=5_000_000), gitignore=True, fndignore=True
         )
         assert "size:custom:5000000" in selected
+
+
+class TestAHomogeneousFolderKeepsItsRule:
+    """The defect this file exists to catch, now reachable: the tree lists
+    what a source contains, so on an all-markdown folder a real
+    `kinds = ["md"]` was "everything offered" and collapsed to no rule —
+    deleted by opening the screen, with the index widened to match."""
+
+    def test_the_rule_survives(self) -> None:
+        from fnd.filters.scan import SourceSample
+
+        spec = FilterSpec(kinds=("md",))
+        sample = SourceSample(kinds={"md": 12}, tags={})
+        assert _round_trip(spec, sample=sample).kinds == ("md",)
+
+    def test_the_branch_does_not_claim_every_type(self) -> None:
+        from fnd.filters.scan import SourceSample
+        from fnd.filters.tree_model import spec_branches
+
+        sample = SourceSample(kinds={"md": 12}, tags={})
+        branch = next(
+            b for b in spec_branches(FilterSpec(kinds=("md",)), sample) if b.id == "kinds"
+        )
+        assert branch.full_label == "", "a sampled list cannot promise every type"
+
+    def test_a_complete_offer_still_collapses(self) -> None:
+        from fnd.filters.scan import SourceSample
+        from fnd.kinds import ALL_KIND_IDS
+
+        every = FilterSpec(kinds=tuple(ALL_KIND_IDS))
+        sample = SourceSample(kinds=dict.fromkeys(ALL_KIND_IDS, 1), tags={})
+        assert _round_trip(every, sample=sample).kinds == ()

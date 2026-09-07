@@ -191,13 +191,32 @@ class TestTagTriState:
 
 
 class TestEveryTypeTickedMeansEveryType:
-    """The tree lists only the types a source contains, so ticking every box is
-    the user saying "all of them". Freezing the sampled list meant a PDF added
-    later was never indexed, while leaving the branch alone indexed it."""
+    """ "All of them" only when all of them were on offer.
 
-    def test_ticking_every_offered_type_stores_no_restriction(self) -> None:
+    The tree lists what a source contains, so on a homogeneous folder a real
+    `kinds = ["md"]` was already "everything offered" and collapsed to no rule
+    at all — deleting the restriction without a keypress on it, and widening
+    the index. Ticking a full SAMPLE now stores those types and the branch
+    says "N of N types" rather than claiming "every type"; the way to mean
+    every type is to tick nothing, which is what the legend's ○ says.
+    """
+
+    def test_a_full_sample_keeps_the_types_it_names(self) -> None:
         offered = {"kind:md", "kind:python", "kind:txt"}
         spec, _g, _f = apply_selection(FilterSpec(), offered, set(), offered)
+        assert spec.kinds == ("md", "python", "txt")
+
+    def test_a_real_rule_survives_a_no_op_round_trip(self) -> None:
+        """hunt-k's case: the rule was deleted by opening the screen."""
+        offered = {"kind:md"}
+        spec, _g, _f = apply_selection(FilterSpec(kinds=("md",)), offered, set(), offered)
+        assert spec.kinds == ("md",)
+
+    def test_ticking_every_registry_kind_still_collapses(self) -> None:
+        from fnd.kinds import ALL_KIND_IDS
+
+        every = {f"kind:{k}" for k in ALL_KIND_IDS}
+        spec, _g, _f = apply_selection(FilterSpec(), every, set(), every)
         assert spec.kinds == ()
 
     def test_ticking_some_still_restricts(self) -> None:

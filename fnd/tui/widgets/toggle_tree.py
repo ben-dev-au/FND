@@ -36,6 +36,11 @@ _EXCLUDED = "⊘"
 _MARKER_GAP = "  "
 
 
+def _plural(noun: str, n: int) -> str:
+    """`1 tag`, not `1 tags`."""
+    return noun[:-1] if n == 1 and noun.endswith("s") else noun
+
+
 def tri_state_marker(n_selected: int, n_total: int) -> str:
     """●/◐/○ for a parent whose children are ``n_selected`` of ``n_total`` on."""
     if n_total == 0 or n_selected == 0:
@@ -49,6 +54,9 @@ class ToggleItem:
 
     id: str
     label: str
+    key: str = ""
+    """What makes two leaves the same thing to a user. Defaults to the label;
+    set it where the label carries something else as well, such as a count."""
 
 
 @dataclass(frozen=True)
@@ -241,21 +249,26 @@ class ToggleTree(Tree[dict[str, Any]]):
         """
         if not g.noun:
             return ""
-        # Count labels, not leaves: one tag is drawn under every source that
-        # can carry it, so counting rows called a single excluded `no_index`
-        # two.
-        seen = {it.label for it in g.leaves}
-        n_on = len({it.label for it in g.leaves if it.id in self._selected})
-        n_off = len({it.label for it in g.leaves if it.id in self._excluded})
+
+        # Count what the user can tell apart, not rows: one tag is drawn under
+        # every source that can carry it. Keyed on `key`, because a label may
+        # also carry a per-source file count, which made the same tag look
+        # like two.
+        def _key(item: ToggleItem) -> str:
+            return item.key or item.label
+
+        seen = {_key(it) for it in g.leaves}
+        n_on = len({_key(it) for it in g.leaves if it.id in self._selected})
+        n_off = len({_key(it) for it in g.leaves if it.id in self._excluded})
         parts = []
         if mode == "cycle":
             if n_on:
-                parts.append(f"only {n_on} {g.noun}")
+                parts.append(f"only {n_on} {_plural(g.noun, n_on)}")
             if n_off:
                 parts.append(f"{n_off} excluded")
         elif n_on and n_on < len(seen):
             # ● already says "all of them"; a count there is noise.
-            parts.append(f"{n_on} of {len(seen)} {g.noun}")
+            parts.append(f"{n_on} of {len(seen)} {_plural(g.noun, len(seen))}")
         return f"  ({', '.join(parts)})" if parts else ""
 
     def _group_label(self, g: ToggleGroup) -> str:

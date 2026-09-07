@@ -71,11 +71,19 @@ class Branch:
     id: str
     label: str
     mode: str
-    items: tuple[tuple[str, str], ...] = ()  # (item id, label)
+    items: tuple[tuple[str, ...], ...] = ()
+    """(item id, label) or (item id, label, key). The key says what makes
+    two leaves the same thing to a user, where the label carries more —
+    a tag row shows its file count, so the label alone counted one tag twice."""
     groups: tuple[Branch, ...] = ()
     empty_label: str = ""
     full_label: str = ""
     noun: str = ""
+
+
+def _offers_every_kind(items: list[tuple[str, str, str]]) -> bool:
+    """Whether the tree is showing the whole registry rather than a sample."""
+    return {kind for _cat, kind, _label in items} >= set(ALL_KIND_IDS)
 
 
 def _kind_items(
@@ -137,13 +145,13 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
     groups: list[Branch] = []
     for source in sources:
         seen = [
-            (f"tag:{source}:{v}", f"{v}  ({c})")
+            (f"tag:{source}:{v}", f"{v}  ({c})", v)
             for v, c in (sample.tags_for(source) if sample else [])
         ]
         configured = set(spec.tag_includes.get(source, ())) | set(spec.tag_excludes.get(source, ()))
         for tag in sorted(configured):
             if not any(i[0] == f"tag:{source}:{tag}" for i in seen):
-                seen.append((f"tag:{source}:{tag}", tag))
+                seen.append((f"tag:{source}:{tag}", tag, tag))
         # Whatever is switched on sorts first, so the branch shows what it is
         # doing without the user scrolling a corpus-length list to find it.
         active = {f"tag:{source}:{t}" for t in configured}
@@ -189,7 +197,9 @@ def spec_branches(
                 "multi",
                 groups=categories,
                 empty_label="every type",
-                full_label="every type",
+                # Only claim "every type" when every type was offered; on a
+                # sampled list, all-ticked means those types and says so.
+                full_label="every type" if _offers_every_kind(kinds) else "",
                 noun="types",
             )
         )
@@ -389,8 +399,13 @@ def apply_selection(
     # leaving the branch untouched indexed it, and both read as "all types".
     # `AddCollectionWizard._set_includes` already collapses the same way.
     shown = {i.removeprefix("kind:") for i in offered if i.startswith("kind:")} if offered else None
-    everything = shown or set(ALL_KIND_IDS)
-    kinds = () if picked and picked >= everything else tuple(sorted(picked))
+    # Only when the tree offered EVERY type does ticking them all mean "no
+    # restriction". The tree lists what a source contains, so on a homogeneous
+    # folder a genuine `kinds = ["md"]` was already "all of them" and collapsed
+    # to no rule at all — deleting the restriction with no keypress on it.
+    everything = shown if shown is not None else set(ALL_KIND_IDS)
+    complete = shown is None or shown >= set(ALL_KIND_IDS)
+    kinds = () if picked and complete and picked >= everything else tuple(sorted(picked))
     keep = _tags_from(selected)
     tags = _tags_from(excluded)
     today = dt.date.today()
