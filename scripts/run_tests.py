@@ -9,6 +9,10 @@ exists to stop comes from sibling worktrees with their own ``.git``. Workers
 are sized after the lock is held, so a queued run measures the machine it will
 actually get rather than the one it is waiting behind.
 
+An interrupt during the wait relies on ``KeyboardInterrupt`` being a
+``BaseException``: widening the guard below to ``except BaseException`` would
+make a queued run uninterruptible.
+
 ``FND_TEST_WORKERS`` forces the worker count and ``FND_TEST_NO_LOCK`` skips the
 gate; the two are independent. An explicit ``-n`` suppresses the sizing only,
 and still queues behind the lock.
@@ -17,6 +21,7 @@ and still queues behind the lock.
 from __future__ import annotations
 
 import contextlib
+import errno
 import math
 import os
 import subprocess
@@ -108,17 +113,28 @@ def pick_workers() -> int:
     return max(1, min(WORKER_CEILING, math.floor(allowed)))
 
 
-def _acquire(handle: IO[str]) -> None:
-    """Raises OSError while another run holds the lock."""
+def _try_acquire(handle: IO[str]) -> bool:
+    """False while another run holds the lock. OSError means the lock itself is
+    unusable, which must not be mistaken for contention and waited out."""
     if sys.platform == "win32":
         import msvcrt
 
         handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-    else:
-        import fcntl
+        try:
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            if exc.errno in (errno.EACCES, errno.EDEADLK):
+                return False
+            raise
+        return True
 
+    import fcntl
+
+    try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    return True
 
 
 @contextlib.contextmanager
@@ -137,17 +153,19 @@ def _machine_lock() -> Generator[None]:
     try:
         while True:
             try:
-                _acquire(handle)
-                os.environ[LOCK_ENV] = "1"
-                break
-            except OSError:
-                if time.monotonic() > deadline:
-                    _notify("test lock still held after 30m; running anyway")
+                if _try_acquire(handle):
+                    os.environ[LOCK_ENV] = "1"
                     break
-                if not announced:
-                    _notify("another test run is in progress, waiting...")
-                    announced = True
-                time.sleep(2.0)
+            except OSError as exc:
+                _notify(f"test lock unusable ({exc}); running unsynchronised")
+                break
+            if time.monotonic() > deadline:
+                _notify("test lock still held after 30m; running anyway")
+                break
+            if not announced:
+                _notify("another test run is in progress, waiting...")
+                announced = True
+            time.sleep(2.0)
         yield
     finally:
         handle.close()

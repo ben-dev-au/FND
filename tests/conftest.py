@@ -7,8 +7,10 @@ import contextlib
 import importlib
 import importlib.util
 import os
+import sys
 from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from textual.pilot import Pilot, WaitForScreenTimeout
@@ -310,35 +312,37 @@ def _quiet_preview_load_paths() -> Generator[None]:  # pyright: ignore[reportUnu
 # scripts/run_tests.py holds a per-user lock so two suites cannot starve each
 # other, but it only binds runs that go through it: `uv run pytest` typed
 # directly bypasses it, which is how three concurrent suites once shared this
-# machine. A run large enough to matter takes the same lock here instead.
+# machine. A run big enough to matter takes the same lock here instead.
 #
-# Two entry points because xdist runs collection in every worker and never in
-# the controller: a parallel run is gated at configure time, a serial one on
-# the item count once it is known.
+# Two entry points because xdist collects in every worker and never in the
+# controller. Gating a parallel run at configure time instead would gate it
+# before the size is known, queueing a six-test `-n 2` run for thirty minutes.
 
-_LOCK_THRESHOLD = 200
+_LOCK_THRESHOLD = 500
 _held_lock: contextlib.AbstractContextManager[None] | None = None
 
 
-def _is_worker(config: pytest.Config) -> bool:
-    return hasattr(config, "workerinput")
-
-
-def _parallel(config: pytest.Config) -> bool:
-    return bool(config.getoption("numprocesses", None))
+def _gate_applies(config: pytest.Config) -> bool:
+    """CI is one job per VM, so the lock buys nothing there and a wait would
+    outlive the job's timeout. A collect-only run executes nothing."""
+    if hasattr(config, "workerinput"):
+        return False
+    if os.environ.get("CI") or os.environ.get("FND_TEST_NO_LOCK"):
+        return False
+    return not bool(config.getoption("collectonly", False))
 
 
 def _take_machine_lock() -> None:
-    """The wrapper owns the implementation; its absence is not a reason to
-    fail the suite, and an already-held lock is not a reason to queue."""
+    """The wrapper owns the implementation; its absence is not a reason to fail
+    the suite, but it is a reason to say so rather than run on silently."""
     global _held_lock
-    if _held_lock is not None or os.environ.get("FND_TEST_NO_LOCK"):
+    if _held_lock is not None:
         return
     wrapper = Path(__file__).resolve().parents[1] / "scripts" / "run_tests.py"
     try:
         spec = importlib.util.spec_from_file_location("_fnd_test_lock", wrapper)
         if spec is None or spec.loader is None:
-            return
+            raise ImportError(f"no loader for {wrapper}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         if os.environ.get(module.LOCK_ENV):
@@ -346,21 +350,34 @@ def _take_machine_lock() -> None:
         lock = module._machine_lock()
         lock.__enter__()
         _held_lock = lock
-    except Exception:
-        return
+    except Exception as exc:
+        print(f"test lock unavailable ({exc}); running unsynchronised", file=sys.stderr)
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    if not _is_worker(config) and _parallel(config):
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(  # pyright: ignore[reportUnusedFunction]
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """trylast because pluggy is LIFO: a conftest hook otherwise runs before
+    pytest's own deselection and counts the tests -k and -m are about to drop."""
+    if _gate_applies(config) and len(items) >= _LOCK_THRESHOLD:
         _take_machine_lock()
 
 
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    if not _is_worker(config) and not _parallel(config) and len(items) >= _LOCK_THRESHOLD:
-        _take_machine_lock()
+if importlib.util.find_spec("xdist") is not None:
+    # Defined only when xdist is installed: pytest rejects an unknown hook
+    # outright, so an unconditional definition breaks every `-p no:xdist` run.
+    def pytest_xdist_node_collection_finished(  # pyright: ignore[reportUnusedFunction]
+        node: Any, ids: list[str]
+    ) -> None:
+        """The controller's only sight of the collected set under xdist."""
+        if _gate_applies(node.config) and len(ids) >= _LOCK_THRESHOLD:
+            _take_machine_lock()
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+def pytest_sessionfinish(  # pyright: ignore[reportUnusedFunction]
+    session: pytest.Session, exitstatus: int
+) -> None:
     global _held_lock
     if _held_lock is not None:
         _held_lock.__exit__(None, None, None)
