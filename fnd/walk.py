@@ -306,7 +306,8 @@ def walk_sources(
     Per source: ``walk`` applies includes/excludes and the ignore files, then
     the source's resolved filters gate each candidate (:mod:`fnd.filters`).
     Frontmatter parse errors and missing-field strict-null cases drop the file
-    silently — the indexer logs them via ``fnd status --errors``.
+    silently: there is no command that reports them, which is why
+    :meth:`IgnoreMatch.describe` exists unused.
 
     ``skip_dirs`` is forwarded to :func:`walk`. Indexer entry points
     resolve this from ``defaults.skip_junk_dirs`` + ``extra_junk_dirs``;

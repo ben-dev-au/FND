@@ -164,3 +164,32 @@ def test_collection_list_counts_sources_not_roots(
     # Two sources configured; output must show 2, not 0.
     assert "2" in result.output
     assert "source" in result.output.lower()
+
+
+def test_the_source_help_matches_what_the_command_accepts() -> None:
+    """It said "Repeat to add multiple" while the command refuses a second
+    one, and the docstring three lines above said the opposite."""
+    import re
+
+    from typer.testing import CliRunner
+
+    from fnd.cli import app
+
+    out = CliRunner().invoke(app, ["collection", "add", "--help"]).stdout
+    flat = " ".join(re.sub(r"[│─╭╮╰╯]", " ", out).split())
+    assert "Repeat to add multiple" not in flat
+    assert "One per command" in flat, flat[:200]
+
+
+def test_no_message_points_at_a_command_that_does_not_exist() -> None:
+    """`fnd status --errors` was named as the way to see dropped files; the
+    option does not exist, and nothing reports them."""
+    import inspect
+
+    from typer.testing import CliRunner
+
+    from fnd import walk
+    from fnd.cli import app
+
+    assert "status --errors" not in inspect.getsource(walk)
+    assert CliRunner().invoke(app, ["status", "--errors"]).exit_code != 0

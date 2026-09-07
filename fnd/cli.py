@@ -648,7 +648,8 @@ def collection_add(
     source: list[Path] = typer.Option(
         ...,
         "--source",
-        help="Root directory for this collection. Repeat to add multiple.",
+        help="Root directory for this collection. One per command; "
+        "run it again to add another source.",
     ),
     include: list[str] = typer.Option(
         [],
