@@ -578,3 +578,57 @@ class TestAFrontmatterOnlyExpression:
         got = _names(tmp_path, defaults=DefaultFilters(expression="file.name != 'b.md'"))
         assert "b.md" not in got
         assert "a.md" in got
+
+
+class TestASymlinkCycleTerminates:
+    """A cycle produced endlessly many distinct paths for the same directory,
+    so the walk only stopped when the OS refused the depth — after walking one
+    file dozens of times and storing the deepest alias as its path."""
+
+    def test_a_loop_yields_each_file_once(self, tmp_path: Path) -> None:
+        from fnd.walk import walk
+
+        root = tmp_path.resolve()
+        notes = root / "notes"
+        notes.mkdir()
+        for i in range(3):
+            (notes / f"n{i}.md").write_text("x\n")
+        (notes / "loop").symlink_to(root)
+
+        paths = list(walk(roots=[root], follow_symlinks=True))
+        assert len(paths) == 3, [str(p) for p in paths]
+        assert len({p.resolve() for p in paths}) == 3
+
+    def test_the_stored_path_is_the_short_one(self, tmp_path: Path) -> None:
+        from fnd.walk import walk
+
+        root = tmp_path.resolve()
+        notes = root / "notes"
+        notes.mkdir()
+        (notes / "a.md").write_text("x\n")
+        (notes / "loop").symlink_to(root)
+
+        [path] = list(walk(roots=[root], follow_symlinks=True))
+        assert "loop" not in str(path), path
+
+    def test_a_link_to_another_tree_is_still_followed(self, tmp_path: Path) -> None:
+        """The guard must not stop legitimate symlink following."""
+        from fnd.walk import walk
+
+        root = tmp_path.resolve()
+        root.joinpath("here.md").write_text("x\n")
+        other = tmp_path.parent / f"{tmp_path.name}-other"
+        other.mkdir()
+        (other / "there.md").write_text("y\n")
+        (root / "link").symlink_to(other)
+
+        names = {p.name for p in walk(roots=[root], follow_symlinks=True)}
+        assert names == {"here.md", "there.md"}
+
+    def test_a_loop_is_untouched_when_links_are_not_followed(self, tmp_path: Path) -> None:
+        from fnd.walk import walk
+
+        root = tmp_path.resolve()
+        (root / "a.md").write_text("x\n")
+        (root / "loop").symlink_to(root)
+        assert {p.name for p in walk(roots=[root])} == {"a.md"}

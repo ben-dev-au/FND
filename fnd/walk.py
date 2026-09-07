@@ -147,6 +147,21 @@ def _is_index_dir(path: str) -> bool:
     return os.path.exists(os.path.join(path, _INDEX_SIDECAR))
 
 
+def _dir_identity(path: Path) -> tuple[int, int] | None:
+    """(device, inode) for a directory, or None if it cannot be stat'd.
+
+    Identity rather than the path string: a symlink cycle produces endlessly
+    many distinct paths for the same directory, and the walk only terminated
+    when the OS refused the depth — after walking one file dozens of times and
+    storing the deepest alias as its path.
+    """
+    try:
+        info = path.stat()
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino)
+
+
 def _scandir_walk(
     *,
     root: Path,
@@ -171,8 +186,18 @@ def _scandir_walk(
     # Ignore files apply from the source root downwards; see ancestor_stack.
     base = ancestor_stack(root, ignore_names)
     stack: list[tuple[Path, IgnoreStack]] = [] if _is_index_dir(str(root)) else [(root, base)]
+    # Real directories already entered, so a symlink cycle terminates on the
+    # first repeat rather than on the OS running out of path. Only needed when
+    # following links, and only then does the identity lookup cost anything.
+    seen: set[tuple[int, int]] = set()
     while stack:
         current, inherited = stack.pop()
+        if follow_symlinks:
+            identity = _dir_identity(current)
+            if identity is not None:
+                if identity in seen:
+                    continue
+                seen.add(identity)
         try:
             with os.scandir(current) as it:
                 entries = sorted(it, key=lambda e: e.name)
