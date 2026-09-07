@@ -529,3 +529,47 @@ async def test_the_wizard_editor_stays_inside_its_panel(built_index: Path) -> No
         assert editor.has_focus
         assert panel.region.contains_region(editor.region), "the editor left its panel"
         assert panel.region.width == closed_width, "the panel resized as editing began"
+
+
+class TestTheWizardShowsWhatWillBeIndexed:
+    """Setting nothing does not mean "every type": the source it writes
+    inherits `defaults.filters`, so a default of `kinds = ["md"]` was painted
+    as "every type" while the new collection indexed 3 files of 12."""
+
+    @staticmethod
+    async def _rows(config, pilot_size=(110, 26)):
+        from fnd.tui import FNDApp
+        from fnd.tui.settings_screen import AddCollectionWizard
+
+        app = FNDApp(index_dir=Path("/nonexistent"), config=config)
+        async with app.run_test(size=pilot_size) as pilot:
+            await pilot.pause()
+            app.push_screen(AddCollectionWizard())
+            for _ in range(20):
+                await pilot.pause()
+            return {
+                item.id: item.value_getter(app)
+                for item in app.screen._build_field_items()
+                if item.value_getter
+            }
+
+    @pytest.mark.asyncio
+    async def test_inherited_filters_are_named(self) -> None:
+        from fnd.config import Config, DefaultFilters, Defaults
+
+        config = Config(
+            defaults=Defaults(filters=DefaultFilters(kinds=["md"], frontmatter="Course == 'A'"))
+        )
+        rows = await self._rows(config)
+        assert "md" in rows["wiz.includes"]
+        assert "inherited" in rows["wiz.includes"], rows["wiz.includes"]
+        assert "Course == 'A'" in rows["wiz.filter"]
+        assert "every type" not in rows["wiz.includes"], "the claim that was false"
+
+    @pytest.mark.asyncio
+    async def test_without_defaults_it_still_reads_plainly(self) -> None:
+        from fnd.config import Config
+
+        rows = await self._rows(Config())
+        assert rows["wiz.includes"] == "every type"
+        assert rows["wiz.filter"] == "(none)"

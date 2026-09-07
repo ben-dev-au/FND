@@ -2039,6 +2039,14 @@ def open_source_filter_browser(
     )
 
 
+def _default_filters(app: Any) -> Any:
+    """The global default filters, or the shipped ones when no config."""
+    from fnd.config import DefaultFilters
+
+    cfg = getattr(app, "_config", None)
+    return getattr(getattr(cfg, "defaults", None), "filters", None) or DefaultFilters()
+
+
 def _default_frontmatter(app: Any) -> str:
     cfg = getattr(app, "_config", None)
     return (getattr(cfg.defaults.filters, "frontmatter", None) or "") if cfg else ""
@@ -3185,14 +3193,23 @@ class AddCollectionWizard(Screen[None]):
         ]
 
     def _summarise_includes(self) -> str:
-        """Every type ticked is the absence of a restriction, and the wizard
-        correctly writes nothing for it; "40 selected" read as a restriction."""
+        """What the new collection will actually index.
+
+        Setting nothing here does not mean "every type": the source inherits
+        `defaults.filters`, so a default of `kinds = ["md"]` was painted as
+        "every type" while the collection indexed 3 files of 12.
+        """
         from fnd.kinds import ALL_KIND_IDS
 
         n = len(self._fields["includes"])
-        if n in (0, len(ALL_KIND_IDS)):
+        if n == len(ALL_KIND_IDS):
             return "every type"
-        return f"{n} of {len(ALL_KIND_IDS)} types"
+        if n:
+            return f"{n} of {len(ALL_KIND_IDS)} types"
+        inherited = list(_default_filters(self.app).kinds)
+        if inherited:
+            return f"{', '.join(inherited)} (inherited)"
+        return "every type"
 
     def _summarise_excludes(self) -> str:
         return _excludes_summary(self._fields)
@@ -3206,7 +3223,10 @@ class AddCollectionWizard(Screen[None]):
         syntax mistakes surface without leaving the form."""
         text = str(self._fields.get("filter") or "").strip()
         if not text:
-            return "(none)"
+            # Same reason as `_summarise_includes`: an unset rule here means
+            # the default's rule applies, not that nothing does.
+            inherited = _default_frontmatter(self.app).strip()
+            return f"{inherited} (inherited)" if inherited else "(none)"
         from fnd.filter_dsl import parse_or_error
 
         _pred, err = parse_or_error(text)
