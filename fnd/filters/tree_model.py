@@ -57,7 +57,7 @@ BRANCHES = ("kinds", "tags", "ignore", "size", "modified", "created")
 # Shown above the tree. The glyphs carry different polarity per branch —
 # ● on a file type includes, ⊘ on a tag excludes — so the meaning is stated
 # once here rather than guessed from each row.
-LEGEND = "⊘  never index these   ●  index ONLY these   ○  no rule"
+LEGEND = "⊘  never index these   ●  index ONLY these   ◐  some of these   ○  no rule"
 
 
 @dataclass(frozen=True, slots=True)

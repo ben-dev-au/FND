@@ -778,3 +778,42 @@ async def test_the_rule_editor_names_the_glob_trap(built_index: Path) -> None:
         help_text = str(app.screen.query_one("#rule_help", Static).render())
         assert "* stops at /" in help_text
         assert "'drafts/**'" in help_text
+
+
+def test_the_legend_names_every_glyph_the_tree_paints() -> None:
+    """`◐` is painted on any partly-on branch and was in no legend."""
+    from fnd.filters.tree_model import LEGEND
+    from fnd.tui.widgets.toggle_tree import _EMPTY, _EXCLUDED, _FULL, _PARTIAL
+
+    for glyph in (_EXCLUDED, _FULL, _PARTIAL, _EMPTY):
+        assert glyph in LEGEND, f"{glyph} is painted but unexplained"
+
+
+def test_the_sources_row_names_every_dimension_that_narrows_it() -> None:
+    """It named file types alone, so an inherited rule that cut a source to
+    one file in sixteen still left the row reading "All types"."""
+    from fnd.config import (
+        CollectionConfig,
+        Config,
+        DefaultFilters,
+        Defaults,
+        SourceConfig,
+        SourceFilters,
+    )
+    from fnd.tui.menu import _other_filters
+
+    config = Config(
+        defaults=Defaults(filters=DefaultFilters(expression="file.name ~~ 'alpha*'")),
+        collections={
+            "c": CollectionConfig(
+                sources=[
+                    SourceConfig(path=Path("~/x")),
+                    SourceConfig(path=Path("~/y"), filters=SourceFilters(max_size=1000)),
+                ]
+            )
+        },
+    )
+    inheriting, bounded = config.collections["c"].sources
+    assert "rule" in _other_filters(inheriting), "an inherited rule still narrows the source"
+    assert "size" in _other_filters(bounded)
+    assert "size" not in _other_filters(inheriting)

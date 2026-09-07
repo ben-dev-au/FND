@@ -1610,8 +1610,8 @@ def _source_trailing(collection_name: str, idx: int) -> Callable[[FNDApp], str]:
             suffixes = {glob[glob.rfind(".") :] for glob in src.includes if glob.rfind(".") != -1}
             kinds = sorted({k for k, spec in KIND_BY_ID.items() if set(spec.suffixes) & suffixes})
         types = ", ".join(kinds) if kinds else "All types"
-        if path_globs:
-            types = f"{types} · path globs"
+        parts = [types, *(["path globs"] if path_globs else []), *_other_filters(src)]
+        types = " · ".join(parts)
         suffix = ""
         try:
             p = Path(src.path)
@@ -1622,6 +1622,28 @@ def _source_trailing(collection_name: str, idx: int) -> Callable[[FNDApp], str]:
         return f"{types}{suffix}"
 
     return _summary
+
+
+def _other_filters(src: Any) -> list[str]:
+    """Dimensions narrowing this source besides file type and path.
+
+    The row named only types, so a source an inherited rule had cut to one
+    file in sixteen still read "All types".
+    """
+    f = src.effective_filters
+    named = []
+    if f.include_tags or f.exclude_tags:
+        named.append("tags")
+    if f.min_size is not None or f.max_size is not None:
+        named.append("size")
+    if any(
+        getattr(f, n) is not None
+        for n in ("created_after", "created_before", "modified_after", "modified_before")
+    ):
+        named.append("dates")
+    if (f.frontmatter or "").strip() or (f.expression or "").strip():
+        named.append("rule")
+    return named
 
 
 def _make_open_clone_source(name: str) -> Callable[[FNDApp], None]:
