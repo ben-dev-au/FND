@@ -528,7 +528,15 @@ def _trailing_segments(item: MenuItem, app: FNDApp | None) -> list[tuple[str, st
             v = item.picker_getter(app)
         except Exception:
             v = None
-        if isinstance(v, list):
+        # A count is the fallback, not the rule: "40 selected" is the ABSENCE
+        # of a type restriction, and "2 selected" never names the globs. A row
+        # that can say what it holds says it.
+        if item.value_getter is not None:
+            try:
+                value_str = str(item.value_getter(app))
+            except Exception:
+                value_str = "(unset)"
+        elif isinstance(v, list):
             value_str = f"{len(v)} selected" if v else "(none)"
         else:
             value_str = str(v) if v not in (None, "") else "(unset)"
@@ -1966,6 +1974,20 @@ def _source_filters_or_none(raw: dict[str, Any] | None) -> Any:
     return SourceFilters.model_validate(cleaned) if cleaned else None
 
 
+def _excludes_summary(fields: dict[str, Any]) -> str:
+    """The presets and globs by name. A count never showed the globs anywhere
+    in the UI, and the picker put the widget's help text in their place."""
+    from fnd.config import EXCLUDES_PRESETS
+
+    named = [
+        str(EXCLUDES_PRESETS[key]["label"])
+        for key in fields.get("excludes_presets") or ()
+        if key in EXCLUDES_PRESETS
+    ]
+    named += [g.strip() for g in str(fields.get("excludes_custom") or "").split(",") if g.strip()]
+    return ", ".join(named) if named else "(none)"
+
+
 def _overridden_fields(overrides: dict[str, Any] | None) -> list[str]:
     """The settings a source overrides, one name each.
 
@@ -2380,6 +2402,7 @@ class SourceFormScreen(Screen[None]):
             MenuItem(
                 id="form.excludes",
                 label="Excludes",
+                value_getter=lambda _app: _excludes_summary(self._fields),
                 description=(
                     "Paths to skip, as ready-made presets or your own globs. "
                     "Applied before any filter, so an excluded folder is never "
@@ -2862,10 +2885,7 @@ class AddCollectionWizard(Screen[None]):
         with Vertical(id="settings_box") as box:
             box.border_title = "Add Collection"
             yield SettingsList()
-            yield Static(
-                "─── Test filter against sample frontmatter ───",
-                classes="form_separator",
-            )
+            yield Static("", id="form_sample_sep", classes="form_separator")
             yield TextArea("", id="frontmatter_sample")
             yield Static("(no sample)", id="match_status")
             yield Static("", id="wizard_error", classes="-hidden")
@@ -2904,6 +2924,17 @@ class AddCollectionWizard(Screen[None]):
 
     def _populate_fields(self) -> None:
         self.query_one(SettingsList).set_items(self._build_field_items())
+        self._refresh_sample_tester()
+
+    def _refresh_sample_tester(self) -> None:
+        """As on the source form: nothing to test without a rule."""
+        rule = str(self._fields.get("filter") or "").strip()
+        for wid in ("#form_sample_sep", "#frontmatter_sample", "#match_status"):
+            self.query_one(wid).display = bool(rule)
+        if rule:
+            self.query_one("#form_sample_sep", Static).update(
+                f"─── Paste frontmatter to test:  {sanitise_display_text(rule)} ───"
+            )
 
     def _build_field_items(self) -> list[MenuItem]:
         from fnd.config import EXCLUDES_PRESETS
@@ -2927,6 +2958,7 @@ class AddCollectionWizard(Screen[None]):
             MenuItem(
                 id="wiz.includes",
                 label="File types",
+                value_getter=lambda _app: self._summarise_includes(),
                 description=(
                     "Which types to index. Tick none for every supported type, "
                     "which also picks up ones added in later versions."
@@ -2940,6 +2972,7 @@ class AddCollectionWizard(Screen[None]):
             MenuItem(
                 id="wiz.excludes",
                 label="Excludes",
+                value_getter=lambda _app: self._summarise_excludes(),
                 description=(
                     "Paths to skip, as presets or your own globs. Applied "
                     "before any filter, so an excluded folder is never read."
@@ -2986,11 +3019,17 @@ class AddCollectionWizard(Screen[None]):
         ]
 
     def _summarise_includes(self) -> str:
+        """Every type ticked is the absence of a restriction, and the wizard
+        correctly writes nothing for it; "40 selected" read as a restriction."""
+        from fnd.kinds import ALL_KIND_IDS
+
         n = len(self._fields["includes"])
-        return "all types" if n == 0 else f"{n} type{'s' if n != 1 else ''}"
+        if n in (0, len(ALL_KIND_IDS)):
+            return "every type"
+        return f"{n} of {len(ALL_KIND_IDS)} types"
 
     def _summarise_excludes(self) -> str:
-        return f"{len(self._fields['excludes_presets'])} presets"
+        return _excludes_summary(self._fields)
 
     def _set_follow(self, value: bool) -> None:
         self._fields["follow_symlinks"] = bool(value)

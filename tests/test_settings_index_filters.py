@@ -817,3 +817,37 @@ def test_the_sources_row_names_every_dimension_that_narrows_it() -> None:
     assert "rule" in _other_filters(inheriting), "an inherited rule still narrows the source"
     assert "size" in _other_filters(bounded)
     assert "size" not in _other_filters(inheriting)
+
+
+def test_a_radio_group_keeps_one_option_selected() -> None:
+    """`⏎` on the already-selected "Any size" turned it off, leaving nothing
+    selected and the branch reading `(any)` — a fourth state, differing from
+    `(Any size)` only in case, that the legend cannot express."""
+    from fnd.tui.widgets.toggle_tree import ToggleGroup, ToggleItem, ToggleTree
+
+    group = ToggleGroup(
+        "size",
+        "Maximum file size",
+        (ToggleItem("size:any", "Any size"), ToggleItem("size:1mb", "Up to 1 MB")),
+        mode="radio",
+    )
+    tree = ToggleTree("F")
+    tree._by_id = {"size": group}
+    tree._selected, tree._excluded = {"size:any"}, set()
+    for pressed in ("size:any", "size:1mb", "size:1mb"):
+        tree._selected -= {i.id for i in group.leaves if i.id != pressed}
+        tree._selected.add(pressed)
+        assert tree._selected, f"pressing {pressed} emptied the group"
+    assert tree._selected == {"size:1mb"}
+
+
+def test_the_pickers_name_what_they_hold() -> None:
+    """ "40 selected" is the ABSENCE of a type restriction, and a count never
+    showed the exclude globs anywhere in the UI."""
+    from fnd.kinds import ALL_KIND_IDS
+    from fnd.tui.settings_screen import _excludes_summary
+
+    assert _excludes_summary({}) == "(none)"
+    assert _excludes_summary({"excludes_custom": "build/**, dist/**"}) == "build/**, dist/**"
+    assert "**/*.csv" in _excludes_summary({"excludes_custom": "**/*.csv"})
+    assert len(ALL_KIND_IDS) > 1, "the wizard summary below depends on there being many"

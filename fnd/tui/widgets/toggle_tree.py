@@ -341,8 +341,11 @@ class ToggleTree(Tree[dict[str, Any]]):
                 node.set_label(self._item_label(item_id))
                 self._repaint_parent(node)
             elif mode == "radio" and group is not None:
+                # Re-selecting the current option is a no-op, as a radio group
+                # means everywhere: toggling it off left nothing selected, a
+                # fourth state the legend cannot express.
                 self._selected -= {it.id for it in group.leaves if it.id != item_id}
-                self._selected.symmetric_difference_update({item_id})
+                self._selected.add(item_id)
                 parent = node.parent
                 if parent is not None:
                     self._repaint_group(parent, group)
