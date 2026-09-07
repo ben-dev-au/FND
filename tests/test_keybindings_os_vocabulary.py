@@ -225,3 +225,16 @@ def test_no_unresolved_placeholder_reaches_the_user(
         os_labels.ALT_WORD,
     ):
         assert token not in text, token
+
+
+def test_a_narrow_footer_keeps_the_screen_s_own_keys() -> None:
+    """Anchors repeat on every screen and are listed under `?`; a screen's own
+    keys are neither, so `^S Save` must not be the part that goes."""
+    anchors = (("/", "Search"), (":", "Menu"), ("?", "Keys"), ("q", "Quit"))
+    contextual = (("Tab", "Fields"), ("⏎", "Edit"), ("^S", "Save"))
+    bar = render_hint_bar(anchors, contextual)
+    assert bar.cell_len > 80, "the case only arises when the full bar overflows"
+    fitted = bar.fitted(80)
+    assert "Save" in fitted.plain
+    assert fitted.cell_len <= 80
+    assert fitted.plain.endswith("…"), "a dropped hint must be marked"

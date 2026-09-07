@@ -112,6 +112,9 @@ class MenuItem:
     # SCALAR
     setting_path: str = ""
     hint: str = ""
+    elide: str = "tail"
+    """Which end of an over-long value to drop: ``tail``, or ``head`` for a
+    path, whose leaf is what tells two sources apart."""
     coerce: Callable[[str], Any] | None = None
     value_getter: Callable[[FNDApp], str] | None = None
     # Takes precedence over ``setting_path``, for a row that edits screen-local

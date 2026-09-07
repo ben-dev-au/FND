@@ -157,16 +157,21 @@ def toml_value(value: Any) -> str:
     return _quoted(str(value))
 
 
-def path_value(path: Path) -> str:
-    """A path as TOML, re-tilded under the home directory. The model expands
-    `~` on load, so without this every generated config bakes in one machine's
-    absolute paths and stops being portable or shareable."""
+def under_home(path: Path) -> str:
+    """A path re-tilded under the home directory."""
     home = Path.home()
     if path == home:
-        return toml_value("~")
+        return "~"
     if path.is_relative_to(home):
-        return toml_value("~/" + path.relative_to(home).as_posix())
-    return toml_value(str(path))
+        return "~/" + path.relative_to(home).as_posix()
+    return str(path)
+
+
+def path_value(path: Path) -> str:
+    """A path as TOML, re-tilded. The model expands `~` on load, so without
+    this every generated config bakes in one machine's absolute paths and
+    stops being portable or shareable."""
+    return toml_value(under_home(path))
 
 
 _ESCAPES = {

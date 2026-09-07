@@ -172,6 +172,13 @@ _GLYPH_PICKER = "▾"  # U+25BE small caret
 _GLYPH_EXTERNAL = "↗"  # U+2197 upper-right arrow
 
 
+def _display_path(raw: str) -> str:
+    """A source path as the user wrote it: `~` rather than a home prefix."""
+    from fnd.config_render import under_home
+
+    return under_home(Path(raw).expanduser())
+
+
 def _render_row(
     item: MenuItem,
     app: FNDApp | None,
@@ -293,7 +300,9 @@ def _render_row(
         # least a 2-char dotted pad and the whole affordance.
         min_pad = 2
         gap = 2  # leading + trailing space around the dots
-        segments = _truncate_segments_to_fit(segments, budget=width - used - min_pad - gap)
+        segments = _truncate_segments_to_fit(
+            segments, budget=width - used - min_pad - gap, elide=item.elide
+        )
         plain_len = sum(len(seg_text) for seg_text, _ in segments)
         pad = max(min_pad, width - used - plain_len - gap)
         text.append(" " + "·" * pad + " ", style="dim")
@@ -304,8 +313,15 @@ def _render_row(
     return text
 
 
+def _shorten(text: str, keep: int, elide: str) -> str:
+    """``text`` in ``keep`` cells, marking the end that was dropped."""
+    if keep <= 1:
+        return "…"
+    return "…" + text[-(keep - 1) :] if elide == "head" else text[: keep - 1] + "…"
+
+
 def _truncate_segments_to_fit(
-    segments: list[tuple[str, str]], *, budget: int
+    segments: list[tuple[str, str]], *, budget: int, elide: str = "tail"
 ) -> list[tuple[str, str]]:
     """Shrink the first dim/summary segment with ``…`` so the total
     fits within ``budget``. The trailing affordance segment (and any
@@ -320,6 +336,17 @@ def _truncate_segments_to_fit(
     # dim segments to consume whatever's left.
     reserved = sum(len(seg_text) for seg_text, style in segments if "dim" not in style)
     available_for_dim = budget - reserved
+    if reserved > budget:
+        # A value is not an affordance: a long one reserved in full ran past
+        # the right border and the terminal cut it, with nothing to say so.
+        # Glyphs are one or two cells, so shrinking the longest segment
+        # leaves them whole.
+        kept = [(t, s) for t, s in segments if "dim" not in s]
+        longest = max(range(len(kept)), key=lambda i: len(kept[i][0]))
+        room = budget - (reserved - len(kept[longest][0]))
+        text, style = kept[longest]
+        kept[longest] = (_shorten(text, room, elide), style)
+        return kept
     if available_for_dim <= 1:
         # Pathologically narrow row — drop dim segments altogether,
         # keep only the affordance.
@@ -2375,6 +2402,8 @@ class SourceFormScreen(Screen[None]):
             if key == "filter" and v:
                 status = self._parse_status(v)
                 return f"{v}   {status}".rstrip()
+            if key == "path" and v:
+                return _display_path(v)
             return v or "(unset)"
 
         return MenuItem(
@@ -2386,6 +2415,7 @@ class SourceFormScreen(Screen[None]):
             hint=hint,
             coerce=str,
             value_getter=_get,
+            elide="head" if key == "path" else "tail",
         )
 
     def _set_follow(self, value: bool) -> None:

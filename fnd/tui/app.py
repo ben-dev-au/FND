@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from fnd.query import FileGroup, Hit
 
 
+from rich.text import Text
 from textual import events, on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -115,18 +116,12 @@ def _action_priority(action_id: str) -> bool:
     return False
 
 
-def render_hint_bar(
+def _hint_clusters(
     anchors: tuple[tuple[str, str], ...],
-    contextual: tuple[tuple[str, str], ...] = (),
+    contextual: tuple[tuple[str, str], ...],
+    *,
+    elided: bool = False,
 ) -> Any:
-    """Build the bottom hint bar as a Rich ``Text``.
-
-    Two clusters separated by extra whitespace: ``anchors`` on the left
-    (always present, builds muscle memory), ``contextual`` on the right
-    (changes by focus / screen). Both use the same key-glyph rendering
-    so the visual is identical across the main app and the Settings
-    menu — this is the renderer both call into.
-    """
     from rich.text import Text
 
     def _cluster(pairs: tuple[tuple[str, str], ...]) -> Text:
@@ -145,9 +140,76 @@ def render_hint_bar(
 
     joined = _cluster(anchors)
     if contextual:
-        joined.append_text(Text("      ", style=""))
+        if anchors:
+            joined.append_text(Text("      ", style=""))
         joined.append_text(_cluster(contextual))
+    if elided:
+        joined.append_text(Text(" …", style="dim"))
     return joined
+
+
+class _HintBar:
+    """The hint bar, refitted to the width it is painted at.
+
+    Anchors repeat on every screen and are listed under `?`; a screen's own
+    keys are neither, so an overlong bar drops anchors from the right first.
+    Without this the terminal cropped the tail and the form's `^S Save`
+    never painted. Not a :class:`Text` subclass: Rich renders one through a
+    fast path that never consults ``__rich_console__``.
+    """
+
+    def __init__(
+        self,
+        anchors: tuple[tuple[str, str], ...],
+        contextual: tuple[tuple[str, str], ...],
+    ) -> None:
+        self._anchors = anchors
+        self._contextual = contextual
+        self._full = _hint_clusters(anchors, contextual)
+
+    @property
+    def plain(self) -> str:
+        return self._full.plain
+
+    @property
+    def cell_len(self) -> int:
+        return self._full.cell_len
+
+    def __str__(self) -> str:
+        return self._full.plain
+
+    def fitted(self, width: int) -> Text:
+        for n in range(len(self._anchors), -1, -1):
+            text = _hint_clusters(
+                self._anchors[:n], self._contextual, elided=n < len(self._anchors)
+            )
+            if text.cell_len <= width:
+                return text
+        for n in range(len(self._contextual) - 1, 0, -1):
+            text = _hint_clusters((), self._contextual[:n], elided=True)
+            if text.cell_len <= width:
+                return text
+        return _hint_clusters((), self._contextual[:1])
+
+    def __rich_console__(self, console: Any, options: Any) -> Any:
+        text = self.fitted(options.max_width)
+        text.no_wrap = True
+        yield text
+
+
+def render_hint_bar(
+    anchors: tuple[tuple[str, str], ...],
+    contextual: tuple[tuple[str, str], ...] = (),
+) -> Any:
+    """Build the bottom hint bar as a Rich ``Text``.
+
+    Two clusters separated by extra whitespace: ``anchors`` on the left
+    (always present, builds muscle memory), ``contextual`` on the right
+    (changes by focus / screen). Both use the same key-glyph rendering
+    so the visual is identical across the main app and the Settings
+    menu — this is the renderer both call into.
+    """
+    return _HintBar(anchors, contextual)
 
 
 # How long quit waits for the prefetch drainer to accept its cancellation

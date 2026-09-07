@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
@@ -569,3 +569,24 @@ class TestANoOpSaveChangesNothing:
         from fnd.tui.settings_screen import _merge_frontmatter
 
         assert _merge_frontmatter({}, "", "Course == 'A'", had_override=False) == {}
+
+
+def test_a_long_path_row_marks_what_it_dropped() -> None:
+    """A value is not an affordance: reserved in full, a long path ran past the
+    right border and the terminal cut it with nothing to say so."""
+    from fnd.tui.menu import KIND_SCALAR, MenuItem
+    from fnd.tui.settings_screen import _render_row
+
+    path = "~/Documents/Uni/B. Software Engineering (Honours)/2026 Semester 2/Cloud"
+    item = MenuItem(
+        id="form.path",
+        label="Path",
+        kind=KIND_SCALAR,
+        setting_path="",
+        value_getter=lambda _app: path,
+        elide="head",
+    )
+    rendered = _render_row(item, cast("Any", object()), width=60).plain
+    assert len(rendered) <= 60, rendered
+    assert rendered.rstrip().endswith("Cloud"), "the leaf tells two sources apart"
+    assert "…" in rendered
