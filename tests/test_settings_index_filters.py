@@ -1769,3 +1769,58 @@ class TestTheDefaultsScreenOffersEveryType:
         kinds = next(b for b in spec_branches(FilterSpec(), sample) if b.id == "kinds")
         offered = {i.removeprefix("kind:") for g in kinds.groups for i, _l in g.items}
         assert offered == {"md"}
+
+
+class TestTagCountsAreCountsOfFiles:
+    """Counts are per file, so sampling the same folder twice doubled them:
+    one vault in two collections reported six files carrying a tag that three
+    files carry, and a nested source counted its contents twice."""
+
+    @staticmethod
+    def _corpus(root: Path) -> Path:
+        notes = root / "notes"
+        notes.mkdir()
+        for i in range(3):
+            (notes / f"n{i}.md").write_text("---\ntags: [keep]\n---\nx\n")
+        return notes
+
+    @staticmethod
+    def _config(*roots: Path):
+        from fnd.config import CollectionConfig, Config, SourceConfig
+
+        return Config(
+            collections={
+                str(i): CollectionConfig(sources=[SourceConfig(path=r)])
+                for i, r in enumerate(roots)
+            }
+        )
+
+    def test_the_same_folder_twice_counts_once(self, tmp_path: Path) -> None:
+        from fnd.tui.menu import _sample_first_source
+
+        notes = self._corpus(tmp_path.resolve())
+        app = SimpleNamespace(_config=self._config(notes, notes))
+        sample = _sample_first_source(cast("Any", app))
+        assert sample.tags["frontmatter"] == {"keep": 3}
+
+    def test_a_nested_source_does_not_double_count(self, tmp_path: Path) -> None:
+        from fnd.tui.menu import _sample_first_source
+
+        root = tmp_path.resolve()
+        self._corpus(root)
+        app = SimpleNamespace(_config=self._config(root, root / "notes"))
+        sample = _sample_first_source(cast("Any", app))
+        assert sample.tags["frontmatter"] == {"keep": 3}
+
+    def test_separate_folders_still_add_up(self, tmp_path: Path) -> None:
+        """Deduplication must not hide a genuinely different source."""
+        from fnd.tui.menu import _sample_first_source
+
+        root = tmp_path.resolve()
+        first = self._corpus(root)
+        second = root / "other"
+        second.mkdir()
+        (second / "x.md").write_text("---\ntags: [keep]\n---\nx\n")
+        app = SimpleNamespace(_config=self._config(first, second))
+        sample = _sample_first_source(cast("Any", app))
+        assert sample.tags["frontmatter"] == {"keep": 4}

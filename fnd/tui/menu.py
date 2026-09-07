@@ -2164,6 +2164,31 @@ def _open_filter_browser(app: FNDApp) -> None:
     )
 
 
+def _distinct_roots(cfg: Any) -> list[Path]:
+    """Folders to sample once each.
+
+    Counts are per file, so sampling the same folder twice doubles them: one
+    vault listed in two collections reported six files carrying a tag that
+    three files carry, and a nested source counted its contents twice.
+    """
+    from pathlib import Path
+
+    chosen: list[Path] = []
+    for collection in list(cfg.collections.values())[:3]:
+        for source in collection.sources[:2]:
+            try:
+                root = Path(source.path).expanduser().resolve()
+            except OSError:
+                continue
+            if not root.exists():
+                continue
+            if any(root == seen or root.is_relative_to(seen) for seen in chosen):
+                continue
+            chosen = [s for s in chosen if not s.is_relative_to(root)]
+            chosen.append(root)
+    return chosen
+
+
 def _sample_first_source(app: FNDApp) -> Any:
     """Tag values seen in the configured sources, for the picker to offer.
 
@@ -2174,26 +2199,20 @@ def _sample_first_source(app: FNDApp) -> Any:
     file-type groups vanish from this screen as collections were added. Tags
     have no registry to fall back on, so they stay sampled.
     """
-    from pathlib import Path
-
     from fnd.filters.scan import SourceSample, sample_source
 
     cfg = app._config  # type: ignore[attr-defined]
     if cfg is None:
         return None
     merged = SourceSample()
-    for collection in list(cfg.collections.values())[:3]:
-        for source in collection.sources[:2]:
-            root = Path(source.path)
-            if not root.exists():
-                continue
-            part = sample_source(root, budget_s=0.6)
-            merged.files_seen += part.files_seen
-            merged.truncated = merged.truncated or part.truncated
-            for src, values in part.tags.items():
-                bucket = merged.tags.setdefault(src, {})
-                for value, n in values.items():
-                    bucket[value] = bucket.get(value, 0) + n
+    for root in _distinct_roots(cfg):
+        part = sample_source(root, budget_s=0.6)
+        merged.files_seen += part.files_seen
+        merged.truncated = merged.truncated or part.truncated
+        for src, values in part.tags.items():
+            bucket = merged.tags.setdefault(src, {})
+            for value, n in values.items():
+                bucket[value] = bucket.get(value, 0) + n
     return merged
 
 
