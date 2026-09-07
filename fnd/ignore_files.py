@@ -201,12 +201,27 @@ class IgnoreStack:
         return IgnoreStack(tuple(f for f in self.files if f.path.name != filename))
 
     def match(self, target: Path, *, is_dir: bool) -> IgnoreMatch | None:
-        decided: IgnoreMatch | None = None
-        for ignore_file in self.files:
-            found = ignore_file.match(target, is_dir=is_dir)
-            if found is not None:
-                decided = found  # innermost file wins
-        return decided
+        """The decision, taken per KIND of ignore file, exclusion winning.
+
+        `.gitignore` and `.fndignore` are separate policies, not one merged
+        file. Deciding across both together let a negation in one re-admit
+        what the other excluded — so switching `.fndignore` ON could *add*
+        files, and a whitelisting one made `.gitignore` a no-op entirely.
+        Within a single kind the innermost file still wins, as git does.
+        """
+        negated: IgnoreMatch | None = None
+        for name in dict.fromkeys(f.path.name for f in self.files):
+            decided: IgnoreMatch | None = None
+            for ignore_file in self.files:
+                if ignore_file.path.name != name:
+                    continue
+                found = ignore_file.match(target, is_dir=is_dir)
+                if found is not None:
+                    decided = found  # innermost file of this kind wins
+            if decided is not None and decided.ignored:
+                return decided
+            negated = negated or decided
+        return negated
 
     def ignored(self, target: Path, *, is_dir: bool) -> bool:
         found = self.match(target, is_dir=is_dir)

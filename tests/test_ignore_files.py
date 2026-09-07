@@ -365,3 +365,54 @@ def test_a_nested_repo_does_not_switch_off_fndignore(tmp_path: Path) -> None:
     assert "repo/secret.md" not in got, ".fndignore stopped applying inside the repo"
     assert "repo/gitonly.md" in got, "the outer .gitignore reached inside the repo"
     assert {"keep.md", "repo/ok.md"} <= got
+
+
+class TestTwoIgnoreFilesAreTwoPolicies:
+    """`.gitignore` and `.fndignore` are separate policies, not one merged
+    file. Deciding across both together let a negation in one re-admit what
+    the other excluded — so switching `.fndignore` on could ADD files, and a
+    whitelisting one made `.gitignore` a no-op entirely."""
+
+    @staticmethod
+    def _corpus(root: Path) -> None:
+        (root / "notes.md").write_text("a\n")
+        (root / "secret.md").write_text("b\n")
+        (root / "data.csv").write_text("c\n")
+        (root / "build").mkdir()
+        (root / "build" / "out.md").write_text("d\n")
+        (root / ".gitignore").write_text("build/\nsecret.md\n")
+        # A standard git whitelist: exclude everything, re-admit dirs and md.
+        (root / ".fndignore").write_text("*\n!*/\n!*.md\n")
+
+    @staticmethod
+    def _walked(root: Path, names: tuple[str, ...]) -> set[str]:
+        from fnd.walk import walk
+
+        return {
+            p.resolve().relative_to(root).as_posix() for p in walk(roots=[root], ignore_names=names)
+        }
+
+    def test_adding_the_second_file_never_adds_a_file(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        self._corpus(root)
+        git = self._walked(root, (".gitignore",))
+        fnd = self._walked(root, (".fndignore",))
+        both = self._walked(root, (".gitignore", ".fndignore"))
+        assert both <= git, f"{both - git} came back when .fndignore was added"
+        assert both <= fnd, f"{both - fnd} came back when .gitignore was added"
+
+    def test_a_whitelist_does_not_disable_the_other_file(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        self._corpus(root)
+        both = self._walked(root, (".gitignore", ".fndignore"))
+        assert "secret.md" not in both, ".gitignore's exclusion was overridden"
+        assert "build/out.md" not in both
+        assert both == {"notes.md"}
+
+    def test_negation_within_one_file_still_works(self, tmp_path: Path) -> None:
+        """The git-compatible half must survive: innermost wins per kind."""
+        root = tmp_path.resolve()
+        (root / "keep.md").write_text("a\n")
+        (root / "drop.md").write_text("b\n")
+        (root / ".gitignore").write_text("*.md\n!keep.md\n")
+        assert self._walked(root, (".gitignore",)) == {"keep.md"}
