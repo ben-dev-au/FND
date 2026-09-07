@@ -13,7 +13,7 @@ import pytest
 from pydantic import BaseModel
 
 from fnd import config as conf
-from fnd.config_migrations import CONFIG_VERSION, ConfigTooNewError, migrate
+from fnd.config_migrations import CONFIG_VERSION, ConfigTooNewError, check_version, migrate
 from fnd.config_render import (
     _SOURCE_ORDER,
     DEFAULT_GROUPS,
@@ -65,6 +65,14 @@ def _sample() -> conf.Config:
             ),
         },
     )
+
+
+def _reload(text: str) -> conf.Config:
+    """Parse rendered output the way `load` does: `config_version` is consumed
+    by the version check, and Config forbids anything it does not know."""
+    raw = tomllib.loads(text)
+    check_version(raw)
+    return conf.Config.model_validate(raw)
 
 
 def _maximal() -> conf.Config:
@@ -193,10 +201,10 @@ class TestTheWholeSurfaceRoundTrips:
 
     def test_it_survives_a_render(self) -> None:
         config = _maximal()
-        assert conf.Config.model_validate(tomllib.loads(render_config(config))) == config
+        assert _reload(render_config(config)) == config
 
     def test_an_empty_collection_is_not_lost(self) -> None:
-        back = conf.Config.model_validate(tomllib.loads(render_config(_maximal())))
+        back = _reload(render_config(_maximal()))
         assert "Soft Eng Books" in back.collections
         assert back.collections["Soft Eng Books"].sources == []
 
@@ -251,12 +259,12 @@ class TestDocumentationCannotDrift:
 class TestRoundTrip:
     def test_a_config_survives_being_rendered(self) -> None:
         config = _sample()
-        back = conf.Config.model_validate(tomllib.loads(render_config(config)))
+        back = _reload(render_config(config))
         assert back == config
 
     def test_rendering_is_idempotent(self) -> None:
         first = render_config(_sample())
-        again = conf.Config.model_validate(tomllib.loads(first))
+        again = _reload(first)
         assert render_config(again) == first
 
     def test_an_unset_field_renders_as_its_own_example(self) -> None:
@@ -334,7 +342,7 @@ class TestValueShapes:
     gate the shapes those fields can hold, which is where the losses were."""
 
     def _round_trip(self, config: conf.Config) -> conf.Config:
-        return conf.Config.model_validate(tomllib.loads(render_config(config)))
+        return _reload(render_config(config))
 
     def _with_notes(self, notes: str) -> conf.Config:
         return conf.Config(
@@ -442,6 +450,39 @@ class TestRefusingBadOutput:
         finally:
             module.render_config = original
         assert path.read_text(encoding="utf-8") == before, "the old config was not kept"
+
+
+class TestUnknownKeysFailLoudly:
+    """The renderer only knows the schema and every writer replaces the whole
+    file, so a key the models ignore is deleted on the next save. Refusing at
+    load is the only place that can name it."""
+
+    @pytest.mark.parametrize(
+        ("case", "text", "named"),
+        [
+            ("top-level table", "[mystery]\nk = 1\n", "mystery"),
+            ("defaults typo", "[defaults]\nresult_limitt = 5\n", "result_limitt"),
+            ("filter field", "[defaults.filters]\nnope = 1\n", "nope"),
+            (
+                "source key",
+                '[[collections.n.sources]]\npath = "~/N"\nmystery = 1\n',
+                "mystery",
+            ),
+        ],
+    )
+    def test_an_unknown_key_is_refused_and_named(
+        self, case: str, text: str, named: str, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text(text, encoding="utf-8")
+        with pytest.raises(Exception, match=named):
+            conf.load(path)
+
+    def test_the_starter_config_still_loads(self, tmp_path: Path) -> None:
+        """Forbidding extras would be worthless if our own output tripped it."""
+        path = tmp_path / "config.toml"
+        path.write_text(conf.starter_config(), encoding="utf-8")
+        conf.load(path)
 
 
 class TestMigration:

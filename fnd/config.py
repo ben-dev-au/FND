@@ -220,7 +220,7 @@ class _ConfigModel(BaseModel):
     prose cannot drift from the schema.
     """
 
-    model_config = ConfigDict(use_attribute_docstrings=True)
+    model_config = ConfigDict(use_attribute_docstrings=True, extra="forbid")
 
 
 class DefaultFilters(_ConfigModel):
