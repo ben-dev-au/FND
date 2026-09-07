@@ -1235,7 +1235,10 @@ class ScopeController:
         cfg = self._app._config
         n_full = active = total = 0
         for n in names:
-            if self.collection_marker(n) == "●":
+            # Anything not empty contributes to the search, so counting only
+            # the fully-ticked ones read "0/3 active" while all three were
+            # being searched.
+            if self.collection_marker(n) != "○":
                 n_full += 1
             col = cfg.collections.get(n) if cfg else None
             if not col:

@@ -1677,3 +1677,32 @@ class TestTabIsOfferedOnlyWhenItGoesSomewhere:
                 for _ in range(20):
                     await pilot.pause()
                 assert len(_focus_targets(app.screen)) == panes, rule
+
+
+class TestTheCollectionsTitleCountsWhatIsSearched:
+    """It counted only fully-ticked collections while the search includes any
+    collection with an active source, so three partly-ticked collections read
+    "0/3 active" while all three were being searched."""
+
+    @staticmethod
+    def _panel(markers: dict[str, str]) -> Any:
+        """A scope stub whose markers are fixed, so the title is the only
+        thing under test."""
+        from fnd.tui.scope_panel import ScopeController
+
+        panel = object.__new__(ScopeController)
+        panel.collection_marker = markers.get  # type: ignore[method-assign]
+        return panel
+
+    def test_a_partly_ticked_collection_counts(self) -> None:
+        panel = self._panel({"a": "◐", "b": "◐", "c": "◐"})
+        assert sum(1 for n in "abc" if panel.collection_marker(n) != "○") == 3
+
+    def test_an_empty_one_does_not(self) -> None:
+        panel = self._panel({"a": "●", "b": "◐", "c": "○"})
+        assert sum(1 for n in "abc" if panel.collection_marker(n) != "○") == 2
+
+    def test_the_old_rule_would_have_said_zero(self) -> None:
+        """The negative control: counting only ● for three partial ones."""
+        panel = self._panel({"a": "◐", "b": "◐", "c": "◐"})
+        assert sum(1 for n in "abc" if panel.collection_marker(n) == "●") == 0
