@@ -4,8 +4,10 @@ Two suites on one machine starve each other: at 97% CPU busy and 100 MB free
 RAM, a test asserting on its own CPU share failed 1 run in 3, under xdist and
 serially alike. The lock removes the overlap, the worker count keeps a single
 run inside spare capacity, and both are advisory: pytest run directly is
-unaffected. The lock is machine-wide, not repo-local, because the contention
-this exists to stop comes from sibling worktrees with their own ``.git``.
+unaffected. The lock is per-user, not repo-local, because the contention this
+exists to stop comes from sibling worktrees with their own ``.git``. Workers
+are sized after the lock is held, so a queued run measures the machine it will
+actually get rather than the one it is waiting behind.
 
 ``FND_TEST_WORKERS`` forces the worker count; ``FND_TEST_NO_LOCK`` skips the
 gate. An explicit ``-n`` on the command line disables both defaults.
@@ -20,7 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Sequence
 from pathlib import Path
 from typing import IO
 
@@ -30,6 +32,20 @@ WORKER_CEILING = 6
 # Peak RSS of a worker plus its extract-pool child, measured at ~1.0 GB.
 GB_PER_WORKER = 1.2
 LOCK_TIMEOUT_SECONDS = 1800
+
+
+def _notify(message: str) -> None:
+    """pre-commit captures hook output and prints it only on failure, so a
+    wait reaches nobody and a queued push reads as a hang. The terminal
+    bypasses that buffer."""
+    device = "CONOUT$" if sys.platform == "win32" else "/dev/tty"
+    try:
+        with open(device, "w") as terminal:
+            terminal.write(f"{message}\n")
+            terminal.flush()
+        return
+    except OSError:
+        print(message, file=sys.stderr, flush=True)
 
 
 def _free_gb() -> float:
@@ -49,7 +65,7 @@ def _free_gb() -> float:
             if value.isdigit():
                 counts[key.strip()] = int(value)
         pages = sum(counts.get(k, 0) for k in ("Pages free", "Pages purgeable", "Pages inactive"))
-        return pages * page / 1024**3
+        return pages * page / 1024**3 if pages else float("inf")
     meminfo = Path("/proc/meminfo")
     if meminfo.exists():
         for line in meminfo.read_text().splitlines():
@@ -59,21 +75,22 @@ def _free_gb() -> float:
 
 
 def _busy_cores(ncpu: int) -> float:
-    """Cores in use now. An instantaneous sample beats the 1-minute load
-    average, which lags a run that started seconds ago."""
-    if sys.platform == "darwin":
-        try:
-            out = subprocess.run(
-                ["top", "-l", "2", "-n", "0"], capture_output=True, text=True, timeout=30
-            ).stdout
-            usage = [ln for ln in out.splitlines() if ln.startswith("CPU usage")][-1]
-            return ncpu * (1.0 - float(usage.split(",")[-1].strip().split("%")[0]) / 100.0)
-        except (OSError, ValueError, IndexError, subprocess.SubprocessError):
-            pass
+    """Cores in use now. The load average is instant but lags; the accurate
+    sample costs ~2.2s, so it is only paid when it could lower the count."""
     try:
-        return os.getloadavg()[0]
+        load1 = os.getloadavg()[0]
     except OSError:
         return ncpu / 2.0
+    if load1 <= ncpu - WORKER_CEILING:
+        return load1
+    try:
+        out = subprocess.run(
+            ["top", "-l", "2", "-n", "0"], capture_output=True, text=True, timeout=30
+        ).stdout
+        usage = [ln for ln in out.splitlines() if ln.startswith("CPU usage")][-1]
+        return ncpu * (1.0 - float(usage.split(",")[-1].strip().split("%")[0]) / 100.0)
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return load1
 
 
 def pick_workers() -> int:
@@ -83,16 +100,17 @@ def pick_workers() -> int:
         return max(1, int(forced))
     ncpu = os.cpu_count() or 4
     if sys.platform == "win32":
-        return min(WORKER_CEILING, max(2, ncpu // 2))
+        return max(1, min(WORKER_CEILING, ncpu // 2))
     allowed = min(ncpu - _busy_cores(ncpu), _free_gb() / GB_PER_WORKER)
     return max(1, min(WORKER_CEILING, math.floor(allowed)))
 
 
 def _acquire(handle: IO[str]) -> None:
-    """Raises OSError when another run holds the lock."""
+    """Raises OSError while another run holds the lock."""
     if sys.platform == "win32":
         import msvcrt
 
+        handle.seek(0)
         msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
     else:
         import fcntl
@@ -101,13 +119,16 @@ def _acquire(handle: IO[str]) -> None:
 
 
 @contextlib.contextmanager
-def _machine_lock() -> Iterator[None]:
+def _machine_lock() -> Generator[None]:
     if os.environ.get("FND_TEST_NO_LOCK"):
         yield
         return
-    handle = (Path(tempfile.gettempdir()) / "fnd-pytest.lock").open("w")
-    handle.write("x")
-    handle.flush()
+    try:
+        handle = (Path(tempfile.gettempdir()) / "fnd-pytest.lock").open("a+")
+    except OSError as exc:
+        _notify(f"test lock unavailable ({exc}); running unsynchronised")
+        yield
+        return
     deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
     announced = False
     try:
@@ -117,10 +138,10 @@ def _machine_lock() -> Iterator[None]:
                 break
             except OSError:
                 if time.monotonic() > deadline:
-                    print("lock still held after 30m; running anyway", file=sys.stderr)
+                    _notify("test lock still held after 30m; running anyway")
                     break
                 if not announced:
-                    print("another test run is in progress, waiting...", file=sys.stderr)
+                    _notify("another test run is in progress, waiting...")
                     announced = True
                 time.sleep(2.0)
         yield
@@ -128,15 +149,27 @@ def _machine_lock() -> Iterator[None]:
         handle.close()
 
 
+def _wants_workers(args: Sequence[str]) -> bool:
+    """An explicit -n wins, and injecting one under `-p no:xdist` exits 4."""
+    if any(a.startswith(("-n", "--numprocesses")) for a in args):
+        return False
+    return not any("no:xdist" in a for a in args)
+
+
 def main() -> int:
-    args = sys.argv[1:]
-    if not any(a.startswith(("-n", "--numprocesses")) for a in args):
-        workers = pick_workers()
-        if workers > 1:
-            print(f"pytest: {workers} workers", file=sys.stderr)
-            args = ["-n", str(workers), "--dist", "load", *args]
+    args = list(sys.argv[1:])
     with _machine_lock():
-        return subprocess.call([sys.executable, "-m", "pytest", *args])
+        if _wants_workers(args):
+            workers = pick_workers()
+            if workers > 1:
+                _notify(f"pytest: {workers} workers")
+                # loadfile, not load: a module's tests stay on one worker, which
+                # is what serial gives a suite that mutates sys.modules. Costs 19s.
+                args = ["-n", str(workers), "--dist", "loadfile", *args]
+        try:
+            return subprocess.call([sys.executable, "-m", "pytest", *args])
+        except KeyboardInterrupt:
+            return 130
 
 
 if __name__ == "__main__":

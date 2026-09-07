@@ -1,5 +1,5 @@
 {
-  "include": ["fnd", "tests"],
+  "include": ["fnd", "tests", "scripts"],
   "exclude": ["**/__pycache__", ".venv", "dist", "build"],
   "pythonVersion": "3.13",
   "venvPath": ".",
