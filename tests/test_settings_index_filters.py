@@ -747,3 +747,34 @@ async def test_the_wizard_refuses_an_invalid_rule_instead_of_crashing(built_inde
         error = wizard.query_one("#wizard_error", Static)
         assert "-hidden" not in error.classes
         assert "frontmatter" in str(error.render())
+
+
+@pytest.mark.asyncio
+async def test_the_rule_editor_names_the_glob_trap(built_index: Path) -> None:
+    """Both hunters wrote `'*drafts*'`, watched it green-tick, and indexed
+    every draft: `*` does not cross `/`. And "✓ every file" was the rule's
+    scope, read as a claim that it matches everything."""
+    from textual.widgets import Static
+
+    from fnd.tui.settings_screen import RuleTextScreen
+
+    app = FNDApp(index_dir=built_index)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.push_screen(
+            RuleTextScreen(
+                title="Custom expression",
+                value="NOT file.path ~~ '*drafts*'",
+                note_scoped=False,
+                on_save=lambda _t: None,
+            )
+        )
+        for _ in range(12):
+            await pilot.pause()
+        status = str(app.screen.query_one("#rule_status", Static).render())
+        assert status.startswith("✓")
+        assert "every file" in status
+        assert status != "✓ every file", "the scope must not read as a match claim"
+        help_text = str(app.screen.query_one("#rule_help", Static).render())
+        assert "* stops at /" in help_text
+        assert "'drafts/**'" in help_text

@@ -5051,6 +5051,14 @@ def _branch_group(branch: Any) -> ToggleGroup:
     )
 
 
+#: Shown under the rule box. Both hunters wrote an inert glob here: `*` does
+#: not cross `/`, so `'*drafts*'` never matches while `'drafts/**'` does.
+_RULE_HELP = (
+    "fields  file.path/name/ext/kind/size, file.tags.all, or any frontmatter key\n"
+    "match   ~~ is a glob and * stops at /, so 'drafts/**' matches, '*drafts*' does not"
+)
+
+
 class RuleTextScreen(Screen[None]):
     """One typed filter rule, validated as you type.
 
@@ -5076,6 +5084,9 @@ class RuleTextScreen(Screen[None]):
     RuleTextScreen #rule_status { height: auto; padding: 0 1; color: $text-muted; }
     RuleTextScreen #rule_status.-ok { color: $success; }
     RuleTextScreen #rule_status.-bad { color: $error; }
+    RuleTextScreen #rule_help {
+        height: auto; padding: 0 1; color: $text-muted; text-style: dim;
+    }
     RuleTextScreen > #footer_hints {
         dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
     }
@@ -5100,6 +5111,7 @@ class RuleTextScreen(Screen[None]):
             box.border_title = self._title
             yield TextArea(self._value, id="rule_text")
             yield Static("", id="rule_status")
+            yield Static(_RULE_HELP, id="rule_help")
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
@@ -5129,8 +5141,11 @@ class RuleTextScreen(Screen[None]):
             status.update(f"✗ col {err.column}: {err.message}")
             return
         status.add_class("-ok")
-        scope = "any file with a frontmatter block" if self._note_scoped else "every file"
-        status.update(f"✓ {scope}")
+        scope = "files with a frontmatter block" if self._note_scoped else "every file"
+        # "✓ every file" was read as "this matches every file". It is the
+        # rule's scope, and a rule that parses can still match nothing or
+        # exclude nothing.
+        status.update(f"✓ reads as valid — it will be tested against {scope}")
 
     def action_back(self) -> None:
         self.app.pop_screen()
