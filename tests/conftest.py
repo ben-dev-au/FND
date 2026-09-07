@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import importlib.util
+import os
 from collections.abc import Generator
 from pathlib import Path
 
@@ -301,3 +303,65 @@ def _quiet_preview_load_paths() -> Generator[None]:  # pyright: ignore[reportUnu
         debounce_field.default = debounce_original
         prefetch_field.default = prefetch_original
         Defaults.model_rebuild(force=True)
+
+
+# ── Machine lock for ad-hoc runs ───────────────────────────────────
+#
+# scripts/run_tests.py holds a per-user lock so two suites cannot starve each
+# other, but it only binds runs that go through it: `uv run pytest` typed
+# directly bypasses it, which is how three concurrent suites once shared this
+# machine. A run large enough to matter takes the same lock here instead.
+#
+# Two entry points because xdist runs collection in every worker and never in
+# the controller: a parallel run is gated at configure time, a serial one on
+# the item count once it is known.
+
+_LOCK_THRESHOLD = 200
+_held_lock: contextlib.AbstractContextManager[None] | None = None
+
+
+def _is_worker(config: pytest.Config) -> bool:
+    return hasattr(config, "workerinput")
+
+
+def _parallel(config: pytest.Config) -> bool:
+    return bool(config.getoption("numprocesses", None))
+
+
+def _take_machine_lock() -> None:
+    """The wrapper owns the implementation; its absence is not a reason to
+    fail the suite, and an already-held lock is not a reason to queue."""
+    global _held_lock
+    if _held_lock is not None or os.environ.get("FND_TEST_NO_LOCK"):
+        return
+    wrapper = Path(__file__).resolve().parents[1] / "scripts" / "run_tests.py"
+    try:
+        spec = importlib.util.spec_from_file_location("_fnd_test_lock", wrapper)
+        if spec is None or spec.loader is None:
+            return
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if os.environ.get(module.LOCK_ENV):
+            return
+        lock = module._machine_lock()
+        lock.__enter__()
+        _held_lock = lock
+    except Exception:
+        return
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if not _is_worker(config) and _parallel(config):
+        _take_machine_lock()
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    if not _is_worker(config) and not _parallel(config) and len(items) >= _LOCK_THRESHOLD:
+        _take_machine_lock()
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    global _held_lock
+    if _held_lock is not None:
+        _held_lock.__exit__(None, None, None)
+        _held_lock = None

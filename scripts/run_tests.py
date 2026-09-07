@@ -33,6 +33,8 @@ WORKER_CEILING = 6
 # Peak RSS of a worker plus its extract-pool child, measured at ~1.0 GB.
 GB_PER_WORKER = 1.2
 LOCK_TIMEOUT_SECONDS = 1800
+# Set once held, so tests/conftest.py's gate does not queue behind us.
+LOCK_ENV = "FND_TEST_LOCK_HELD"
 
 
 def _notify(message: str) -> None:
@@ -136,6 +138,7 @@ def _machine_lock() -> Generator[None]:
         while True:
             try:
                 _acquire(handle)
+                os.environ[LOCK_ENV] = "1"
                 break
             except OSError:
                 if time.monotonic() > deadline:
