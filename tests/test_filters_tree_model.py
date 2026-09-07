@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from fnd.filters import FilterSpec
 from fnd.filters.scan import SourceSample, sample_source
-from fnd.filters.tree_model import Branch, apply_selection, selection_for, spec_branches
+from fnd.filters.tree_model import (
+    Branch,
+    apply_selection,
+    custom_ids,
+    selection_for,
+    spec_branches,
+)
 
 
 def _leaves(branches: list[Branch]) -> set[str]:
@@ -204,3 +211,33 @@ class TestEveryTypeTickedMeansEveryType:
         every = {f"kind:{k}" for k in ALL_KIND_IDS}
         spec, _g, _f = apply_selection(FilterSpec(), every, set())
         assert spec.kinds == ()
+
+
+class TestACustomBoundStaysOnOffer:
+    """Its row exists only while the spec holds it, so picking a preset over a
+    custom value discarded the value with no way back to it."""
+
+    @staticmethod
+    def _labels(spec: FilterSpec, branch: str, keep: dict[str, str]) -> list[str]:
+        return [
+            lbl for b in spec_branches(spec, None, keep) if b.id == branch for _i, lbl in b.items
+        ]
+
+    def test_the_row_survives_moving_off_it(self) -> None:
+        held = FilterSpec(max_size=7_000_000)
+        keep = custom_ids(held)
+        moved = replace(held, max_size=1_000_000)
+        assert "Under 7 MB" not in self._labels(moved, "size", {})
+        assert "Under 7 MB" in self._labels(moved, "size", keep)
+
+    def test_selecting_it_again_restores_the_exact_bound(self) -> None:
+        moved = FilterSpec(max_size=1_000_000)
+        selected, excluded = selection_for(moved)
+        selected = {i for i in selected if not i.startswith("size:")} | {"size:custom:7000000"}
+        spec, _g, _f = apply_selection(moved, selected, excluded)
+        assert spec.max_size == 7_000_000
+
+    def test_rows_stay_ordered_by_the_bound_they_set(self) -> None:
+        keep = custom_ids(FilterSpec(max_size=7_000_000))
+        labels = self._labels(FilterSpec(), "size", keep)
+        assert labels.index("Under 7 MB") == labels.index("Under 1 MB") + 1

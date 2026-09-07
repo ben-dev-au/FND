@@ -5059,6 +5059,10 @@ class FilterBrowserScreen(Screen[None]):
         self._gitignore = gitignore
         self._fndignore = fndignore
         self._sample: Any = None
+        # A custom bound stays on offer for the visit: the radio row carrying
+        # it exists only while the spec holds it, so picking a preset instead
+        # would otherwise discard the value with no way back to it.
+        self._kept_custom: dict[str, str] = {}
         self._sample_provider = sample_provider
         self._scanning = sample_provider is not None
         self._on_save = on_save
@@ -5147,12 +5151,13 @@ class FilterBrowserScreen(Screen[None]):
     def _rebuild(self) -> None:
         import contextlib
 
-        from fnd.filters.tree_model import selection_for, spec_branches
+        from fnd.filters.tree_model import custom_ids, selection_for, spec_branches
 
         tree = self.query_one("#filter_tree", ToggleTree)
         keep = tree.expanded_group_ids if tree.root.children else set()
         line = tree.cursor_line
-        branches = spec_branches(self._spec, self._sample)
+        self._kept_custom.update(custom_ids(self._spec))
+        branches = spec_branches(self._spec, self._sample, self._kept_custom)
         # Kept so a commit knows which kinds were actually on screen: ticking
         # every visible box means "all of them", not the sampled subset.
         self._branches = branches

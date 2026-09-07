@@ -12,6 +12,7 @@ change what it holds as the clock moves.
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
 from fnd.filters.model import FilterSpec
@@ -25,7 +26,14 @@ TAG_SOURCE_LABELS: dict[str, str] = {
     "frontmatter": "Note tags (YAML)",
 }
 
-__all__ = ["BRANCHES", "LEGEND", "apply_selection", "selection_for", "spec_branches"]
+__all__ = [
+    "BRANCHES",
+    "LEGEND",
+    "apply_selection",
+    "custom_ids",
+    "selection_for",
+    "spec_branches",
+]
 
 # (id, label, days back). ``None`` days = no bound.
 _WINDOWS: tuple[tuple[str, str, int | None], ...] = (
@@ -137,8 +145,17 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
     return Branch("tags", "Tags", "cycle", groups=tuple(groups), empty_label="any tag")
 
 
-def spec_branches(spec: FilterSpec, sample: SourceSample | None = None) -> list[Branch]:
-    """The branches a filter screen should render for ``spec``."""
+def spec_branches(
+    spec: FilterSpec,
+    sample: SourceSample | None = None,
+    keep_custom: Mapping[str, str] | None = None,
+) -> list[Branch]:
+    """The branches a filter screen should render for ``spec``.
+
+    ``keep_custom`` names custom bounds to keep offering per branch even when
+    the spec no longer holds them, so picking a preset over a custom value is
+    reversible without retyping it in the text view.
+    """
     branches: list[Branch] = []
 
     kinds = _kind_items(sample, spec.kinds)
@@ -174,17 +191,21 @@ def spec_branches(spec: FilterSpec, sample: SourceSample | None = None) -> list[
             empty_label="none",
         )
     )
-    size_items = [(f"size:{i}", lbl) for i, lbl, _ in _SIZES]
-    size_id = _size_id(spec.max_size)
-    if size_id.startswith(f"{CUSTOM}:"):
-        size_items.insert(1, (f"size:{size_id}", f"Under {_human_size(spec.max_size or 0)}"))
+    # Rows stay ordered by the bound they set, so a custom one lands among the
+    # presets rather than ahead of them.
+    sized = [(-1 if v is None else v, f"size:{i}", lbl) for i, lbl, v in _SIZES]
+    for custom in _custom_offers("size", spec, keep_custom):
+        value = int(custom.removeprefix(f"{CUSTOM}:"))
+        sized.append((value, f"size:{custom}", f"Under {_human_size(value)}"))
+    size_items = [(i, lbl) for _k, i, lbl in sorted(sized)]
     branches.append(Branch("size", "Maximum file size", "radio", tuple(size_items)))
     for field_name, label in (("modified", "Modified within"), ("created", "Created within")):
-        items = [(f"{field_name}:{i}", lbl) for i, lbl, _ in _WINDOWS]
-        bound = getattr(spec, f"{field_name}_after")
-        window_id = _window_id(bound)
-        if window_id.startswith(f"{CUSTOM}:"):
-            items.insert(1, (f"{field_name}:{window_id}", f"Since {bound.isoformat()}"))
+        dated = [(-1 if d is None else d, f"{field_name}:{i}", lbl) for i, lbl, d in _WINDOWS]
+        for custom in _custom_offers(field_name, spec, keep_custom):
+            since = custom.removeprefix(f"{CUSTOM}:")
+            days = (dt.date.today() - dt.date.fromisoformat(since)).days
+            dated.append((days, f"{field_name}:{custom}", f"Since {since}"))
+        items = [(i, lbl) for _k, i, lbl in sorted(dated)]
         branches.append(Branch(field_name, label, "radio", tuple(items)))
     branches.append(
         Branch(
@@ -277,6 +298,24 @@ def _window_id(value: dt.date | None) -> str:
         (i for i, _l, d in _WINDOWS if d is not None and abs(d - days) <= 1),
         f"{CUSTOM}:{value.isoformat()}",
     )
+
+
+def custom_ids(spec: FilterSpec) -> dict[str, str]:
+    """Branch id → the custom bound it currently holds, if any."""
+    holds = {
+        "size": _size_id(spec.max_size),
+        "modified": _window_id(spec.modified_after),
+        "created": _window_id(spec.created_after),
+    }
+    return {branch: i for branch, i in holds.items() if i.startswith(f"{CUSTOM}:")}
+
+
+def _custom_offers(
+    branch: str, spec: FilterSpec, keep: Mapping[str, str] | None
+) -> tuple[str, ...]:
+    """The custom rows a branch shows: its own bound first, then a kept one."""
+    ids = (custom_ids(spec).get(branch), (keep or {}).get(branch))
+    return tuple(dict.fromkeys(i for i in ids if i))
 
 
 def _custom_value(selected: set[str] | frozenset[str], field: str) -> str | None:
