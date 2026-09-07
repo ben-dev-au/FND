@@ -5200,12 +5200,16 @@ class FilterBrowserScreen(Screen[None]):
             self.notify(f"Could not copy: {e}", severity="error")
 
     def action_clear_all(self) -> None:
+        """Clear every rule set here, and only those.
+
+        It used to keep the frontmatter rule and the expression while saying
+        everything was cleared, and to switch both ignore-file toggles off.
+        Turning those off *widens* what is indexed, which is the opposite of
+        what clearing suggests, and they have their own rows to do it from.
+        """
         from fnd.filters import FilterSpec
 
-        self._spec = FilterSpec(
-            frontmatter=self._spec.frontmatter, expression=self._spec.expression
-        )
-        self._gitignore = self._fndignore = False
+        self._spec = FilterSpec()
         self._rebuild()
 
     def action_edit_text(self) -> None:

@@ -464,3 +464,52 @@ async def test_the_summary_says_what_the_expression_leaves_out(built_index: Path
     assert "not in the expression" in summary, summary
     assert ".gitignore" in summary
     assert "**/*.md" in summary
+
+
+class TestClearClearsWhatItClaims:
+    """`c` kept the frontmatter rule and the expression while the summary said
+    everything was cleared, and switched both ignore-file toggles off, which
+    widens the index rather than narrowing it."""
+
+    def test_clear_empties_every_rule_including_the_text_ones(self) -> None:
+        from fnd.filters import FilterSpec
+
+        before = FilterSpec(
+            kinds=("md",),
+            max_size=99,
+            frontmatter="Course == 'A'",
+            expression="file.size > 1",
+        )
+        after = FilterSpec()
+        assert before.frontmatter, "fixture must have a rule to clear"
+        assert before.expression, "fixture must have an expression to clear"
+        assert not after.frontmatter
+        assert not after.expression
+        assert not after.kinds
+        assert after.max_size is None
+
+    @pytest.mark.asyncio
+    async def test_clear_leaves_the_ignore_toggles_alone(self, built_index: Path) -> None:
+        """They have their own rows, and switching them off admits everything
+        the ignore files were keeping out."""
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            from fnd.filters import FilterSpec
+
+            screen = FilterBrowserScreen(
+                title="t",
+                spec=FilterSpec(kinds=("md",)),
+                gitignore=True,
+                fndignore=True,
+                on_save=lambda *_: None,
+            )
+            app.push_screen(screen)
+            for _ in range(20):
+                await pilot.pause()
+            screen.action_clear_all()
+            await pilot.pause()
+            assert screen._gitignore is True, "clear switched .gitignore off"
+            assert screen._fndignore is True, "clear switched .fndignore off"
