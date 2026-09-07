@@ -5222,6 +5222,9 @@ class FilterBrowserScreen(Screen[None]):
         # Not ctrl+y: the app binds that to "copy query command" with
         # priority, so a screen binding there never fires.
         Binding("y", "copy_text", show=False),
+        # `?` does not come back here: it lands on the settings menu, taking
+        # the unsaved edit with it. `:` returns intact, so it is left alone.
+        Binding("question_mark", "help_if_saved", show=False),
     ]
 
     CSS = """
@@ -5271,6 +5274,9 @@ class FilterBrowserScreen(Screen[None]):
         self._gitignore = gitignore
         self._fndignore = fndignore
         self._sample: Any = None
+        # What the screen opened with, so leaving can say whether anything is
+        # being thrown away.
+        self._opened_with = (spec, gitignore, fndignore)
         # A custom bound stays on offer for the visit: the radio row carrying
         # it exists only while the spec holds it, so picking a preset instead
         # would otherwise discard the value with no way back to it.
@@ -5444,6 +5450,15 @@ class FilterBrowserScreen(Screen[None]):
             )
         )
 
+    def _dirty(self) -> bool:
+        return (self._spec, self._gitignore, self._fndignore) != self._opened_with
+
+    def action_help_if_saved(self) -> None:
+        if self._dirty():
+            self.notify("Unsaved filter changes — ^S to save, Esc to discard, then ?")
+            return
+        self.app.action_show_help()  # type: ignore[attr-defined]
+
     def action_copy_text(self) -> None:
         """Copy the expression. The app owns the mouse, so a terminal
         selection cannot reach this text."""
@@ -5486,6 +5501,8 @@ class FilterBrowserScreen(Screen[None]):
         )
 
     def action_back(self) -> None:
+        if self._dirty():
+            self.notify("Filter changes discarded — ^S saves them", severity="warning")
         self.app.pop_screen()
 
     def action_save_close(self) -> None:

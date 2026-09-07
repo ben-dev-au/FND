@@ -881,3 +881,77 @@ async def test_each_route_says_what_saving_does_to_the_index(built_index: Path) 
 
     assert "saving does not reindex" in await _head("saving does not reindex")
     assert "saving reindexes this collection" in await _head("saving reindexes this collection")
+
+
+class TestUnsavedFilterWork:
+    """`?` does not return here: it lands on the settings menu, taking the
+    edit with it. `:` returns intact, so it is deliberately left alone."""
+
+    @staticmethod
+    async def _browser(app: FNDApp, pilot: Any) -> Any:
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(),
+                gitignore=True,
+                fndignore=True,
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(15):
+            await pilot.pause()
+        return app.screen
+
+    @pytest.mark.asyncio
+    async def test_an_edit_holds_the_help_key(self, built_index: Path) -> None:
+        from dataclasses import replace
+
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            screen = await self._browser(app, pilot)
+            screen._spec = replace(screen._spec, kinds=("md",))
+            await pilot.press("question_mark")
+            for _ in range(10):
+                await pilot.pause()
+            assert isinstance(app.screen, FilterBrowserScreen), "the edit was carried off"
+
+    @pytest.mark.asyncio
+    async def test_help_still_opens_when_nothing_is_unsaved(self, built_index: Path) -> None:
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await self._browser(app, pilot)
+            await pilot.press("question_mark")
+            for _ in range(10):
+                await pilot.pause()
+            assert not isinstance(app.screen, FilterBrowserScreen), "? must still work"
+
+    @pytest.mark.asyncio
+    async def test_the_command_palette_comes_back_with_the_edit(self, built_index: Path) -> None:
+        """The negative control for the key we chose NOT to guard."""
+        from dataclasses import replace
+
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            screen = await self._browser(app, pilot)
+            screen._spec = replace(screen._spec, kinds=("md",))
+            screen._rebuild()
+            await pilot.press("colon")
+            for _ in range(10):
+                await pilot.pause()
+            await pilot.press("escape")
+            for _ in range(10):
+                await pilot.pause()
+            assert isinstance(app.screen, FilterBrowserScreen)
+            assert app.screen._spec.kinds == ("md",)
