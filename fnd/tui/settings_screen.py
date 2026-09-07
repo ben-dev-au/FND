@@ -1878,6 +1878,7 @@ def open_source_filter_browser(
     root: Any,
     on_change: Callable[[], None],
     globs: list[str] | None = None,
+    excludes: list[str] | None = None,
 ) -> None:
     """The source's *effective* filters, edited as branches.
 
@@ -1919,6 +1920,7 @@ def open_source_filter_browser(
             fndignore=resolved.respect_fndignore,
             sample_provider=_sample,
             globs=list(globs or ()),
+            excludes=list(excludes or ()),
             inherited=(
                 _spec_from_filters(defaults),
                 defaults.respect_gitignore,
@@ -2000,6 +2002,18 @@ def _source_filters_or_none(raw: dict[str, Any] | None) -> Any:
     if cleared:
         cleaned["clears"] = cleared
     return SourceFilters.model_validate(cleaned) if cleaned else None
+
+
+def _exclude_globs(fields: dict[str, Any]) -> list[str]:
+    """Every exclude glob in force, presets expanded."""
+    from fnd.config import EXCLUDES_PRESETS
+
+    out: list[str] = []
+    for key in fields.get("excludes_presets") or ():
+        if key in EXCLUDES_PRESETS:
+            out.extend(EXCLUDES_PRESETS[key]["globs"])
+    out += [g.strip() for g in str(fields.get("excludes_custom") or "").split(",") if g.strip()]
+    return out
 
 
 def _excludes_summary(fields: dict[str, Any]) -> str:
@@ -2338,7 +2352,14 @@ class SourceFormScreen(Screen[None]):
             for g in str(self._fields.get("includes_custom") or "").split(",")
             if g.strip()
         ]
-        open_source_filter_browser(app, self._fields["filters"], root, self._populate_fields, globs)
+        open_source_filter_browser(
+            app,
+            self._fields["filters"],
+            root,
+            self._populate_fields,
+            globs,
+            _exclude_globs(self._fields),
+        )
 
     def _filters_summary(self) -> str:
         count = len(_overridden_fields(self._fields.get("filters")))
@@ -5280,6 +5301,7 @@ class FilterBrowserScreen(Screen[None]):
         fndignore: bool,
         sample_provider: Callable[[], Any] | None = None,
         globs: list[str] | None = None,
+        excludes: list[str] | None = None,
         inherited: tuple[Any, bool, bool] | None = None,
         save_note: str = "",
         on_save: Callable[[Any, bool, bool], None],
@@ -5295,6 +5317,9 @@ class FilterBrowserScreen(Screen[None]):
         # as ticked kinds: saving them back as kinds would widen a glob that
         # names one suffix of a multi-suffix type. Say so instead.
         self._globs = list(globs or ())
+        # Excludes drop files before any filter runs, so a summary that names
+        # only the includes is silent about half of what is skipped.
+        self._excludes = list(excludes or ())
         self._title = title
         self._spec = spec
         self._gitignore = gitignore
@@ -5458,6 +5483,8 @@ class FilterBrowserScreen(Screen[None]):
         head = [f"obeying {ignores}" if ignores else "ignore files off"]
         if self._globs:
             head.append("restricted to paths: " + ", ".join(self._globs))
+        if self._excludes:
+            head.append("skipping paths: " + ", ".join(self._excludes))
         if self._save_note:
             head.append(self._save_note)
         if self._scanning:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 from typing import Any, cast
 
@@ -1124,3 +1125,43 @@ def test_the_footer_never_drops_the_save_key() -> None:
         painted = bar.fitted(width).plain
         assert "Save" in painted, f"the save key was dropped at {width} cols: {painted}"
         assert bar.fitted(width).cell_len <= width
+
+
+@pytest.mark.asyncio
+async def test_the_summary_names_the_excludes_too(built_index: Path) -> None:
+    """It named the include globs and never the excludes, which drop files
+    before any filter runs — so it was silent about half of what is skipped."""
+    from fnd.config import CollectionConfig, Config, SourceConfig
+    from fnd.tui.settings_screen import FilterBrowserScreen, SourceFormScreen
+
+    config = Config(
+        collections={
+            "c": CollectionConfig(
+                sources=[SourceConfig(path="~/x", includes=["notes/**"], excludes=["**/*.csv"])]
+            )
+        }
+    )
+    app = FNDApp(index_dir=built_index, config=config)
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+        for _ in range(20):
+            await pilot.pause()
+        app.screen._open_filters()
+        for _ in range(30):
+            await pilot.pause()
+        assert isinstance(app.screen, FilterBrowserScreen)
+        summary = _summary_text(app.screen)
+        assert "restricted to paths: notes/**" in summary, summary
+        assert "**/*.csv" in summary, f"the exclude is unmentioned: {summary}"
+
+
+def test_a_bound_no_picker_holds_is_still_visible() -> None:
+    """`Created within` speaks for `created_after` only, so a `created_before`
+    in force left the tree reading as though nothing were set."""
+    from fnd.filters import FilterSpec
+    from fnd.filters.tree_model import spec_branches
+
+    spec = FilterSpec(created_before=dt.date(2026, 1, 1))
+    beyond = next(b for b in spec_branches(spec) if b.id == "beyond")
+    assert [label for _i, label in beyond.items] == ["Created before 2026-01-01"]
