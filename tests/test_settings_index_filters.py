@@ -1277,3 +1277,66 @@ class TestTheTwoLevelSaveSaysWhichLevelItIs:
             footer = app.screen.query_one("#footer_hints", Static).render_line(0).text
             assert "Save" in footer
             assert "Apply" not in footer
+
+
+class TestClearSaysWhatItTook:
+    """`c` sits beside `^S`, takes no confirmation and wiped the set in
+    silence — including a tag exclusion, which is a protection rather than a
+    preference."""
+
+    def test_every_spec_field_has_a_name_a_user_would_recognise(self) -> None:
+        from fnd.tui.settings_screen import _FIELD_WORDS, _SPEC_FIELDS
+
+        assert set(_SPEC_FIELDS) == set(_FIELD_WORDS), "a field with no word to name it"
+
+    def test_the_defaults_route_names_the_protection_it_dropped(self) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import _cleared_note
+
+        before = FilterSpec(kinds=("md",), exclude_tags={"os": ("no_index",)})
+        note = _cleared_note(before, FilterSpec(), inheriting=False)
+        assert "skipped tags" in note, note
+        assert "file types" in note
+
+    def test_the_source_route_says_it_went_back_to_inherited(self) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import _cleared_note
+
+        before = FilterSpec(kinds=("md",), exclude_tags={"os": ("no_index",)})
+        after = FilterSpec(exclude_tags={"os": ("no_index",)})
+        note = _cleared_note(before, after, inheriting=True)
+        assert "inherited" in note
+        assert "skipped tags" not in note, "the exclusion survived, so it was not taken"
+
+    def test_clearing_nothing_says_so(self) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import _cleared_note
+
+        assert _cleared_note(FilterSpec(), FilterSpec(), inheriting=False) == "Nothing to clear"
+
+    @pytest.mark.asyncio
+    async def test_pressing_c_raises_it(self, built_index: Path) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(
+                FilterBrowserScreen(
+                    title="Index filters",
+                    spec=FilterSpec(kinds=("md",), exclude_tags={"os": ("no_index",)}),
+                    gitignore=True,
+                    fndignore=True,
+                    on_save=lambda *_a: None,
+                )
+            )
+            for _ in range(15):
+                await pilot.pause()
+            said: list[str] = []
+            app.screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+            await pilot.press("c")
+            for _ in range(6):
+                await pilot.pause()
+            assert said, "clearing said nothing"
+            assert "skipped tags" in said[0], said

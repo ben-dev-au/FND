@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -131,3 +132,46 @@ def test_invalid_date_token_is_rejected(captured: dict[str, Any]) -> None:
 def test_invalid_tag_match_is_rejected(captured: dict[str, Any]) -> None:
     result = runner.invoke(app, ["search", "notes", "--tag", "a", "--tag-match", "some"])
     assert result.exit_code != 0
+
+
+class TestTwoFiltersNarrow:
+    """The query parser is OR-default, so the TUI space-joining its filter
+    clauses made a second filter widen the result set: picking a file type and
+    then a date returned files matching either."""
+
+    @staticmethod
+    def _index(tmp_path: Path) -> Path:
+        from fnd.index import build_index
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "note.md").write_text("widget widget\n")
+        (src / "app.js").write_text("widget in code\n")
+        index_dir = tmp_path / "idx"
+        index_dir.mkdir()
+        build_index(roots=[src], index_dir=index_dir, collection="c")
+        return index_dir
+
+    def _names(self, index_dir: Path, query: str) -> set[str]:
+        from fnd.query import Searcher
+
+        return {Path(h.path).name for h in Searcher(index_dir=index_dir).search(query, limit=50)}
+
+    def test_two_dimensions_intersect(self, tmp_path: Path) -> None:
+        index_dir = self._index(tmp_path)
+        assert self._names(index_dir, "(kind:javascript AND kind:md) AND (widget)") == set()
+
+    def test_space_joining_them_would_have_unioned(self, tmp_path: Path) -> None:
+        """The negative control: this is the shape the TUI used to build."""
+        index_dir = self._index(tmp_path)
+        assert self._names(index_dir, "(kind:javascript kind:md) AND (widget)") == {
+            "note.md",
+            "app.js",
+        }
+
+    def test_values_within_one_dimension_still_union(self, tmp_path: Path) -> None:
+        index_dir = self._index(tmp_path)
+        assert self._names(index_dir, "(kind:(md javascript)) AND (widget)") == {
+            "note.md",
+            "app.js",
+        }

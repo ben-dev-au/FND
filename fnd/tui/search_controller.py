@@ -379,7 +379,11 @@ class SearchController:
             generation=generation,
             query=query,
             lexical=lexical,
-            filter_prefix=" ".join(filter_clauses),
+            # Joined with AND, not a space: the parser is OR-default, so
+            # space-joining made a second filter WIDEN the results — picking a
+            # file type and then a date returned files matching either. Values
+            # inside one clause, `kind:(md pdf)`, stay a deliberate OR.
+            filter_prefix=" AND ".join(filter_clauses),
             metadata_filter=plan.metadata_filter,
             # Copied, not referenced: the scope panel mutates these lists on
             # the event loop while the worker is reading them.

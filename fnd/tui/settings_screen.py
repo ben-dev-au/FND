@@ -5262,6 +5262,40 @@ class RuleTextScreen(Screen[None]):
         self.app.pop_screen()
 
 
+#: Spec fields as the screens name them, so a message reads like the UI. Two
+#: fields sharing a name collapse to one entry.
+_FIELD_WORDS: dict[str, str] = {
+    "kinds": "file types",
+    "include_tags": "required tags",
+    "exclude_tags": "skipped tags",
+    "min_size": "size limits",
+    "max_size": "size limits",
+    "created_after": "created dates",
+    "created_before": "created dates",
+    "modified_after": "modified dates",
+    "modified_before": "modified dates",
+    "frontmatter": "the frontmatter rule",
+    "expression": "the custom rule",
+}
+
+
+def _cleared_note(before: Any, after: Any, *, inheriting: bool) -> str:
+    """What `c` just took away, named as the screens name it."""
+    dropped = list(
+        dict.fromkeys(
+            _FIELD_WORDS[name]
+            for name in _SPEC_FIELDS
+            if getattr(before, name) and not getattr(after, name)
+        )
+    )
+    if not dropped:
+        return "Nothing to clear"
+    lost = ", ".join(dropped)
+    if inheriting:
+        return f"Back to the inherited filters — this source no longer overrides {lost}"
+    return f"Cleared {lost} — nothing is filtered out now"
+
+
 class FilterBrowserScreen(Screen[None]):
     """Filters as the Filters pane shows them: collapsible branches, tri-state.
 
@@ -5557,11 +5591,16 @@ class FilterBrowserScreen(Screen[None]):
         """
         from fnd.filters import FilterSpec
 
+        before = self._spec
         if self._inherited is None:
             self._spec = FilterSpec()
         else:
             self._spec, self._gitignore, self._fndignore = self._inherited
         self._rebuild()
+        # `c` sits beside `^S` and takes no confirmation, so it has to say what
+        # it took — above all a tag exclusion, which is a protection rather
+        # than a preference.
+        self.notify(_cleared_note(before, self._spec, inheriting=self._inherited is not None))
 
     def action_edit_text(self) -> None:
         def _save(spec: Any) -> None:
