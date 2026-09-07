@@ -1937,7 +1937,8 @@ def open_source_filter_browser(
                 defaults.respect_gitignore,
                 defaults.respect_fndignore,
             ),
-            save_note="saving reindexes this collection",
+            save_note="^S applies here; ^S on the source form saves and reindexes",
+            commit_label="Apply",
             on_save=_save,
         )
     )
@@ -5314,6 +5315,7 @@ class FilterBrowserScreen(Screen[None]):
         excludes: list[str] | None = None,
         inherited: tuple[Any, bool, bool] | None = None,
         save_note: str = "",
+        commit_label: str = "Save",
         on_save: Callable[[Any, bool, bool], None],
     ) -> None:
         super().__init__()
@@ -5323,6 +5325,10 @@ class FilterBrowserScreen(Screen[None]):
         # What Ctrl+S does to the index. The two routes differ: a source save
         # reindexes its collection, the defaults save reindexes nothing.
         self._save_note = save_note
+        # And what it does at all. On a source this screen stages into the
+        # form, which owns the write, so calling it "Save" promised something
+        # only the form does.
+        self._commit_label = commit_label
         # Include globs restrict the file types too, but they cannot be shown
         # as ticked kinds: saving them back as kinds would widen a glob that
         # names one suffix of a multi-suffix type. Say so instead.
@@ -5408,7 +5414,7 @@ class FilterBrowserScreen(Screen[None]):
                     ("→", "Open"),
                     ("t", "As text"),
                     ("c", "Clear"),
-                    ("^S", "Save"),
+                    ("^S", self._commit_label),
                     ("y", "Copy"),
                     ("Esc/←", "Discard"),
                 ),

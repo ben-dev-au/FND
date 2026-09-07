@@ -1219,3 +1219,61 @@ async def test_a_text_editor_advertises_only_keys_that_work(built_index: Path) -
         assert screen.query_one("#rule_text", TextArea).text == "/:?q", (
             "the premise: those keys reach the box"
         )
+
+
+class TestTheTwoLevelSaveSaysWhichLevelItIs:
+    """The per-source browser stages into the form, which owns the write. It
+    said "^S Save" and promised "saving reindexes this collection", so a single
+    ^S looked committed while writing nothing — and a later Esc then reported
+    the work discarded, after the user had pressed save."""
+
+    @pytest.mark.asyncio
+    async def test_the_source_route_calls_it_applying(self, built_index: Path) -> None:
+        from textual.widgets import Static
+
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.settings_screen import FilterBrowserScreen, SourceFormScreen
+
+        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        app = FNDApp(index_dir=built_index, config=config)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+            for _ in range(20):
+                await pilot.pause()
+            app.screen._open_filters()
+            for _ in range(30):
+                await pilot.pause()
+            assert isinstance(app.screen, FilterBrowserScreen)
+            summary = _summary_text(app.screen)
+            assert "applies here" in summary, summary
+            assert "saving reindexes this collection" not in summary
+            footer = app.screen.query_one("#footer_hints", Static).render_line(0).text
+            assert "Apply" in footer, footer
+
+    @pytest.mark.asyncio
+    async def test_the_defaults_route_still_calls_it_saving(self, built_index: Path) -> None:
+        """There the screen does own the write, so "Save" is the truth."""
+        from textual.widgets import Static
+
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(
+                FilterBrowserScreen(
+                    title="Index filters",
+                    spec=FilterSpec(),
+                    gitignore=True,
+                    fndignore=True,
+                    save_note="saving does not reindex",
+                    on_save=lambda *_a: None,
+                )
+            )
+            for _ in range(15):
+                await pilot.pause()
+            footer = app.screen.query_one("#footer_hints", Static).render_line(0).text
+            assert "Save" in footer
+            assert "Apply" not in footer
