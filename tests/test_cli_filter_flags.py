@@ -267,3 +267,50 @@ class TestReportingCommandsLeaveTheConfigAlone:
         assert cli._reports_only(["--help"])
         assert called == [], "help must not reach the migration"
         assert config.read_text() == original
+
+
+class TestIndexingIntoAnUnconfiguredCollection:
+    """`fnd index --collection ghost` writes chunks under a name that
+    `collection list` reports as not existing, so the documents are
+    searchable but nothing can reindex or remove them."""
+
+    @staticmethod
+    def _run(scratch: Path, *args: str) -> tuple[str, str]:
+        import os
+        import subprocess
+
+        env = dict(
+            os.environ,
+            XDG_DATA_HOME=str(scratch / "d"),
+            XDG_CACHE_HOME=str(scratch / "c"),
+            PYTHONPATH=os.getcwd(),
+        )
+        result = subprocess.run(
+            [
+                "python",
+                "-c",
+                "import sys; from fnd.cli import main; sys.argv=['fnd', *sys.argv[1:]]; main()",
+                *args,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout, result.stderr
+
+    def test_it_says_the_collection_will_be_unreachable(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.md").write_text("ghosty\n")
+        out, err = self._run(tmp_path, "index", str(src), "--collection", "ghost")
+        assert "indexed" in out
+        assert "not in your config" in err, err
+        assert "collection add ghost" in err, "it must name the way to fix it"
+
+    def test_a_configured_collection_says_nothing(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.md").write_text("real\n")
+        self._run(tmp_path, "collection", "add", "real", "--source", str(src))
+        _out, err = self._run(tmp_path, "index", str(src), "--collection", "real")
+        assert "not in your config" not in err, err

@@ -168,6 +168,16 @@ def index(
         tag_frontmatter_keys=tuple(defaults.tag_frontmatter_keys),
     )
     typer.echo(f"indexed {written} chunks under {root} → collection {collection}")
+    if collection not in config.collections:
+        # The chunks are searchable by name, but `collection list` reports no
+        # such collection and nothing in the TUI can reach it, so there is no
+        # way to reindex or remove it later.
+        typer.echo(
+            f"fnd: {collection!r} is not in your config, so it will not appear in "
+            f"`fnd collection list` or the sidebar. Add it with "
+            f"`fnd collection add {collection} --source {root}` to manage it.",
+            err=True,
+        )
 
 
 def parse_filter_flags(
