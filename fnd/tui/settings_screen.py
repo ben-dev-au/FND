@@ -1897,6 +1897,7 @@ def open_source_filter_browser(
                 defaults.respect_gitignore,
                 defaults.respect_fndignore,
             ),
+            save_note="saving reindexes this collection",
             on_save=_save,
         )
     )
@@ -5246,12 +5247,16 @@ class FilterBrowserScreen(Screen[None]):
         sample_provider: Callable[[], Any] | None = None,
         globs: list[str] | None = None,
         inherited: tuple[Any, bool, bool] | None = None,
+        save_note: str = "",
         on_save: Callable[[Any, bool, bool], None],
     ) -> None:
         super().__init__()
         # What this source falls back to with nothing of its own. `None` on the
         # global defaults, which inherit from nothing.
         self._inherited = inherited
+        # What Ctrl+S does to the index. The two routes differ: a source save
+        # reindexes its collection, the defaults save reindexes nothing.
+        self._save_note = save_note
         # Include globs restrict the file types too, but they cannot be shown
         # as ticked kinds: saving them back as kinds would widen a glob that
         # names one suffix of a multi-suffix type. Say so instead.
@@ -5416,6 +5421,8 @@ class FilterBrowserScreen(Screen[None]):
         head = [f"obeying {ignores}" if ignores else "ignore files off"]
         if self._globs:
             head.append("restricted to paths: " + ", ".join(self._globs))
+        if self._save_note:
+            head.append(self._save_note)
         if self._scanning:
             head.append("scanning source for types and tags…")
         elif getattr(self._sample, "truncated", False):

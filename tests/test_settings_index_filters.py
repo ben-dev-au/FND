@@ -851,3 +851,33 @@ def test_the_pickers_name_what_they_hold() -> None:
     assert _excludes_summary({"excludes_custom": "build/**, dist/**"}) == "build/**, dist/**"
     assert "**/*.csv" in _excludes_summary({"excludes_custom": "**/*.csv"})
     assert len(ALL_KIND_IDS) > 1, "the wizard summary below depends on there being many"
+
+
+@pytest.mark.asyncio
+async def test_each_route_says_what_saving_does_to_the_index(built_index: Path) -> None:
+    """The two routes differ and neither said so: a source save reindexes its
+    collection, the defaults save reindexes nothing and leaves every
+    collection holding what it already held."""
+    from fnd.filters import FilterSpec
+    from fnd.tui.settings_screen import FilterBrowserScreen
+
+    async def _head(note: str) -> str:
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.push_screen(
+                FilterBrowserScreen(
+                    title="Index filters",
+                    spec=FilterSpec(),
+                    gitignore=True,
+                    fndignore=True,
+                    save_note=note,
+                    on_save=lambda *_a: None,
+                )
+            )
+            for _ in range(12):
+                await pilot.pause()
+            return _summary_text(app.screen)
+
+    assert "saving does not reindex" in await _head("saving does not reindex")
+    assert "saving reindexes this collection" in await _head("saving reindexes this collection")

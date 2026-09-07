@@ -2138,10 +2138,17 @@ def _open_filter_browser(app: FNDApp) -> None:
         )
         app._config = load()  # type: ignore[attr-defined]
         app._refresh_status()  # type: ignore[attr-defined]
+        # Nothing reindexes here, unlike the per-source route, so every
+        # collection keeps its current contents until the user says otherwise.
+        app.notify(
+            "Filters saved. Collections keep their current contents until you reindex.",
+            severity="warning",
+        )
 
     app.push_screen(
         FilterBrowserScreen(
             title="Index filters",
+            save_note="saving does not reindex",
             spec=_spec_from_filters(current),
             gitignore=current.respect_gitignore,
             fndignore=current.respect_fndignore,
