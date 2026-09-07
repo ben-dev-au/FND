@@ -661,6 +661,24 @@ def _coerce_str_list(raw: str) -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+def _choices_tag_sources(_app: FNDApp) -> list[ChoiceOption]:
+    """The tag providers, named rather than typed."""
+    import sys
+
+    from fnd.tags import TAG_PROVIDERS
+
+    labels = {
+        "frontmatter": ("Note tags (YAML)", "a note's `tags:` frontmatter"),
+        "os": (f"System tags ({os_labels.file_manager_name()})", "tags set in the file manager"),
+    }
+    out: list[ChoiceOption] = []
+    for tag_id, provider in TAG_PROVIDERS.items():
+        label, what = labels.get(tag_id, (tag_id, ""))
+        inert = "" if provider.available_on(sys.platform) else " — not available here"
+        out.append(ChoiceOption(value=tag_id, label=label, description=what + inert))
+    return out
+
+
 def _get_str_list_default(field_name: str) -> Callable[[FNDApp], str]:
     """Render a list-valued default as the comma-separated text the row edits."""
 
@@ -2783,18 +2801,20 @@ def _provider_filters(app: FNDApp) -> tuple[MenuItem, ...]:
             id="filters.tag_sources",
             label="Tag sources",
             description=(
-                "Which sources feed the Tags filter, comma-separated. "
-                "'frontmatter' reads a note's YAML tags:; 'os' reads macOS "
-                "Finder tags"
-                + ("" if os_labels.is_macos() else " (macOS only — inert here)")
-                + ". Leave empty to turn tag filtering off. "
-                "Toggling a source takes effect immediately — no reindex."
+                "Which sources feed the Tags filter. Tick none to turn tag "
+                "filtering off. Turning one off hides its tags straight away; "
+                "turning one on needs a reindex, since tags are read when a "
+                "file is indexed."
             ),
-            kind=KIND_SCALAR,
-            setting_path="defaults.tag_sources",
-            hint="frontmatter, os",
-            coerce=_coerce_str_list,
-            value_getter=_get_str_list_default("tag_sources"),
+            kind=KIND_PICKER,
+            multi=True,
+            choices_provider=_choices_tag_sources,
+            picker_getter=lambda app: (
+                list(app._config.defaults.tag_sources)  # type: ignore[attr-defined]
+                if app._config  # type: ignore[attr-defined]
+                else []
+            ),
+            picker_setter=_setting_writer("defaults.tag_sources"),
             keywords=("tag", "tags", "frontmatter", "finder", "source"),
         ),
     )
