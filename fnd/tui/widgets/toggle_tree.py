@@ -284,10 +284,13 @@ class ToggleTree(Tree[dict[str, Any]]):
             if self._mode(g) == "actions":
                 return
             if self._mode(g) in ("cycle", "radio"):
-                # Selecting every tag is never what the user means; clearing
-                # the branch is.
-                self._selected -= ids
-                self._excluded -= ids
+                # Expand, do not wipe. Selecting every tag is never what the
+                # user means, but neither is discarding several exclusions to
+                # one keypress with no confirmation and no undo — while the
+                # same key on a multi branch means "select all". Enter on a
+                # branch does what Enter on a branch does everywhere else.
+                node.toggle()
+                return
             elif ids and ids <= self._selected:
                 self._selected -= ids
             else:

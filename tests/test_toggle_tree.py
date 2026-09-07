@@ -275,3 +275,23 @@ def test_the_legend_says_what_each_state_does_to_the_index() -> None:
 
     assert "never index" in LEGEND
     assert "ONLY" in LEGEND
+
+
+@pytest.mark.asyncio
+async def test_enter_on_a_tag_branch_does_not_discard_the_exclusions() -> None:
+    """It wiped every selection and exclusion on the branch, with no confirm
+    and no undo, while the same key on a file-type branch means "select all"."""
+    app = _Nested()
+    async with app.run_test() as pilot:
+        tt = app.query_one("#tt", ToggleTree)
+        tags = next(n for n in tt.root.children if str(n.label).endswith("Tags"))
+        tt.cursor_line = tags.children[0].line
+        await pilot.press("enter")  # exclude the first tag
+        await pilot.pause()
+        assert tt.excluded, "precondition: something to lose"
+        before = set(tt.excluded)
+
+        tt.cursor_line = tags.line
+        await pilot.press("enter")
+        await pilot.pause()
+        assert set(tt.excluded) == before, "the branch row discarded the exclusions"
