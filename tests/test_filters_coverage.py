@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from fnd.config import DefaultFilters, SourceConfig, SourceFilters, resolve_filters
+from fnd.config import CLEARABLE, DefaultFilters, SourceConfig, SourceFilters, resolve_filters
 from fnd.walk import walk_sources
 
 #: Per field: a value for the defaults, and a different one for a source to
@@ -48,9 +48,27 @@ class TestEveryFieldResolves:
 
     def test_the_table_covers_every_field(self) -> None:
         """Closed over the schema: a new filter field fails here until it is
-        given values, rather than silently going untested."""
-        assert set(VALUES) == set(SourceFilters.model_fields)
+        given values, rather than silently going untested. `clears` is not a
+        filter but the mechanism for dropping one, and has its own tests."""
+        assert set(VALUES) == set(SourceFilters.model_fields) - {"clears"}
         assert set(VALUES) == set(DefaultFilters.model_fields)
+
+    @pytest.mark.parametrize("field", sorted(CLEARABLE))
+    def test_a_clearable_field_drops_the_inherited_value(self, field: str) -> None:
+        """A list clears with `[]` and a string with `""`; these six had no
+        such value, so the choice silently reverted."""
+        base, _ = VALUES[field]
+        resolved = resolve_filters(
+            SourceFilters.model_validate({"clears": [field]}),
+            DefaultFilters.model_validate({field: base}),
+        )
+        assert getattr(resolved, field) is None
+
+    def test_only_the_six_are_clearable(self) -> None:
+        """A bool says it with `false` and a list with `[]`; naming those would
+        be a second way to say one thing."""
+        with pytest.raises(ValueError, match="clears only applies"):
+            SourceFilters.model_validate({"clears": ["respect_gitignore"]})
 
     @pytest.mark.parametrize("field", sorted(VALUES))
     def test_an_unset_field_inherits_the_default(self, field: str) -> None:

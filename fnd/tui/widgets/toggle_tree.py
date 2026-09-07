@@ -59,7 +59,8 @@ class ToggleGroup:
     of choice a filter set needs:
 
     * ``multi``   — any number on (file types)
-    * ``cycle``   — off → include → exclude → off, as the query pane's tags do
+    * ``cycle``   — off → exclude → include → off; see ``_cycle`` for why
+      this differs from the query pane
     * ``radio``   — at most one on (a date window, a size bound)
     * ``actions`` — leaves carry no state; Enter asks the host to open an
       editor. For the rules that are typed rather than ticked.
@@ -318,14 +319,21 @@ class ToggleTree(Tree[dict[str, Any]]):
         self.post_message(self.SelectionChanged(self, self.selected, self.excluded))
 
     def _cycle(self, item_id: str) -> None:
-        """off → include → exclude → off, as the query pane's tags do."""
-        if item_id in self._selected:
-            self._selected.discard(item_id)
-            self._excluded.add(item_id)
-        elif item_id in self._excluded:
+        """off → exclude → include → off.
+
+        The query pane cycles include first, where include narrows a search
+        and one more press undoes it. Here include means "index only files
+        carrying this", so the first press on a tag can take a collection from
+        eight files to one and needs a reindex to undo. Exclude is both the
+        commoner intent and the recoverable one, so it goes first.
+        """
+        if item_id in self._excluded:
             self._excluded.discard(item_id)
-        else:
             self._selected.add(item_id)
+        elif item_id in self._selected:
+            self._selected.discard(item_id)
+        else:
+            self._excluded.add(item_id)
 
     def _repaint_group(self, gnode: TreeNode[dict[str, Any]], g: ToggleGroup) -> None:
         gnode.set_label(self._group_label(g))

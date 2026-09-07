@@ -216,8 +216,7 @@ class TestNesting:
             tt = app.query_one("#tt", ToggleTree)
             tag_a = next(n for n in tt.root.children if str(n.label).endswith("Tags")).children[0]
             tt.cursor_line = tag_a.line
-            await pilot.press("enter")  # include
-            await pilot.press("enter")  # exclude
+            await pilot.press("enter")  # exclude, the first state now
             await pilot.pause()
             assert tt.excluded == frozenset({"a"})
             assert _labels(tt)["tags"].startswith("◐"), _labels(tt)["tags"]
@@ -249,3 +248,30 @@ class TestNavigateOut:
             await pilot.press("left")  # nothing left to collapse
             await pilot.pause()
             assert seen, "← at the top level did not ask the host to go back"
+
+
+def test_the_first_press_excludes_rather_than_narrowing_to_one_tag() -> None:
+    """Include here means "index only files carrying this", so one press on a
+    tag could take a collection from eight files to one and need a reindex to
+    undo. Exclude is the commoner intent and the recoverable one."""
+    from fnd.tui.widgets.toggle_tree import ToggleTree
+
+    tree = ToggleTree()
+    tree._selected, tree._excluded = set(), set()
+    tree._cycle("tag:frontmatter:draft")
+    assert tree._excluded == {"tag:frontmatter:draft"}
+    assert not tree._selected, "the first press must not write include_tags"
+
+    tree._cycle("tag:frontmatter:draft")
+    assert tree._selected == {"tag:frontmatter:draft"}
+    tree._cycle("tag:frontmatter:draft")
+    assert not tree._selected, "the third press clears include"
+    assert not tree._excluded, "the third press clears exclude"
+
+
+def test_the_legend_says_what_each_state_does_to_the_index() -> None:
+    """`keep only these` reads as a preference; it removes everything else."""
+    from fnd.filters.tree_model import LEGEND
+
+    assert "never index" in LEGEND
+    assert "ONLY" in LEGEND

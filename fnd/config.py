@@ -282,6 +282,13 @@ class DefaultFilters(_ConfigModel):
         return _compiled_or_error(v, "filters")
 
 
+#: Fields with no value meaning "nothing". A list clears with `[]`, a string
+#: with `""` and a bool with `false`; for these `None` already means inherit.
+CLEARABLE: Final = frozenset(
+    {"min_size", "max_size", "created_after", "created_before", "modified_after", "modified_before"}
+)
+
+
 class SourceFilters(_ConfigModel):
     """Per-source overrides. ``None`` inherits ``[defaults.filters]``; the two
     models are distinct types so "unset" is never confused with "set to the
@@ -304,7 +311,7 @@ class SourceFilters(_ConfigModel):
     expression: str | None = None
 
     clears: list[str] = Field(default_factory=list)
-    """Fields this source drops rather than inherits.
+    """Numeric and date fields this source drops rather than inherits.
 
     A list overrides to nothing with `[]` and a string with `""`, but a number
     or a date has no such value: `None` already means inherit, so "no size
@@ -315,10 +322,12 @@ class SourceFilters(_ConfigModel):
 
     @field_validator("clears")
     @classmethod
-    def _known_fields(cls, names: list[str]) -> list[str]:
-        unknown = sorted(set(names) - set(DefaultFilters.model_fields))
-        if unknown:
-            raise ValueError(f"clears names no such filter: {', '.join(unknown)}")
+    def _clearable_fields(cls, names: list[str]) -> list[str]:
+        wrong = sorted(set(names) - CLEARABLE)
+        if wrong:
+            raise ValueError(
+                f"clears only applies to {', '.join(sorted(CLEARABLE))}; got {', '.join(wrong)}"
+            )
         return names
 
     @field_validator("frontmatter", "expression")
@@ -354,7 +363,7 @@ def resolve_filters(source: SourceFilters | None, defaults: DefaultFilters) -> D
         if value is not None and field_name != "clears":
             merged[field_name] = value
     for field_name in source.clears:
-        merged[field_name] = None if field_name not in ("kinds",) else []
+        merged[field_name] = None
     return DefaultFilters.model_validate(merged)
 
 

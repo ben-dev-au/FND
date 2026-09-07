@@ -1813,14 +1813,15 @@ def _source_filters_or_none(raw: dict[str, Any] | None) -> Any:
     nothing — the row's ``-`` — so dropping it here would silently reinstate
     the global value the user was overriding.
     """
-    from fnd.config import DefaultFilters, SourceFilters
+    from fnd.config import CLEARABLE, SourceFilters
 
     items = raw or {}
     cleaned = {k: v for k, v in items.items() if v is not None}
-    # A scalar set to None is the user choosing "no limit here" over an
-    # inherited one. Dropping it made that choice indistinguishable from
-    # never having made it, so it silently reverted on the next open.
-    cleared = sorted(k for k, v in items.items() if v is None and k in DefaultFilters.model_fields)
+    # A number or date set to None is the user choosing "no limit here" over an
+    # inherited one. Dropping it made that choice indistinguishable from never
+    # having made it, so it silently reverted on the next open. A bool or a
+    # list is not clearable: false and [] already say it.
+    cleared = sorted(k for k, v in items.items() if v is None and k in CLEARABLE)
     if cleared:
         cleaned["clears"] = cleared
     return SourceFilters.model_validate(cleaned) if cleaned else None
