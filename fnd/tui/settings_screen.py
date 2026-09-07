@@ -1741,7 +1741,12 @@ def open_source_filter_browser(
         values = _spec_to_mapping(spec)
         values["respect_gitignore"] = gitignore
         values["respect_fndignore"] = fndignore
+        # The tree does not edit `clears`, and this rebuilds the overrides from
+        # scratch, so anything it cannot express has to be carried across or it
+        # is deleted by visiting the screen.
+        carried = {k: v for k, v in overrides.items() if k not in values and v}
         overrides.clear()
+        overrides.update(carried)
         for name, value in values.items():
             if not _same_setting(value, getattr(defaults, name, None)):
                 overrides[name] = value
@@ -1773,6 +1778,11 @@ def _seeded_filters(source: Any) -> dict[str, Any]:
     clearing it there actually clears it.
     """
     values: dict[str, Any] = source.filters.model_dump(exclude_none=True) if source.filters else {}
+    # `clears` defaults to a list, so exclude_none always carries it. An empty
+    # one is not an override, and leaving it in made every open-and-save look
+    # like a change and force a rebuild.
+    if not values.get("clears"):
+        values.pop("clears", None)
     legacy = str(source.legacy_frontmatter or "")
     if legacy and not values.get("frontmatter"):
         values["frontmatter"] = legacy
@@ -2001,6 +2011,7 @@ class SourceFormScreen(Screen[None]):
         self._fields: dict[str, Any] = {
             "path": "",
             "includes_custom": "",  # comma-separated free-form globs
+            "includes_types": [],  # type globs the absorber left in place
             "excludes_presets": [],  # list[str] of EXCLUDES_PRESETS keys
             "excludes_custom": "",  # comma-separated free-form globs
             "filter": "",
@@ -2069,12 +2080,18 @@ class SourceFormScreen(Screen[None]):
         if not (0 <= self._source_index < len(sources)):
             return
         s = sources[self._source_index]
-        # File types live in the filter set; only free-form globs remain here.
-        _exts, includes_custom = _split_includes_globs(list(s.includes))
+        # File types live in the filter set, but only when the absorber moved
+        # them: it declines on a mixed list, leaving the type globs in
+        # `includes`. Discarding them here deleted them on the next save, so
+        # keep the glob strings themselves rather than the kind ids.
+        _kinds, includes_custom = _split_includes_globs(list(s.includes))
+        free_form = {g.strip() for g in includes_custom.split(",") if g.strip()}
+        type_globs = [g for g in s.includes if g not in free_form]
         preset_keys, excludes_custom = _split_excludes_globs(list(s.excludes))
         self._fields = {
             "path": str(s.path),
             "includes_custom": includes_custom,
+            "includes_types": type_globs,
             "excludes_presets": preset_keys,
             "excludes_custom": excludes_custom,
             "filter": _source_frontmatter(s),
@@ -2503,8 +2520,10 @@ class SourceFormScreen(Screen[None]):
         if not Path(path).expanduser().exists():
             self._show_error(f"Path does not exist: {path}")
             return
-        # Only free-form globs: the file types are a filter, not a glob list.
-        includes_globs: list[str] = []
+        # Type globs the absorber declined to move stay exactly as they were:
+        # this form has no control for them, so rebuilding without them was a
+        # silent deletion.
+        includes_globs: list[str] = list(self._fields.get("includes_types") or [])
         for g in str(self._fields.get("includes_custom") or "").split(","):
             g = g.strip()
             if g:
@@ -3009,6 +3028,7 @@ class AddCollectionWizard(Screen[None]):
                     dict(self._fields.get("filters", {})),
                     str(self._fields["filter"]),
                     _default_frontmatter(self.app),
+                    had_override=self._fields.get("filters", {}).get("frontmatter") is not None,
                 )
             ),
         )

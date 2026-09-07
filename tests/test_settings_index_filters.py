@@ -513,3 +513,43 @@ class TestClearClearsWhatItClaims:
             await pilot.pause()
             assert screen._gitignore is True, "clear switched .gitignore off"
             assert screen._fndignore is True, "clear switched .fndignore off"
+
+
+class TestANoOpSaveChangesNothing:
+    """Three ways opening a source and saving unchanged altered what it
+    indexes. Each was invisible afterwards, and two fired no reindex."""
+
+    def test_mixed_include_globs_survive(self) -> None:
+        """The absorber declines to move type globs out of a mixed list, so
+        they stay in `includes`; the form discarded them, taking the source
+        from seven files to one."""
+        from fnd.tui.settings_screen import _split_includes_globs
+
+        original = ["**/*.md", "**/*.markdown", "repo/**"]
+        _kinds, custom = _split_includes_globs(original)
+        free_form = {g.strip() for g in custom.split(",") if g.strip()}
+        rebuilt = [g for g in original if g not in free_form] + sorted(free_form)
+        assert sorted(rebuilt) == sorted(original)
+
+    def test_an_empty_clears_is_not_an_override(self) -> None:
+        """It defaults to a list, so `exclude_none` always carried it, and
+        every open-and-save looked like a change and forced a rebuild."""
+        from fnd.config import SourceConfig, SourceFilters
+        from fnd.tui.settings_screen import _seeded_filters
+
+        plain = SourceConfig(path=Path("~/N"), filters=SourceFilters(kinds=["md"]))
+        assert "clears" not in _seeded_filters(plain)
+
+    def test_a_cleared_field_is_still_seeded(self) -> None:
+        from fnd.config import SourceConfig, SourceFilters
+        from fnd.tui.settings_screen import _seeded_filters
+
+        cleared = SourceConfig(path=Path("~/N"), filters=SourceFilters(clears=["max_size"]))
+        assert _seeded_filters(cleared)["clears"] == ["max_size"]
+
+    def test_the_wizard_inherits_rather_than_opting_out(self) -> None:
+        """Add-source inherited the global rule and add-collection did not:
+        the same user action with two answers."""
+        from fnd.tui.settings_screen import _merge_frontmatter
+
+        assert _merge_frontmatter({}, "", "Course == 'A'", had_override=False) == {}
