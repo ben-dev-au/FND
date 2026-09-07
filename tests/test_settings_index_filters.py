@@ -1013,3 +1013,52 @@ class TestEscMeansOneThing:
                 await pilot.pause()
         assert sink, "^S must commit"
         assert sink[-1] == ["a"], sink
+
+
+def test_the_rename_row_describes_what_rename_does() -> None:
+    """It claimed scope follows the new name and the index is not rebuilt.
+    Neither is true: `_save` ends in `reindex_with_warning(rebuild=True)` and
+    nothing migrates the saved selection."""
+    import inspect
+
+    from fnd.tui.menu import _provider_collection
+    from fnd.tui.settings_screen import RenameCollectionScreen
+
+    row = next(i for i in _provider_collection(None, "c") if i.id == "col.c.rename")
+    source = inspect.getsource(RenameCollectionScreen._save)
+    assert "rebuild=True" in source, "guard: this test pins the row against the code"
+    assert "not rebuilt" not in row.description
+    assert "does not follow" in row.description
+
+
+@pytest.mark.asyncio
+async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) -> None:
+    """The filter browser saves into `_fields`, not to disk, so ^S there and
+    Esc here threw the edit away without a word."""
+    from fnd.config import CollectionConfig, Config, SourceConfig
+    from fnd.tui.settings_screen import SourceFormScreen
+
+    config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+    app = FNDApp(index_dir=built_index, config=config)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+        for _ in range(20):
+            await pilot.pause()
+        form = app.screen
+        notes: list[str] = []
+        form.notify = lambda msg, **kw: notes.append(str(msg))  # type: ignore[method-assign]
+        form.action_back()
+        await pilot.pause()
+        assert notes == [], "an untouched form discards nothing"
+
+        app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+        for _ in range(20):
+            await pilot.pause()
+        form = app.screen
+        form.notify = lambda msg, **kw: notes.append(str(msg))  # type: ignore[method-assign]
+        form._fields["filters"] = {"kinds": ["md"]}
+        form.action_back()
+        await pilot.pause()
+        assert notes, "leaving with an edit must say so"
+        assert "discarded" in notes[0], notes

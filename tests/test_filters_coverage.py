@@ -13,7 +13,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -416,3 +416,84 @@ class TestClearDropsOverridesNotProtections:
             on_save=lambda *_a: None,
         )
         assert screen._inherited is None
+
+
+class TestTheTextViewNeverWidens:
+    """Round-tripping through the text form dropped a clause whenever a
+    dimension appeared twice, and dropping a conjunct can only admit more.
+    Reachable with no typing at all: open the text view, save, save."""
+
+    DIMENSIONS: ClassVar[dict[str, tuple[Any, str]]] = {
+        "kinds": (("md",), "file.kind in ['pdf']"),
+        "min_size": (100, "file.size >= 5000"),
+        "max_size": (100, "file.size <= 5000"),
+        "created_after": (dt.date(2026, 1, 1), "file.created >= 2020-01-01"),
+        "created_before": (dt.date(2026, 1, 1), "file.created <= 2030-01-01"),
+        "modified_after": (dt.date(2026, 1, 1), "file.modified >= 2020-01-01"),
+        "modified_before": (dt.date(2026, 1, 1), "file.modified <= 2030-01-01"),
+    }
+
+    @pytest.mark.parametrize("field", sorted(DIMENSIONS))
+    def test_a_dimension_named_twice_keeps_both_clauses(self, field: str) -> None:
+        from dataclasses import replace as _replace
+
+        from fnd.filters import FilterSpec
+        from fnd.filters.text_form import parse, render
+
+        value, expression = self.DIMENSIONS[field]
+        spec = _replace(FilterSpec(expression=expression), **{field: value})
+        once = parse(render(spec))
+        assert getattr(once, field) == value, "the picker's clause was dropped"
+        assert render(once) == render(parse(render(once))), "not idempotent"
+
+    def test_the_index_does_not_widen_across_a_round_trip(self, tmp_path: Path) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.filters.text_form import parse, render
+
+        (tmp_path / "a.md").write_text("hello\n")
+        (tmp_path / "c.pdf").write_bytes(b"%PDF-1.4\n")
+
+        def walked(spec: FilterSpec) -> set[str]:
+            overrides = SourceFilters(kinds=list(spec.kinds), expression=spec.expression or None)
+            return _walked(tmp_path, DefaultFilters(), overrides)
+
+        spec = FilterSpec(kinds=("md",), expression="file.kind in ['pdf']")
+        assert walked(spec) == set(), "the two clauses together admit nothing"
+        assert walked(parse(render(spec))) == set(), "the round trip widened the index"
+
+
+class TestATypoCannotOpenTheIndex:
+    """An unknown fact is *unknown*, not false, so its rule is waived — which
+    means a misspelt field admits every file instead of none, and voids the
+    valid clause beside it."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "file.sixe <= 1000",
+            "(file.kind in ['md']) AND (file.sixe <= 1000)",
+            "file.author == 'x'",
+        ],
+    )
+    def test_it_is_refused_with_a_column(self, text: str) -> None:
+        from fnd.filter_dsl import parse_or_error
+
+        _pred, err = parse_or_error(text)
+        assert err is not None, f"{text!r} was accepted"
+        assert err.column >= 1
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "file.size <= 1000",
+            "'x' in file.tags.all",
+            "Course == 'DPwC' AND status == 'done'",
+        ],
+    )
+    def test_real_facts_and_frontmatter_keys_still_parse(self, text: str) -> None:
+        """Frontmatter keys cannot contain a dot, so they are never mistaken
+        for a fact."""
+        from fnd.filter_dsl import parse_or_error
+
+        _pred, err = parse_or_error(text)
+        assert err is None, err

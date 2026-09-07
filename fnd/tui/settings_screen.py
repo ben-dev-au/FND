@@ -2278,17 +2278,10 @@ class SourceFormScreen(Screen[None]):
             "app_params_vault": (s.app_params or {}).get("vault", ""),
             "filters": _seeded_filters(s),
         }
-        self._snapshot = {
-            "path": self._fields["path"],
-            "includes_custom": self._fields["includes_custom"],
-            "excludes_presets": list(self._fields["excludes_presets"]),
-            "excludes_custom": self._fields["excludes_custom"],
-            "filter": self._fields["filter"],
-            "follow_symlinks": self._fields["follow_symlinks"],
-            "app": self._fields["app"],
-            "app_params_vault": self._fields["app_params_vault"],
-            "filters": copy.deepcopy(self._fields["filters"]),
-        }
+        # Copied wholesale rather than key by key: the hand-written list had
+        # drifted from `_fields`, missing `includes_types`, so the snapshot
+        # never equalled the fields and every save forced a rebuild.
+        self._snapshot = copy.deepcopy(self._fields)
 
     def _frontmatter_text(self) -> str:
         """This source's frontmatter rule.
@@ -2817,6 +2810,11 @@ class SourceFormScreen(Screen[None]):
         self.app.call_later(_chain)
 
     def action_back(self) -> None:
+        # The filter browser saves into `_fields`, not to disk, so leaving the
+        # form is what discards it — including an edit the user had just
+        # committed with ^S one screen down.
+        if self._snapshot != self._fields:
+            self.notify("Source changes discarded — ^S saves them", severity="warning")
         self.app.pop_screen()
 
     # ── Tab cycles field list ↔ sample TextArea ───────────────

@@ -1461,8 +1461,9 @@ def _provider_collection(app: FNDApp, name: str) -> tuple[MenuItem, ...]:
             id=f"col.{name}.rename",
             label="Rename",
             description=(
-                "Change this collection's name. Search scope and saved panel "
-                "state follow the new name; the index is not rebuilt."
+                "Change this collection's name. The index is rebuilt under the "
+                "new name, and your saved scope selection does not follow it — "
+                "re-tick the collection afterwards."
             ),
             kind=KIND_EXTERNAL,
             external=_make_open_rename(name),

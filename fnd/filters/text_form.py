@@ -253,6 +253,11 @@ def parse(text: str) -> FilterSpec:
             # `Course == 'X' AND NOT ('private' in tags)` came back as the
             # tag half alone, widening the source to the whole vault.
             updates[name] = _and_join(updates.get(name), value)  # type: ignore[arg-type]
+        elif name in updates:
+            # A dimension has one slot, so a second clause for it is a further
+            # conjunct that assigning would drop — and dropping a conjunct can
+            # only ever admit more files. Keep it as typed text instead.
+            leftover.append(_unparse(clause) or stripped)
         else:
             updates[name] = value
     if tags:

@@ -449,11 +449,36 @@ def referenced_fields(node: object) -> frozenset[str]:
     return frozenset()
 
 
+def _reject_unknown_facts(tree: object, text: str) -> None:
+    """Raise on a `file.` name that is not a fact.
+
+    An unknown fact is *unknown*, not false, so its rule is waived — and a
+    typo therefore admits every file rather than none. Frontmatter keys
+    provably cannot contain a dot, so anything dotted here is a mistake.
+    """
+    from fnd.file_facts import RESERVED_FACTS, is_fact_name
+
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        field = getattr(node, "field", None)
+        if isinstance(field, str) and is_fact_name(field) and field not in RESERVED_FACTS:
+            column = text.find(field) + 1
+            known = ", ".join(sorted(RESERVED_FACTS))
+            raise FilterError(f"no such field {field!r}; known fields are {known}", max(column, 1))
+        stack.extend(
+            child
+            for name in ("left", "right", "operand", "node")
+            if (child := getattr(node, name, None)) is not None
+        )
+
+
 def compile_filter(text: str) -> Predicate:
     """Parse ``text`` into a callable predicate. Raises FilterError on
     syntax issues. The returned predicate is pure: it never raises and
     returns False on type mismatches or missing fields (strict null)."""
     tree = parse(text)
+    _reject_unknown_facts(tree, text)
     return _make_evaluator(tree)
 
 
