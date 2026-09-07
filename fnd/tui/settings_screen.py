@@ -179,6 +179,27 @@ def _display_path(raw: str) -> str:
     return under_home(Path(raw).expanduser())
 
 
+def _discard_custom_globs(screen: Any, field_key: str) -> None:
+    """Clear a custom-glob field, keeping the text on offer for the visit.
+
+    The tick is derived from the text, so the value cannot simply stay; but
+    dropping it outright lost typed globs to one keypress, with no undo.
+    """
+    text = str(screen._fields.get(field_key) or "").strip()
+    if not text:
+        return
+    screen._discarded_globs[field_key] = text
+    screen._fields[field_key] = ""
+    screen.app.notify(f"Custom globs cleared — tick again to restore: {text}")
+
+
+def _custom_seed(screen: Any, field_key: str) -> str:
+    """What the glob prompt opens with: the current value, else the one the
+    last untick cleared."""
+    current = str(screen._fields.get(field_key) or "")
+    return current or screen._discarded_globs.get(field_key, "")
+
+
 def _render_row(
     item: MenuItem,
     app: FNDApp | None,
@@ -2046,6 +2067,8 @@ class SourceFormScreen(Screen[None]):
         super().__init__()
         self._collection_name = collection_name
         self._source_index = source_index  # None = adding new
+        # Globs an untick cleared, so re-ticking can offer them back.
+        self._discarded_globs: dict[str, str] = {}
         self._fields: dict[str, Any] = {
             "path": "",
             "includes_custom": "",  # comma-separated free-form globs
@@ -2402,8 +2425,16 @@ class SourceFormScreen(Screen[None]):
         if wants_custom and not str(self._fields.get("excludes_custom") or "").strip():
             self._prompt_custom("excludes_custom", "Excludes custom globs (comma-separated)")
         elif not wants_custom:
-            self._fields["excludes_custom"] = ""
+            self._discard_custom("excludes_custom")
         self.query_one(SettingsList).refresh_values()
+
+    def _discard_custom(self, field_key: str) -> None:
+        """Untick clears the globs, but keeps them for the visit.
+
+        The tick is derived from the text, so leaving it set would re-tick the
+        row; dropping it outright lost typed globs to one keypress.
+        """
+        _discard_custom_globs(self, field_key)
 
     def _prompt_custom(self, field_key: str, label: str) -> None:
         item = MenuItem(
@@ -2412,7 +2443,7 @@ class SourceFormScreen(Screen[None]):
             kind=KIND_SCALAR,
             value_getter=lambda _app, key=field_key: str(self._fields.get(key) or ""),
         )
-        self.query_one(EditBar).open(item, str(self._fields.get(field_key) or ""))
+        self.query_one(EditBar).open(item, _custom_seed(self, field_key))
 
     def _field_item(self, key: str, label: str, *, hint: str, description: str = "") -> MenuItem:
         def _get(_app: Any) -> str:
@@ -2731,6 +2762,8 @@ class AddCollectionWizard(Screen[None]):
         super().__init__()
         from fnd.config import EXCLUDES_PRESETS
 
+        # Globs an untick cleared, so re-ticking can offer them back.
+        self._discarded_globs: dict[str, str] = {}
         self._fields: dict[str, Any] = {
             "name": "",
             "path": "",
@@ -2927,7 +2960,7 @@ class AddCollectionWizard(Screen[None]):
         if wants_custom and not str(self._fields.get("excludes_custom") or "").strip():
             self._prompt_custom("excludes_custom", "Excludes custom globs (comma-separated)")
         elif not wants_custom:
-            self._fields["excludes_custom"] = ""
+            _discard_custom_globs(self, "excludes_custom")
         self.query_one(SettingsList).refresh_values()
 
     def _prompt_custom(self, field_key: str, label: str) -> None:
@@ -2939,7 +2972,7 @@ class AddCollectionWizard(Screen[None]):
             kind=KIND_SCALAR,
             value_getter=lambda _app, key=field_key: str(self._fields.get(key) or ""),
         )
-        self.query_one(EditBar).open(item, str(self._fields.get(field_key) or ""))
+        self.query_one(EditBar).open(item, _custom_seed(self, field_key))
 
     @on(SettingsList.Activated)
     def _on_field_activated(self, ev: SettingsList.Activated) -> None:

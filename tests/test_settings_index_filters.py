@@ -622,3 +622,23 @@ async def test_the_sample_tester_appears_only_with_a_rule_to_test(built_index: P
     shown, text = await _separator("status == 'done'")
     assert shown
     assert "status == 'done'" in text, text
+
+
+@pytest.mark.asyncio
+async def test_unticking_custom_globs_keeps_them_on_offer(built_index: Path) -> None:
+    """Untick discarded typed globs to one keypress, with no undo."""
+    from fnd.config import CollectionConfig, Config, SourceConfig
+    from fnd.tui.settings_screen import SourceFormScreen, _custom_seed
+
+    config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+    app = FNDApp(index_dir=built_index, config=config)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+        for _ in range(20):
+            await pilot.pause()
+        form = app.screen
+        form._fields["excludes_custom"] = "build/**, dist/**"
+        form._set_excludes([])
+        assert form._fields["excludes_custom"] == "", "untick must stop applying them"
+        assert _custom_seed(form, "excludes_custom") == "build/**, dist/**"
