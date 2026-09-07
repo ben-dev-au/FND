@@ -181,3 +181,26 @@ class TestTagTriState:
         tags = next(b for b in spec_branches(spec, _sample()) if b.id == "tags")
         os_group = next(g for g in tags.groups if g.id == "tags:os")
         assert any(i[0] == "tag:os:never_scanned" for i in os_group.items)
+
+
+class TestEveryTypeTickedMeansEveryType:
+    """The tree lists only the types a source contains, so ticking every box is
+    the user saying "all of them". Freezing the sampled list meant a PDF added
+    later was never indexed, while leaving the branch alone indexed it."""
+
+    def test_ticking_every_offered_type_stores_no_restriction(self) -> None:
+        offered = {"kind:md", "kind:python", "kind:txt"}
+        spec, _g, _f = apply_selection(FilterSpec(), offered, set(), offered)
+        assert spec.kinds == ()
+
+    def test_ticking_some_still_restricts(self) -> None:
+        offered = {"kind:md", "kind:python", "kind:txt"}
+        spec, _g, _f = apply_selection(FilterSpec(), {"kind:md", "kind:txt"}, set(), offered)
+        assert spec.kinds == ("md", "txt")
+
+    def test_without_an_offered_set_every_registry_kind_collapses(self) -> None:
+        from fnd.kinds import ALL_KIND_IDS
+
+        every = {f"kind:{k}" for k in ALL_KIND_IDS}
+        spec, _g, _f = apply_selection(FilterSpec(), every, set())
+        assert spec.kinds == ()

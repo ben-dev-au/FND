@@ -16,7 +16,7 @@ from dataclasses import dataclass, replace
 
 from fnd.filters.model import FilterSpec
 from fnd.filters.scan import SourceSample
-from fnd.kinds import CATEGORIES, KIND_BY_ID, KINDS_IN_CATEGORY
+from fnd.kinds import ALL_KIND_IDS, CATEGORIES, KIND_BY_ID, KINDS_IN_CATEGORY
 
 # Source-neutral labels: there are no Finder tags off macOS, and the branch
 # should not name an OS the user is not on.
@@ -286,10 +286,25 @@ def _custom_value(selected: set[str] | frozenset[str], field: str) -> str | None
 
 
 def apply_selection(
-    spec: FilterSpec, selected: set[str] | frozenset[str], excluded: set[str] | frozenset[str]
+    spec: FilterSpec,
+    selected: set[str] | frozenset[str],
+    excluded: set[str] | frozenset[str],
+    offered: set[str] | frozenset[str] | None = None,
 ) -> tuple[FilterSpec, bool, bool]:
-    """``(spec, respect_gitignore, respect_fndignore)`` matching the tree."""
-    kinds = tuple(sorted(i.removeprefix("kind:") for i in selected if i.startswith("kind:")))
+    """``(spec, respect_gitignore, respect_fndignore)`` matching the tree.
+
+    ``offered`` is the set of kind ids the tree actually showed. The tree lists
+    only the types a source contains, so ticking every visible box is the user
+    saying "all of them" even though the registry has more.
+    """
+    picked = {i.removeprefix("kind:") for i in selected if i.startswith("kind:")}
+    # Every box ticked means "every type", not the list of types that exist
+    # today: freezing it meant a PDF added tomorrow was never indexed, while
+    # leaving the branch untouched indexed it, and both read as "all types".
+    # `AddCollectionWizard._set_includes` already collapses the same way.
+    shown = {i.removeprefix("kind:") for i in offered if i.startswith("kind:")} if offered else None
+    everything = shown or set(ALL_KIND_IDS)
+    kinds = () if picked and picked >= everything else tuple(sorted(picked))
     keep = _tags_from(selected)
     tags = _tags_from(excluded)
     today = dt.date.today()

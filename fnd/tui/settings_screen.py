@@ -5122,6 +5122,9 @@ class FilterBrowserScreen(Screen[None]):
         keep = tree.expanded_group_ids if tree.root.children else set()
         line = tree.cursor_line
         branches = spec_branches(self._spec, self._sample)
+        # Kept so a commit knows which kinds were actually on screen: ticking
+        # every visible box means "all of them", not the sampled subset.
+        self._branches = branches
         groups = [_branch_group(b) for b in branches]
         selected, excluded = selection_for(
             self._spec, gitignore=self._gitignore, fndignore=self._fndignore
@@ -5140,9 +5143,20 @@ class FilterBrowserScreen(Screen[None]):
         from fnd.filters.tree_model import apply_selection
 
         self._spec, self._gitignore, self._fndignore = apply_selection(
-            self._spec, ev.selected, ev.excluded
+            self._spec, ev.selected, ev.excluded, self._offered_kind_ids()
         )
         self._refresh_summary()
+
+    def _offered_kind_ids(self) -> set[str]:
+        """Kind ids the tree actually showed, so "all ticked" means all of
+        them rather than every id in the registry."""
+        ids: set[str] = set()
+        stack = list(getattr(self, "_branches", []))
+        while stack:
+            branch = stack.pop()
+            ids |= {i[0] for i in branch.items if i[0].startswith("kind:")}
+            stack.extend(branch.groups)
+        return ids
 
     def _refresh_summary(self) -> None:
         """Show the rows as the expression they compile to.
