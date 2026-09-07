@@ -1407,3 +1407,34 @@ class TestSettingsScreenTyping:
             await pilot.press("slash")
             await pilot.pause()
             assert screen.query_one("#editor_input", Input).value == "/", "the premise"
+
+
+def test_no_screen_with_a_text_box_advertises_the_anchors_unguarded() -> None:
+    """`/`, `:`, `?` and `q` reach a focused box instead of acting.
+
+    A class-wide guard, not four named screens: two fixes for this defect were
+    made on the screens where it was reported and left every other screen that
+    composes the same chrome broken. Any new screen with a text box has to
+    decide, rather than inheriting the wrong answer.
+    """
+    import inspect
+    import re
+
+    from textual.screen import Screen
+
+    from fnd.tui import settings_screen as module
+
+    unguarded = []
+    for name in dir(module):
+        screen = getattr(module, name)
+        if not (isinstance(screen, type) and issubclass(screen, Screen) and screen is not Screen):
+            continue
+        try:
+            source = inspect.getsource(screen)
+        except OSError:  # pragma: no cover - only for C-defined classes
+            continue
+        takes_typing = bool(re.search(r"yield (Input|TextArea)\(|yield EditBar\(\)", source))
+        guarded = "_editor_hint_bar(" in source or "_wizard_hints(" in source
+        if takes_typing and "_hint_bar(" in source and not guarded:
+            unguarded.append(name)
+    assert not unguarded, f"screens naming keys that type into their box: {unguarded}"

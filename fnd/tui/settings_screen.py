@@ -74,6 +74,36 @@ if TYPE_CHECKING:
 _KEY_COL = 12
 
 
+def _wizard_hints(screen: Any, app: Any) -> Any:
+    """The wizard's footer, without the anchors while a box has focus."""
+    hints = (
+        ("⏎", "Edit"),
+        ("Tab", "Sample"),
+        ("Ctrl+S", "Save & Index"),
+        ("Esc", "Cancel"),
+    )
+    return _editor_hint_bar(hints) if _typing_in(screen) else _hint_bar(app, hints)
+
+
+def _typing_in(screen: Any) -> bool:
+    """Whether a text box on ``screen`` has focus, so the anchors are inert.
+
+    `/`, `:`, `?` and `q` reach a focused box instead of acting, so a footer
+    naming them there names keys that do not work.
+    """
+    import contextlib
+
+    from textual.widgets import Input, TextArea
+
+    with contextlib.suppress(Exception):
+        if "-hidden" not in screen.query_one(EditBar).classes:
+            return True
+    for widget in screen.query(Input):
+        if widget.has_focus:
+            return True
+    return any(widget.has_focus for widget in screen.query(TextArea))
+
+
 def _editor_hint_bar(contextual: tuple[tuple[str, str], ...]) -> Any:
     """A footer for a screen whose focus is a text box.
 
@@ -1803,7 +1833,8 @@ class PickerScreen(Screen[None]):
             if self._item.multi
             else (("⏎", "Select"), ("Esc", "Cancel"))
         )
-        self.query_one("#footer_hints", Static).update(_hint_bar(app, hints))
+        bar = _editor_hint_bar(hints) if _typing_in(self) else _hint_bar(app, hints)
+        self.query_one("#footer_hints", Static).update(bar)
 
     def _render_options(self) -> None:
         """First-paint of the picker list. Toggles after mount use
@@ -2748,7 +2779,8 @@ class SourceFormScreen(Screen[None]):
         )
         if self._source_index is not None:
             hints = (*hints, ("Ctrl+D", "Delete source"))
-        self.query_one("#footer_hints", Static).update(_hint_bar(app, hints))
+        bar = _editor_hint_bar(hints) if _typing_in(self) else _hint_bar(app, hints)
+        self.query_one("#footer_hints", Static).update(bar)
 
     # ── Save / cancel ────────────────────────────────────────
 
@@ -2991,17 +3023,7 @@ class AddCollectionWizard(Screen[None]):
         self._populate_fields()
         self.query_one(SettingsList).focus()
         app: FNDApp = self.app  # type: ignore[assignment]
-        self.query_one("#footer_hints", Static).update(
-            _hint_bar(
-                app,
-                (
-                    ("⏎", "Edit"),
-                    ("Tab", "Sample"),
-                    ("Ctrl+S", "Save & Index"),
-                    ("Esc", "Cancel"),
-                ),
-            )
-        )
+        self.query_one("#footer_hints", Static).update(_wizard_hints(self, app))
 
     def _populate_fields(self) -> None:
         self.query_one(SettingsList).set_items(self._build_field_items())
@@ -3410,9 +3432,8 @@ class NewCollectionScreen(Screen[None]):
         self._render_footer()
 
     def _render_footer(self) -> None:
-        app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎", "Create"), ("Esc", "Cancel")))
+            _editor_hint_bar((("⏎", "Create"), ("Esc", "Cancel")))
         )
 
     @on(Input.Submitted, "#new_collection_name")
@@ -3467,9 +3488,8 @@ class RenameCollectionScreen(Screen[None]):
 
     def on_mount(self) -> None:
         self.query_one("#new_collection_name", Input).focus()
-        app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎", "Save"), ("Esc", "Cancel")))
+            _editor_hint_bar((("⏎", "Save"), ("Esc", "Cancel")))
         )
 
     @on(Input.Submitted, "#new_collection_name")
