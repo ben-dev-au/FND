@@ -414,6 +414,17 @@ class SourceConfig(_ConfigModel):
         return self
 
     @property
+    def legacy_frontmatter(self) -> str | None:
+        """The pre-migration rule, read without tripping the deprecation.
+
+        A config is migrated on disk at startup, not at load, so a rule still
+        living here has to be readable. Attribute access warns once per read,
+        which a walk makes once per source and a settings screen once per
+        repaint.
+        """
+        return self.__dict__.get("frontmatter_filter")
+
+    @property
     def effective_filters(self) -> DefaultFilters:
         """Overrides merged over the defaults.
 

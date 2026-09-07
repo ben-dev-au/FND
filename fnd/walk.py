@@ -294,7 +294,7 @@ def walk_sources(
     """
     from fnd.config import SourceConfig  # local import: avoid cycle
     from fnd.file_facts import FileFacts
-    from fnd.filters import FilterSpec, build_gate
+    from fnd.filters import FileGate, FilterSpec, build_gate
     from fnd.filters.dimensions import rule_from_text, tag_selection
     from fnd.ignore_files import IGNORE_FILENAMES
     from fnd.tags import TAG_PROVIDERS
@@ -320,10 +320,12 @@ def walk_sources(
         # comparison on every PDF and drop the lot.
         scoped = [
             rule_from_text(text, needs_frontmatter=True)
-            for text in (source.frontmatter_filter, resolved.frontmatter)
+            for text in (source.legacy_frontmatter, resolved.frontmatter)
             if text
         ]
-        rules = gate.rules + tuple(scoped)
+        # One gate, not a second `all(...)` beside it: the walk reimplementing
+        # the rule combination is how an OR there would go unnoticed.
+        gate = FileGate.of(gate.rules + tuple(scoped))
         names = [
             name
             for name, on in (
@@ -346,7 +348,7 @@ def walk_sources(
             skip_dirs=skip_dirs,
             ignore_names=names,
         ):
-            if not rules:
+            if not gate:
                 yield path
                 continue
             facts = FileFacts(
@@ -355,5 +357,5 @@ def walk_sources(
                 read_frontmatter=read_frontmatter,
                 tag_providers=providers,
             )
-            if all(rule.passes(facts) for rule in rules):
+            if gate.passes(facts):
                 yield path

@@ -248,7 +248,11 @@ def _set_fields(model: BaseModel, order: tuple[str, ...] = ()) -> list[str]:
     names = [*(n for n in order if n in declared), *(n for n in declared if n not in order)]
     out: list[str] = []
     for name in names:
-        value = getattr(model, name, None)
+        # Straight from the stored values: going through the attribute warns
+        # for a deprecated field, which this deliberately still writes. `.get`
+        # with a fallback would evaluate that attribute access anyway.
+        stored = model.__dict__
+        value = stored[name] if name in stored else getattr(model, name, None)
         # `None` is absent; an explicit `[]` is an override to nothing, which
         # `SourceFilters` uses to opt a source out of an inherited rule.
         if value is None or isinstance(value, BaseModel):
