@@ -699,15 +699,26 @@ def collection_add(
 
     cfg_path = default_config_path()
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    from fnd.config import SourceFilters
+
     new_source = SourceConfig(
         path=source[0],
         includes=list(include),
         excludes=list(exclude),
         follow_symlinks=follow_symlinks,
-        frontmatter_filter=filter,
+        # The current shape, not the deprecated `frontmatter_filter`: a new
+        # write should not create something the next migration has to move.
+        filters=SourceFilters(frontmatter=filter) if filter else None,
     )
     write_collection_source(config_path=cfg_path, collection_name=name, source=new_source)
     typer.echo(f"added source {source[0]} to collection {name} in {cfg_path}")
+    if not Path(source[0]).expanduser().exists():
+        # Indexing it yields nothing and says nothing, so a typo looks like a
+        # working collection until the first search comes back empty.
+        typer.echo(
+            f"fnd: {source[0]} does not exist — indexing it will find no files.",
+            err=True,
+        )
 
 
 @collection_app.command("reindex")

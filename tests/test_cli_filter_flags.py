@@ -314,3 +314,59 @@ class TestIndexingIntoAnUnconfiguredCollection:
         self._run(tmp_path, "collection", "add", "real", "--source", str(src))
         _out, err = self._run(tmp_path, "index", str(src), "--collection", "real")
         assert "not in your config" not in err, err
+
+
+class TestCollectionAddWritesTheCurrentShape:
+    """`--filter` wrote the deprecated `frontmatter_filter`, and a source path
+    that does not exist was accepted in silence — the collection then indexes
+    nothing and looks fine until the first search comes back empty."""
+
+    def test_the_filter_lands_under_filters(self, tmp_path: Path) -> None:
+        import tomllib
+
+        src = tmp_path / "src"
+        src.mkdir()
+        (src / "a.md").write_text("---\nCourse: X\n---\nhi\n")
+        self._run(
+            tmp_path, "collection", "add", "n", "--source", str(src), "--filter", "Course == 'X'"
+        )
+        raw = tomllib.loads((tmp_path / "d" / "fnd" / "config.toml").read_text())
+        source = raw["collections"]["n"]["sources"][0]
+        assert source["filters"]["frontmatter"] == "Course == 'X'"
+        assert "frontmatter_filter" not in source, "a new write must not use the deprecated key"
+
+    def test_a_missing_path_is_called_out(self, tmp_path: Path) -> None:
+        _out, err = self._run(
+            tmp_path, "collection", "add", "g", "--source", str(tmp_path / "nope")
+        )
+        assert "does not exist" in err, err
+
+    def test_a_real_path_says_nothing(self, tmp_path: Path) -> None:
+        src = tmp_path / "src"
+        src.mkdir()
+        _out, err = self._run(tmp_path, "collection", "add", "r", "--source", str(src))
+        assert "does not exist" not in err, err
+
+    @staticmethod
+    def _run(scratch: Path, *args: str) -> tuple[str, str]:
+        import os
+        import subprocess
+
+        env = dict(
+            os.environ,
+            XDG_DATA_HOME=str(scratch / "d"),
+            XDG_CACHE_HOME=str(scratch / "c"),
+            PYTHONPATH=os.getcwd(),
+        )
+        result = subprocess.run(
+            [
+                "python",
+                "-c",
+                "import sys; from fnd.cli import main; sys.argv=['fnd', *sys.argv[1:]]; main()",
+                *args,
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout, result.stderr

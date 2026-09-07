@@ -64,7 +64,9 @@ def test_collection_add_with_filter_and_globs(
     s = load(cfg_path).collection("coursework").sources[0]
     assert s.includes == ["**/*.md"]
     assert s.excludes == ["**/.trash/**"]
-    assert s.frontmatter_filter == "Course == 'DPwC'"
+    # Asserted where the rule takes effect, not where it is stored: a new
+    # write uses `filters.frontmatter`, the deprecated key still loads.
+    assert s.effective_filters.frontmatter == "Course == 'DPwC'"
 
 
 def test_collection_add_invalid_filter_refuses(
