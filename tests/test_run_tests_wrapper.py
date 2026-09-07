@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -111,3 +114,29 @@ def test_an_explicit_worker_count_announces_nothing(monkeypatch: pytest.MonkeyPa
 
     assert _WRAPPER.main() == 0
     assert notices == []
+
+
+def test_the_suite_starts_with_xdist_unregistered() -> None:
+    """`-p no:xdist` leaves xdist installed but unregistered, so conftest's
+    xdist hook must be optional or collection dies before any test runs."""
+    repo = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:xdist",
+            "-q",
+            "--collect-only",
+            "tests/test_smoke.py",
+        ],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        env={**os.environ, "FND_TEST_NO_LOCK": "1"},
+    )
+    output = result.stdout + result.stderr
+    assert "PluginValidationError" not in output, output[-1500:]
+    assert result.returncode == 0, output[-1500:]

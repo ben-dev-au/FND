@@ -364,15 +364,16 @@ def pytest_collection_modifyitems(  # pyright: ignore[reportUnusedFunction]
         _take_machine_lock()
 
 
-if importlib.util.find_spec("xdist") is not None:
-    # Defined only when xdist is installed: pytest rejects an unknown hook
-    # outright, so an unconditional definition breaks every `-p no:xdist` run.
-    def pytest_xdist_node_collection_finished(  # pyright: ignore[reportUnusedFunction]
-        node: Any, ids: list[str]
-    ) -> None:
-        """The controller's only sight of the collected set under xdist."""
-        if _gate_applies(node.config) and len(ids) >= _LOCK_THRESHOLD:
-            _take_machine_lock()
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_node_collection_finished(  # pyright: ignore[reportUnusedFunction]
+    node: Any, ids: list[str]
+) -> None:
+    """The controller's only sight of the collected set under xdist, and it is
+    the whole set rather than this node's share. Optional because `-p no:xdist`
+    leaves xdist installed but unregistered, and pytest rejects a hook whose
+    spec is absent unless it says it can live without one."""
+    if _gate_applies(node.config) and len(ids) >= _LOCK_THRESHOLD:
+        _take_machine_lock()
 
 
 def pytest_sessionfinish(  # pyright: ignore[reportUnusedFunction]
