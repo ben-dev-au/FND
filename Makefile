@@ -4,10 +4,10 @@ sync:
 	uv sync --all-extras --group dev
 
 test:
-	uv run pytest -q
+	uv run python scripts/run_tests.py -q
 
 test-fast:
-	uv run pytest -q -m "not slow"
+	uv run python scripts/run_tests.py -q -m "not slow"
 
 lint:
 	uv run ruff check .
