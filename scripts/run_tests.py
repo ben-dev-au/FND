@@ -168,7 +168,10 @@ def main() -> int:
                     # module-scoped fixture in test_query_acceptance.py wants.
                     # Costs 19s against --dist load.
                     args = ["-n", str(workers), "--dist", "loadfile", *args]
-            return subprocess.call([sys.executable, "-m", "pytest", *args])
+            status = subprocess.call([sys.executable, "-m", "pytest", *args])
+            # A signal death returns -N here, which sys.exit wraps to 256-N:
+            # a killed run reported 247 rather than the shell's 137.
+            return status if status >= 0 else 128 - status
     except KeyboardInterrupt:
         return 130
 
