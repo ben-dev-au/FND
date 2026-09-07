@@ -1340,3 +1340,70 @@ class TestClearSaysWhatItTook:
                 await pilot.pause()
             assert said, "clearing said nothing"
             assert "skipped tags" in said[0], said
+
+
+class TestSettingsScreenTyping:
+    """Two fixes made tonight for other screens had not reached this one: its
+    edit bar docked to the screen while its panel is inset, and its footer
+    named `/ : ? q` while they typed into the focused box."""
+
+    @staticmethod
+    async def _open(app: FNDApp, pilot: Any) -> Any:
+        from fnd.tui.menu import SECTION_FILTERS
+        from fnd.tui.settings_screen import open_settings_section
+
+        open_settings_section(app, SECTION_FILTERS)
+        for _ in range(25):
+            await pilot.pause()
+        return app.screen
+
+    @pytest.mark.asyncio
+    async def test_the_edit_field_stays_inside_the_panel(self, built_index: Path) -> None:
+        from textual.widgets import Input
+
+        from fnd.tui.settings_screen import SettingsList
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            screen = await self._open(app, pilot)
+            rows = screen.query_one(SettingsList)
+            rows.cursor_index = next(
+                i for i, it in enumerate(rows._items) if it.id == "filters.tag_frontmatter_keys"
+            )
+            await pilot.press("enter")
+            for _ in range(8):
+                await pilot.pause()
+            panel = screen.query_one("#settings_box")
+            field = screen.query_one("#editor_input", Input)
+            assert panel.region.contains_region(field.region), (
+                f"field {field.region} left panel {panel.region}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_the_footer_drops_keys_that_type(self, built_index: Path) -> None:
+        from textual.widgets import Input, Static
+
+        from fnd.tui.settings_screen import SettingsList
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            screen = await self._open(app, pilot)
+            footer = screen.query_one("#footer_hints", Static)
+            assert "Search" in footer.render_line(0).text, "idle, the anchors do work"
+
+            rows = screen.query_one(SettingsList)
+            rows.cursor_index = next(
+                i for i, it in enumerate(rows._items) if it.id == "filters.tag_frontmatter_keys"
+            )
+            await pilot.press("enter")
+            for _ in range(8):
+                await pilot.pause()
+            painted = footer.render_line(0).text
+            for dead in ("Search", "Menu", "Keys", "Quit"):
+                assert dead not in painted, f"{dead} types into the box: {painted}"
+
+            await pilot.press("slash")
+            await pilot.pause()
+            assert screen.query_one("#editor_input", Input).value == "/", "the premise"

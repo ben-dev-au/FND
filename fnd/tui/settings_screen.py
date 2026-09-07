@@ -1239,7 +1239,9 @@ class SettingsScreen(Screen[None]):
             if not self._breadcrumb:
                 # Root-only version + build identifier; sub-screens omit it.
                 yield Static("", id="settings_status")
-        yield EditBar()
+            # Inside the panel: this one is inset, so a screen-docked bar
+            # painted at column 0, detached from the row it was editing.
+            yield EditBar()
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
@@ -1349,7 +1351,21 @@ class SettingsScreen(Screen[None]):
         breadcrumb, and cursor row."""
         app: FNDApp = self.app  # type: ignore[assignment]
         cluster = self._hint_cluster()
-        self.query_one("#footer_hints", Static).update(_hint_bar(app, cluster))
+        # `/`, `:`, `?` and `q` type into a focused box rather than acting, so
+        # naming them there advertises four keys that do not work.
+        bar = _editor_hint_bar(cluster) if self._is_typing() else _hint_bar(app, cluster)
+        self.query_one("#footer_hints", Static).update(bar)
+
+    def _is_typing(self) -> bool:
+        """Whether a text box has focus, so the anchors are inert."""
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            if "-hidden" not in self.query_one(EditBar).classes:
+                return True
+        with contextlib.suppress(Exception):
+            return self.query_one("#settings_search", Input).has_focus
+        return False
 
     def _hint_cluster(self) -> tuple[tuple[str, str], ...]:
         """Choose the contextual hint cluster for the current state.
