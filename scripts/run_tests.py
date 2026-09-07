@@ -75,22 +75,22 @@ def _free_gb() -> float:
 
 
 def _busy_cores(ncpu: int) -> float:
-    """Cores in use now. The load average is instant but lags; the accurate
-    sample costs ~2.2s, so it is only paid when it could lower the count."""
+    """Cores in use now. macOS load average reads far above true occupancy
+    (12.25 against 3.26 measured), and lags a machine that just got busy, so
+    it is the fallback rather than a cheap short-circuit. The sample costs 2.2s."""
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.run(
+                ["top", "-l", "2", "-n", "0"], capture_output=True, text=True, timeout=30
+            ).stdout
+            usage = [ln for ln in out.splitlines() if ln.startswith("CPU usage")][-1]
+            return ncpu * (1.0 - float(usage.split(",")[-1].strip().split("%")[0]) / 100.0)
+        except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+            pass
     try:
-        load1 = os.getloadavg()[0]
+        return os.getloadavg()[0]
     except OSError:
         return ncpu / 2.0
-    if load1 <= ncpu - WORKER_CEILING:
-        return load1
-    try:
-        out = subprocess.run(
-            ["top", "-l", "2", "-n", "0"], capture_output=True, text=True, timeout=30
-        ).stdout
-        usage = [ln for ln in out.splitlines() if ln.startswith("CPU usage")][-1]
-        return ncpu * (1.0 - float(usage.split(",")[-1].strip().split("%")[0]) / 100.0)
-    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
-        return load1
 
 
 def pick_workers() -> int:
@@ -158,18 +158,19 @@ def _wants_workers(args: Sequence[str]) -> bool:
 
 def main() -> int:
     args = list(sys.argv[1:])
-    with _machine_lock():
-        if _wants_workers(args):
-            workers = pick_workers()
-            if workers > 1:
-                _notify(f"pytest: {workers} workers")
-                # loadfile, not load: a module's tests stay on one worker, which
-                # is what serial gives a suite that mutates sys.modules. Costs 19s.
-                args = ["-n", str(workers), "--dist", "loadfile", *args]
-        try:
+    try:
+        with _machine_lock():
+            if _wants_workers(args):
+                workers = pick_workers()
+                if workers > 1:
+                    _notify(f"pytest: {workers} workers")
+                    # loadfile keeps a module's tests on one worker, which the
+                    # module-scoped fixture in test_query_acceptance.py wants.
+                    # Costs 19s against --dist load.
+                    args = ["-n", str(workers), "--dist", "loadfile", *args]
             return subprocess.call([sys.executable, "-m", "pytest", *args])
-        except KeyboardInterrupt:
-            return 130
+    except KeyboardInterrupt:
+        return 130
 
 
 if __name__ == "__main__":
