@@ -276,3 +276,27 @@ def test_unticking_the_last_type_widens_and_the_branch_says_so() -> None:
         b for b in spec_branches(widened, SourceSample(kinds={"md": 1}, tags={})) if b.id == "kinds"
     )
     assert branch.empty_label == "every type"
+
+
+class TestBoundsNoPickerCanShow:
+    """`min_size`, `modified_before` and `created_before` have no branch:
+    "Maximum file size" cannot hold a minimum and "Modified within" cannot
+    hold an upper bound. With no row, the tree looked complete while they
+    filtered — measured elsewhere at 16 files down to 4."""
+
+    def test_they_get_a_row_naming_each_one(self) -> None:
+        live = FilterSpec(min_size=100, modified_before=dt.date(2026, 1, 1))
+        branch = next(b for b in spec_branches(live) if b.id == "beyond")
+        assert [label for _i, label in branch.items] == [
+            "At least 100 bytes",
+            "Modified before 2026-01-01",
+        ]
+        assert "(2)" in branch.label
+
+    def test_the_row_is_absent_when_nothing_needs_it(self) -> None:
+        assert not [b for b in spec_branches(FilterSpec()) if b.id == "beyond"]
+
+    def test_created_before_is_covered_too(self) -> None:
+        live = FilterSpec(created_before=dt.date(2025, 6, 3))
+        branch = next(b for b in spec_branches(live) if b.id == "beyond")
+        assert [label for _i, label in branch.items] == ["Created before 2025-06-03"]

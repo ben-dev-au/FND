@@ -104,6 +104,18 @@ def _kind_items(
     return out
 
 
+def _beyond_the_pickers(spec: FilterSpec) -> tuple[tuple[str, str], ...]:
+    """Bounds no branch can show, as (field, one-line description)."""
+    out: list[tuple[str, str]] = []
+    if spec.min_size is not None:
+        out.append(("min_size", f"At least {_human_size(spec.min_size)}"))
+    for field, verb in (("modified", "Modified"), ("created", "Created")):
+        bound = getattr(spec, f"{field}_before")
+        if bound is not None:
+            out.append((f"{field}_before", f"{verb} before {bound.isoformat()}"))
+    return tuple(out)
+
+
 def _rule_label(name: str, value: str) -> str:
     """A typed rule's row: its current text, or that it has none."""
     text = (value or "").strip()
@@ -210,6 +222,19 @@ def spec_branches(
             dated.append((days, f"{field_name}:{custom}", f"Since {since}"))
         items = [(i, lbl) for _k, i, lbl in sorted(dated)]
         branches.append(Branch(field_name, label, "radio", tuple(items)))
+    beyond = _beyond_the_pickers(spec)
+    if beyond:
+        # These dimensions have no picker: "Maximum file size" cannot hold a
+        # minimum, and "Modified within" cannot hold an upper bound. Without a
+        # row the tree looked complete while they filtered.
+        branches.append(
+            Branch(
+                "beyond",
+                f"Only in the expression  ({len(beyond)})",
+                "actions",
+                tuple((f"beyond:{name}", text) for name, text in beyond),
+            )
+        )
     # An actions branch carries no marker, so a collapsed one has to say in
     # its label whether a rule is set.
     set_rules = sum(1 for v in (spec.frontmatter, spec.expression) if (v or "").strip())

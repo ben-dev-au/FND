@@ -5234,6 +5234,11 @@ class FilterBrowserScreen(Screen[None]):
         """
         from dataclasses import replace as _replace
 
+        if ev.item_id.startswith("beyond:"):
+            # No picker can express these, so the row hands over to the one
+            # editor that can rather than being a dead end.
+            self.action_edit_text()
+            return
         field_name = ev.item_id.removeprefix("rule:")
         titles = {
             "frontmatter": "Frontmatter rule · files with frontmatter",
