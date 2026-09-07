@@ -64,6 +64,25 @@ def check_schema_status(index_dir: Path) -> tuple[SchemaStatus, str | None]:
     return SchemaStatus.READY, None
 
 
+def _next_step(config: Config) -> str:
+    """What to do next, given what has been done already.
+
+    The message used to name `collection add` unconditionally, so a user who
+    had just run it was told to run it again — the same text, verbatim, with
+    no way forward.
+    """
+    names = list(config.collections)
+    if not names:
+        return (
+            "No collections yet. Add one with "
+            "`fnd collection add <name> --source <path>`, or run `fnd tui` "
+            "and choose Add Collection."
+        )
+    listed = ", ".join(f"`fnd collection reindex {name}`" for name in names[:3])
+    more = " (and your other collections)" if len(names) > 3 else ""
+    return f"Build it with {listed}{more}."
+
+
 def prompt_and_rebuild_or_exit(
     *,
     index_dir: Path,
@@ -83,12 +102,7 @@ def prompt_and_rebuild_or_exit(
     if status is SchemaStatus.READY:
         return
     if status is SchemaStatus.EMPTY:
-        typer.echo(
-            f"no index at {index_dir}. Configure a collection with "
-            f"`fnd collection add <name> --source <path>` "
-            f"then run `fnd collection reindex <name>`.",
-            err=True,
-        )
+        typer.echo(f"no index at {index_dir}. {_next_step(config)}", err=True)
         raise typer.Exit(code=1)
 
     # STALE.

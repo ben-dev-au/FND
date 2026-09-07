@@ -96,3 +96,42 @@ def test_search_works_when_schema_already_current(
     assert result.exit_code == 0
     assert "schema v" not in result.output.lower()
     assert "rebuild" not in result.output.lower()
+
+
+class TestTheFirstRunMessageMovesYouOn:
+    """It named `collection add` unconditionally, so a user who had just run
+    it was told to run it again — the same text, verbatim, with no way
+    forward. hunt-g hit this as a new user and could not reach the wizard."""
+
+    @staticmethod
+    def _config(*names: str):
+        from fnd.config import CollectionConfig, Config, SourceConfig
+
+        return Config(
+            collections={n: CollectionConfig(sources=[SourceConfig(path="~/n")]) for n in names}
+        )
+
+    def test_a_fresh_machine_is_told_how_to_add_one(self) -> None:
+        from fnd.migrate import _next_step
+
+        step = _next_step(self._config())
+        assert "collection add" in step
+        assert "Add Collection" in step, "the in-app route must be offered too"
+
+    def test_after_adding_one_it_names_reindex_instead(self) -> None:
+        from fnd.migrate import _next_step
+
+        step = _next_step(self._config("notes"))
+        assert "reindex notes" in step
+        assert "collection add" not in step, "it must not name the step already taken"
+
+    def test_it_names_the_collections_that_exist(self) -> None:
+        from fnd.migrate import _next_step
+
+        assert "reindex alpha" in _next_step(self._config("alpha", "beta"))
+
+    def test_the_two_states_differ(self) -> None:
+        """The defect was that they were byte-identical."""
+        from fnd.migrate import _next_step
+
+        assert _next_step(self._config()) != _next_step(self._config("notes"))
