@@ -61,6 +61,21 @@ FULL = _FullScope()
 # source ids (partial / granular). Absence from the map = out of scope.
 
 
+def _tags_summary(n_selected: int, n_available: int, *, sources_on: bool) -> str:
+    """What the Tags branch is doing, without claiming more than it knows.
+
+    The catalogue is scoped to the TICKED tag sources, so an empty one said
+    "none indexed" when the index held plenty and the user had merely switched
+    the sources off. And with nothing to draw the branch returned early, so a
+    live tag filter kept narrowing the search with no row to show for it.
+    """
+    if n_available:
+        return f"{n_selected} of {n_available}"
+    if n_selected:
+        return f"{n_selected} still filtering, no rows to show"
+    return "none indexed" if sources_on else "tag sources off"
+
+
 class ScopeController:
     """Owns scope state (collections / sources / filters), the sidebar
     panel layout, and their persistence to the UI-state file."""
@@ -939,7 +954,7 @@ class ScopeController:
             self._distinct_tag_values(self.tag_exclude)
         )
         n_available = sum(len(v) for v in catalogue.values())
-        summary = f"{n_selected} of {n_available}" if n_available else "none indexed"
+        summary = _tags_summary(n_selected, n_available, sources_on=bool(self._tag_source_ids()))
         tags_node = tree.root.add(
             _styled_parent_label(f"Tags             ({summary})"),
             data={"kind": "filter_category", "category": "tags"},

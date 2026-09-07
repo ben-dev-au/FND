@@ -476,3 +476,30 @@ async def test_leaf_markers_align_with_branch_markers(
         # Branch rows get Textual's 2-cell arrow; leaves pad to match.
         assert str(leaves[0].label).startswith("  "), str(leaves[0].label)
         assert not str(branch.label).startswith("  "), str(branch.label)
+
+
+class TestTheTagsBranchDoesNotOverclaim:
+    """The catalogue is scoped to the TICKED tag sources, so an empty one said
+    "none indexed" while the index held plenty and the user had merely
+    switched the sources off — and with nothing to draw, the branch returned
+    early, leaving a live tag filter narrowing the search with no row."""
+
+    def test_switching_the_sources_off_is_not_an_empty_index(self) -> None:
+        from fnd.tui.scope_panel import _tags_summary
+
+        assert _tags_summary(0, 0, sources_on=False) == "tag sources off"
+        assert _tags_summary(0, 0, sources_on=True) == "none indexed"
+
+    def test_a_live_filter_with_no_rows_says_it_is_still_filtering(self) -> None:
+        from fnd.tui.scope_panel import _tags_summary
+
+        for sources_on in (True, False):
+            summary = _tags_summary(2, 0, sources_on=sources_on)
+            assert "still filtering" in summary, summary
+            assert "none indexed" not in summary
+
+    def test_the_ordinary_case_is_unchanged(self) -> None:
+        from fnd.tui.scope_panel import _tags_summary
+
+        assert _tags_summary(2, 7, sources_on=True) == "2 of 7"
+        assert _tags_summary(0, 7, sources_on=True) == "0 of 7"
