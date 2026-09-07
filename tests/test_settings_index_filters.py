@@ -1494,3 +1494,73 @@ class TestARejectedSaveStopsComplainingOnceFixed:
             for _ in range(6):
                 await pilot.pause()
             assert "-hidden" in error.classes
+
+
+class TestNothingIsThrownAwayInSilence:
+    """Every screen holding user work says so when leaving discards it. Two
+    were missed: the wizard threw away a filled form on both Esc and q, and
+    the text view threw away typed filter text."""
+
+    @pytest.mark.asyncio
+    async def test_the_wizard_says_it_discarded_a_filled_form(self, built_index: Path) -> None:
+        from fnd.tui.settings_screen import AddCollectionWizard
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(AddCollectionWizard())
+            for _ in range(20):
+                await pilot.pause()
+            wizard = app.screen
+            said: list[str] = []
+            wizard.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+            wizard.action_back()
+            await pilot.pause()
+            assert said == [], "an untouched form discards nothing"
+
+            app.push_screen(AddCollectionWizard())
+            for _ in range(20):
+                await pilot.pause()
+            wizard = app.screen
+            said = []
+            wizard.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+            wizard._fields["name"] = "probe"
+            wizard.action_back()
+            await pilot.pause()
+            assert said, "a filled form was discarded in silence"
+            assert "discarded" in said[0], said
+
+    @pytest.mark.asyncio
+    async def test_the_text_view_says_it_discarded_typing(self, built_index: Path) -> None:
+        from textual.widgets import TextArea
+
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterTextScreen
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(
+                FilterTextScreen(title="As text", spec=FilterSpec(), on_save=lambda _s: None)
+            )
+            for _ in range(15):
+                await pilot.pause()
+            screen = app.screen
+            said: list[str] = []
+            screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+            screen.action_back()
+            await pilot.pause()
+            assert said == [], "untouched text discards nothing"
+
+            app.push_screen(
+                FilterTextScreen(title="As text", spec=FilterSpec(), on_save=lambda _s: None)
+            )
+            for _ in range(15):
+                await pilot.pause()
+            screen = app.screen
+            said = []
+            screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+            screen.query_one("#filter_text", TextArea).text = "file.kind in ['md']"
+            screen.action_back()
+            await pilot.pause()
+            assert said, "typed text was discarded in silence"

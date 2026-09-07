@@ -3025,6 +3025,9 @@ class AddCollectionWizard(Screen[None]):
     def on_mount(self) -> None:
         self._populate_fields()
         self.query_one(SettingsList).focus()
+        # An untouched form, to tell "nothing typed yet" from "a filled form
+        # about to be thrown away".
+        self._opened_with = copy.deepcopy(self._fields)
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(_wizard_hints(self, app))
 
@@ -3292,6 +3295,8 @@ class AddCollectionWizard(Screen[None]):
         self.query_one(SettingsList).focus()
 
     def action_back(self) -> None:
+        if self._fields != getattr(self, "_opened_with", self._fields):
+            self.notify("New collection discarded — ^S saves it", severity="warning")
         self.app.pop_screen()
 
     def action_save_close(self) -> None:
@@ -5077,6 +5082,10 @@ class FilterTextScreen(Screen[None]):
         status.update(f"✓ {rows}" if rows else "✓ no filters")
 
     def action_back(self) -> None:
+        from fnd.filters.text_form import render
+
+        if self.query_one("#filter_text", TextArea).text.strip() != render(self._spec).strip():
+            self.notify("Filter text discarded — ^S saves it", severity="warning")
         self.app.pop_screen()
 
     def action_save_close(self) -> None:
