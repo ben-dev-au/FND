@@ -2427,6 +2427,9 @@ class SourceFormScreen(Screen[None]):
     def _populate_fields(self) -> None:
         self.query_one(SettingsList).set_items(self._build_field_items())
         self._refresh_sample_tester()
+        # A rejected save left its reason on screen while the user fixed the
+        # very field it named, so "Name is required." sat above a filled name.
+        self._clear_error()
 
     def _refresh_sample_tester(self) -> None:
         """The tester only appears once there is a rule for it to test.
@@ -3028,6 +3031,9 @@ class AddCollectionWizard(Screen[None]):
     def _populate_fields(self) -> None:
         self.query_one(SettingsList).set_items(self._build_field_items())
         self._refresh_sample_tester()
+        # A rejected save left its reason on screen while the user fixed the
+        # very field it named, so "Name is required." sat above a filled name.
+        self._clear_error()
 
     def _refresh_sample_tester(self) -> None:
         """As on the source form: nothing to test without a rule."""

@@ -1438,3 +1438,59 @@ def test_no_screen_with_a_text_box_advertises_the_anchors_unguarded() -> None:
         if takes_typing and "_hint_bar(" in source and not guarded:
             unguarded.append(name)
     assert not unguarded, f"screens naming keys that type into their box: {unguarded}"
+
+
+class TestARejectedSaveStopsComplainingOnceFixed:
+    """The reason stayed on screen while the user fixed the very field it
+    named, so "Name is required." sat above a filled-in name."""
+
+    @pytest.mark.asyncio
+    async def test_the_wizard_clears_it(self, built_index: Path) -> None:
+        from textual.widgets import Static
+
+        from fnd.tui.settings_screen import AddCollectionWizard
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(AddCollectionWizard())
+            for _ in range(20):
+                await pilot.pause()
+            wizard = app.screen
+            error = wizard.query_one("#wizard_error", Static)
+            wizard.action_save_close()
+            for _ in range(8):
+                await pilot.pause()
+            assert "-hidden" not in error.classes, "the premise: a bad save complains"
+            assert "Name is required" in str(error.render())
+
+            wizard._fields["name"] = "probe"
+            wizard._populate_fields()
+            for _ in range(8):
+                await pilot.pause()
+            assert "-hidden" in error.classes, "it still complains after the fix"
+
+    @pytest.mark.asyncio
+    async def test_the_source_form_clears_it_too(self, built_index: Path) -> None:
+        """Same pattern, same screen family — fixed as a class."""
+        from textual.widgets import Static
+
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.settings_screen import SourceFormScreen
+
+        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        app = FNDApp(index_dir=built_index, config=config)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+            for _ in range(20):
+                await pilot.pause()
+            form = app.screen
+            error = form.query_one("#form_error", Static)
+            form._show_error("Path does not exist: /nope")
+            await pilot.pause()
+            assert "-hidden" not in error.classes
+            form._populate_fields()
+            for _ in range(6):
+                await pilot.pause()
+            assert "-hidden" in error.classes
