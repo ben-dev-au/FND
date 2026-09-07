@@ -488,7 +488,7 @@ async def test_the_summary_says_what_the_expression_leaves_out(built_index: Path
             await pilot.pause()
         summary = _summary_text(app.screen)
 
-    assert "not in the expression" in summary, summary
+    assert "Outside the expression" in summary, summary
     assert ".gitignore" in summary
     assert "**/*.md" in summary
 
@@ -673,7 +673,7 @@ class TestTheSummaryBoxTellsTheTruth:
     """It is five rows; past them the terminal cut the expression mid-token
     with nothing to say it had. Only reachable below ~60 columns."""
 
-    HEAD = "not in the expression — obeying .gitignore, .fndignore"
+    HEAD = "Outside the expression — obeying .gitignore, .fndignore"
     PREFIX = "expression ('t' edits, 'y' copies):  "
     BODY = "(file.kind in ['pdf', 'docx', 'md', 'txt', 'pptx']) AND (NOT ('no_index' in file.tags.all))"
 
@@ -1062,3 +1062,65 @@ async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) 
         await pilot.pause()
         assert notes, "leaving with an edit must say so"
         assert "discarded" in notes[0], notes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("width", [50, 55, 60, 80])
+async def test_the_edit_field_is_never_off_screen(built_index: Path, width: int) -> None:
+    """The bar's label was uncapped, so on a narrow terminal it pushed the
+    field past the right edge: typing changed no painted row while the value
+    accumulated, and saving wrote it into the config."""
+    from textual.widgets import Input
+
+    from fnd.config import CollectionConfig, Config, SourceConfig
+    from fnd.tui.settings_screen import SettingsList, SourceFormScreen
+
+    config = Config(
+        collections={
+            "c": CollectionConfig(sources=[SourceConfig(path="~/x", includes=["**/*.md"])])
+        }
+    )
+    app = FNDApp(index_dir=built_index, config=config)
+    async with app.run_test(size=(width, 24)) as pilot:
+        await pilot.pause()
+        app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+        for _ in range(20):
+            await pilot.pause()
+        form = app.screen
+        rows = form.query_one(SettingsList)
+        rows.cursor_index = next(
+            i for i, it in enumerate(rows._items) if it.id == "form.includes_custom"
+        )
+        await pilot.press("enter")
+        for _ in range(8):
+            await pilot.pause()
+        field = form.query_one("#editor_input", Input)
+        assert field.region.right <= width, f"field at {field.region} is off a {width}-col screen"
+        before = [s.text for s in form._compositor.render_strips()]
+        await pilot.press("a")
+        await pilot.pause()
+        after = [s.text for s in form._compositor.render_strips()]
+        assert before != after, "typing changed nothing on screen"
+
+
+def test_the_footer_never_drops_the_save_key() -> None:
+    """Dropping from the right cut `^S Save` while leaving `c Clear` — a
+    destructive key outliving the one that keeps the work."""
+    from fnd.tui.app import render_hint_bar
+
+    bar = render_hint_bar(
+        (("/", "Search"), (":", "Menu"), ("?", "Keys"), ("q", "Quit")),
+        (
+            ("⏎", "Toggle"),
+            ("→", "Open"),
+            ("t", "As text"),
+            ("c", "Clear"),
+            ("^S", "Save"),
+            ("y", "Copy"),
+            ("Esc/←", "Discard"),
+        ),
+    )
+    for width in (44, 55, 60, 70, 80, 100):
+        painted = bar.fitted(width).plain
+        assert "Save" in painted, f"the save key was dropped at {width} cols: {painted}"
+        assert bar.fitted(width).cell_len <= width

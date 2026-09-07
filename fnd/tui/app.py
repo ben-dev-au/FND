@@ -148,6 +148,11 @@ def _hint_clusters(
     return joined
 
 
+def _is_commit(key: str) -> bool:
+    """Whether a hint's key is the app's save gesture, in any spelling."""
+    return key.replace(" ", "").lower() in {"^s", "ctrl+s"}
+
+
 class _HintBar:
     """The hint bar, refitted to the width it is painted at.
 
@@ -178,6 +183,18 @@ class _HintBar:
     def __str__(self) -> str:
         return self._full.plain
 
+    def _kept(self, n: int) -> tuple[tuple[str, str], ...]:
+        """The first ``n`` hints, always including the commit key.
+
+        Dropping from the right cut `^S Save` while leaving `c Clear` — a
+        destructive key outliving the one that keeps the work.
+        """
+        kept = list(self._contextual[:n])
+        commit = next((h for h in self._contextual[n:] if _is_commit(h[0])), None)
+        if commit is not None:
+            kept = [*kept[: max(0, n - 1)], commit]
+        return tuple(kept)
+
     def fitted(self, width: int) -> Text:
         for n in range(len(self._anchors), -1, -1):
             text = _hint_clusters(
@@ -186,10 +203,10 @@ class _HintBar:
             if text.cell_len <= width:
                 return text
         for n in range(len(self._contextual) - 1, 0, -1):
-            text = _hint_clusters((), self._contextual[:n], elided=True)
+            text = _hint_clusters((), self._kept(n), elided=True)
             if text.cell_len <= width:
                 return text
-        return _hint_clusters((), self._contextual[:1])
+        return _hint_clusters((), self._kept(1), elided=True)
 
     def __rich_console__(self, console: Any, options: Any) -> Any:
         text = self.fitted(options.max_width)

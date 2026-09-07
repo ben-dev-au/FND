@@ -348,6 +348,10 @@ def _render_row(
         affordance_len = sum(
             len(seg_text) for seg_text, seg_style in pending_segments if "dim" not in seg_style
         )
+        # Capped: an over-long value used to eat the label's budget and elide
+        # the label instead of itself, so one row lost its name while the row
+        # above lost its value.
+        affordance_len = min(affordance_len, max(8, width // 2))
         used_leading = (_KEY_COL if item.key else 0) + leading_used
         # Minimum dotted pad + leading/trailing space around it.
         min_pad = 2
@@ -597,8 +601,16 @@ class EditBar(Horizontal):
         background: $surface;
     }
     EditBar.-hidden { display: none; }
-    EditBar > Static.-edit-label { color: $text-muted; width: auto; }
-    EditBar > Input#editor_input { border: none; padding: 0 1; color: $primary; background: $surface; width: 1fr; }
+    /* The label was uncapped, so on a narrow terminal it pushed the field
+       off-screen entirely: typing changed no painted row while the value
+       accumulated, and saving wrote it. */
+    EditBar > Static.-edit-label {
+        color: $text-muted; width: auto; max-width: 40%; text-overflow: ellipsis;
+    }
+    EditBar > Input#editor_input {
+        border: none; padding: 0 1; color: $primary; background: $surface;
+        width: 1fr; min-width: 12;
+    }
     EditBar > Static.-edit-error { color: $error; width: auto; }
     EditBar > Static.-edit-error.-ok { color: $success; }
     EditBar > Static.-edit-error.-warn { color: $warning; }
@@ -5458,7 +5470,7 @@ class FilterBrowserScreen(Screen[None]):
         # neither can appear in the expression below.
         self.query_one("#filter_summary", Static).update(
             _FilterSummary(
-                "not in the expression — " + " · ".join(head),
+                "Outside the expression: " + " · ".join(head),
                 "expression ('t' edits, 'y' copies):  ",
                 text,
             )
