@@ -262,3 +262,17 @@ def test_a_typed_rule_is_visible_while_the_branch_is_shut() -> None:
     spec = FilterSpec(frontmatter="status == 'done'")
     assert "(1 set)" in next(b.label for b in spec_branches(spec) if b.id == "rules")
     assert "(none)" in next(b.label for b in spec_branches(FilterSpec()) if b.id == "rules")
+
+
+def test_unticking_the_last_type_widens_and_the_branch_says_so() -> None:
+    """Nothing ticked is "no rule", which is every type — the one untick that
+    widens rather than narrows. The branch has to name that state."""
+    offered = {"kind:md", "kind:pdf"}
+    narrowed, _g, _f = apply_selection(FilterSpec(), {"kind:md"}, set(), offered)
+    assert narrowed.kinds == ("md",)
+    widened, _g, _f = apply_selection(narrowed, set(), set(), offered)
+    assert widened.kinds == ()
+    branch = next(
+        b for b in spec_branches(widened, SourceSample(kinds={"md": 1}, tags={})) if b.id == "kinds"
+    )
+    assert branch.empty_label == "every type"
