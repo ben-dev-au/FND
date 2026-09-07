@@ -132,9 +132,11 @@ async def test_cpu_time_separates_real_work_from_a_sleeping_process() -> None:
     watch = StallWatch(app, threshold_ms=150)  # type: ignore[arg-type]
     watch.start()
     await asyncio.sleep(0.1)
-    # A BUSY block — real work, not a sleep.
-    spin_until = time.perf_counter() + 0.4
-    while time.perf_counter() < spin_until:
+    # A BUSY block — real work, not a sleep. Bounded by CPU time, as
+    # StallWatch measures it: a starved run gets a fraction of a core, so a
+    # wall-clock spin burned 78-193ms of its 400ms and failed a correct figure.
+    cpu_target = time.process_time() + 0.4
+    while time.process_time() < cpu_target:
         pass
     await asyncio.sleep(0.15)
     watch.stop()
