@@ -609,3 +609,40 @@ class TestAnUnknownKindIsRefused:
         (tmp_path / "a.md").write_text("hello\n")
         assert _walked(tmp_path, DefaultFilters(kinds=["md"])) == {"a.md"}
         assert _walked(tmp_path, DefaultFilters.model_construct(kinds=["markdown"])) == set()
+
+
+class TestThePickerOffersWhatWouldBeIndexed:
+    """The sample walked without ignore files, so a `.fndignore`-d folder
+    still contributed its types and tags — the picker offered a file type the
+    walk could never yield, with a count of files that are never indexed."""
+
+    @staticmethod
+    def _corpus(root: Path) -> None:
+        (root / "keep.md").write_text("x\n")
+        plain = root / "plain"
+        plain.mkdir()
+        (plain / "a.txt").write_text("y\n")
+        (root / ".fndignore").write_text("plain/\n")
+
+    def test_an_ignored_folder_contributes_nothing(self, tmp_path: Path) -> None:
+        from fnd.filters.scan import sample_source
+        from fnd.walk import walk
+
+        root = tmp_path.resolve()
+        self._corpus(root)
+        offered = set(sample_source(root, budget_s=1.0).kinds)
+        walked = {
+            p.suffix.lstrip(".")
+            for p in walk(roots=[root], ignore_names=(".gitignore", ".fndignore"))
+        }
+        assert offered == {"md"}
+        assert "txt" not in offered, "a type the walk can never yield"
+        assert walked == {"md"}
+
+    def test_a_source_that_ignores_nothing_sees_everything(self, tmp_path: Path) -> None:
+        """A source may switch the ignore files off; the sample must follow."""
+        from fnd.filters.scan import sample_source
+
+        root = tmp_path.resolve()
+        self._corpus(root)
+        assert set(sample_source(root, budget_s=1.0, ignore_names=()).kinds) == {"md", "txt"}

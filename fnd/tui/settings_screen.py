@@ -2001,7 +2001,19 @@ def open_source_filter_browser(
     resolved = resolve_filters(SourceFilters.model_validate(overrides or {}), defaults)
 
     def _sample() -> Any:
-        return sample_source(root, budget_s=0.8) if root is not None and root.exists() else None
+        if root is None or not root.exists():
+            return None
+        # The source's own ignore settings, so the offered types and tags are
+        # the ones this source would actually index.
+        names = tuple(
+            name
+            for name, on in (
+                (".gitignore", resolved.respect_gitignore),
+                (".fndignore", resolved.respect_fndignore),
+            )
+            if on
+        )
+        return sample_source(root, budget_s=0.8, ignore_names=names)
 
     def _save(spec: Any, gitignore: bool, fndignore: bool) -> None:
         values = _spec_to_mapping(spec)
