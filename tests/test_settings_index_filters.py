@@ -1188,3 +1188,34 @@ async def test_the_summary_says_when_nothing_can_match(built_index: Path) -> Non
         for _ in range(15):
             await pilot.pause()
         assert "nothing can match" in _summary_text(app.screen)
+
+
+@pytest.mark.asyncio
+async def test_a_text_editor_advertises_only_keys_that_work(built_index: Path) -> None:
+    """`/`, `:`, `?` and `q` type into the box rather than acting, so a footer
+    naming them as Search/Menu/Keys/Quit names four dead keys."""
+    from textual.widgets import Static, TextArea
+
+    from fnd.tui.settings_screen import RuleTextScreen
+
+    app = FNDApp(index_dir=built_index)
+    async with app.run_test(size=(100, 24)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            RuleTextScreen(title="Rule", value="", note_scoped=False, on_save=lambda _t: None)
+        )
+        for _ in range(12):
+            await pilot.pause()
+        screen = app.screen
+        painted = screen.query_one("#footer_hints", Static).render_line(0).text
+        for dead in ("Search", "Menu", "Keys", "Quit"):
+            assert dead not in painted, f"{dead} is advertised but types into the box: {painted}"
+        assert "Save" in painted
+        assert "Cancel" in painted
+
+        for key in ("slash", "colon", "question_mark", "q"):
+            await pilot.press(key)
+        await pilot.pause()
+        assert screen.query_one("#rule_text", TextArea).text == "/:?q", (
+            "the premise: those keys reach the box"
+        )

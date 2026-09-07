@@ -74,6 +74,17 @@ if TYPE_CHECKING:
 _KEY_COL = 12
 
 
+def _editor_hint_bar(contextual: tuple[tuple[str, str], ...]) -> Any:
+    """A footer for a screen whose focus is a text box.
+
+    The app's anchors are inert there — `/`, `:`, `?` and `q` type into the
+    box — so advertising them names four keys that do not work.
+    """
+    from fnd.tui.app import render_hint_bar
+
+    return render_hint_bar((), contextual)
+
+
 def _hint_bar(app: FNDApp, contextual: tuple[tuple[str, str], ...]) -> Any:
     """Build the shared hint-bar Text for a Settings screen. Anchors
     come from the main app (single source of truth)."""
@@ -4997,9 +5008,8 @@ class FilterTextScreen(Screen[None]):
     def on_mount(self) -> None:
         self.query_one("#filter_text", TextArea).focus()
         self._refresh_status()
-        app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("^S", "Save"), ("Esc", "Cancel")))
+            _editor_hint_bar((("^S", "Save"), ("Esc", "Cancel")))
         )
 
     @on(TextArea.Changed, "#filter_text")
@@ -5207,11 +5217,10 @@ class RuleTextScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#rule_text", TextArea).focus()
         self._refresh_status()
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("^S", "Save"), ("Esc", "Cancel")))
+            _editor_hint_bar((("^S", "Save"), ("Esc", "Cancel")))
         )
 
     @on(TextArea.Changed, "#rule_text")
