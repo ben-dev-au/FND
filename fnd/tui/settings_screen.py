@@ -200,6 +200,42 @@ def _custom_seed(screen: Any, field_key: str) -> str:
     return current or screen._discarded_globs.get(field_key, "")
 
 
+# Textual selectors are type selectors and a widget's own CSS is scoped to it,
+# so neither `CSS = OtherScreen.CSS` nor a shared class selector matches the
+# borrowing screen — it renders with no background, border or docked footer.
+# One definition, stamped with each screen's own name.
+_PROMPT_CSS = """
+{cls} {{ background: $surface; }}
+{cls} > #settings_box {{
+    height: auto; border: round $primary 50%; padding: 0 1; margin: 1 4;
+}}
+{cls} > #settings_box:focus-within {{ border: round $accent; }}
+{cls} #clone_list {{ height: auto; }}
+{cls} .info {{ color: $text-muted; padding: 0 0 1 0; }}
+{cls} > #footer_hints {{
+    dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
+}}
+"""
+
+_CONFIRM_CSS = """
+{cls} {{ background: $surface; align: center middle; }}
+{cls} > #settings_box {{
+    width: auto; min-width: 60; max-width: 100; height: auto; max-height: 90%;
+    border: round $error; padding: 0 1;
+}}
+{cls} #confirm_list {{ height: auto; }}
+{cls} .warning {{ color: $text-muted; padding: 0 0 1 0; }}
+{cls} > #footer_hints {{
+    dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
+}}
+"""
+
+
+def chrome_css(cls: str, *, confirm: bool = False) -> str:
+    """The shared Settings chrome, stamped with one screen's type name."""
+    return (_CONFIRM_CSS if confirm else _PROMPT_CSS).format(cls=cls)
+
+
 def _render_row(
     item: MenuItem,
     app: FNDApp | None,
@@ -3187,19 +3223,7 @@ class NewCollectionScreen(Screen[None]):
         Binding("escape,left", "back", "Cancel", show=False),
     ]
 
-    CSS = """
-    NewCollectionScreen { background: $surface; }
-    NewCollectionScreen > #settings_box {
-        height: auto;
-        border: round $primary 50%;
-        padding: 0 1;
-        margin: 1 4;
-    }
-    NewCollectionScreen > #settings_box:focus-within { border: round $accent; }
-    NewCollectionScreen > #footer_hints {
-        dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
-    }
-    """
+    CSS = chrome_css("NewCollectionScreen")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings_box") as box:
@@ -3255,7 +3279,7 @@ class RenameCollectionScreen(Screen[None]):
         Binding("escape,left", "back", "Cancel", show=False),
     ]
 
-    CSS = NewCollectionScreen.CSS  # share styling
+    CSS = chrome_css("RenameCollectionScreen")
 
     def __init__(self, *, collection_name: str) -> None:
         super().__init__()
@@ -3326,26 +3350,15 @@ class DeleteCollectionScreen(Screen[None]):
         Binding("enter", "activate", show=False),
     ]
 
-    CSS = """
-    DeleteCollectionScreen { background: $surface; align: center middle; }
-    DeleteCollectionScreen > #settings_box {
-        width: auto;
-        min-width: 60;
-        max-width: 100;
-        height: auto;
-        max-height: 90%;
-        border: round $error;
-        padding: 0 1;
-    }
+    CSS = (
+        chrome_css("DeleteCollectionScreen", confirm=True)
+        + """
     DeleteCollectionScreen #confirm_summary { padding: 0 0 1 0; }
-    DeleteCollectionScreen #confirm_list { height: auto; }
     DeleteCollectionScreen #deleting_status { padding: 1 0; color: $text-muted; }
     DeleteCollectionScreen #deleting_spinner { height: 1; }
     DeleteCollectionScreen .-hidden { display: none; }
-    DeleteCollectionScreen > #footer_hints {
-        dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
-    }
     """
+    )
 
     def __init__(self, *, collection_name: str) -> None:
         super().__init__()
@@ -3522,27 +3535,17 @@ class CacheMaintenanceConfirm(Screen[None]):
         Binding("enter", "activate", show=False),
     ]
 
-    CSS = """
-    CacheMaintenanceConfirm { background: $surface; align: center middle; }
-    CacheMaintenanceConfirm > #settings_box {
-        width: auto;
-        min-width: 60;
-        max-width: 100;
-        height: auto;
-        max-height: 90%;
-        border: round $warning;
-        padding: 0 1;
-    }
+    CSS = (
+        chrome_css("CacheMaintenanceConfirm", confirm=True)
+        + """
+    CacheMaintenanceConfirm > #settings_box { border: round $warning; }
     CacheMaintenanceConfirm.-destructive > #settings_box { border: round $error; }
     CacheMaintenanceConfirm #confirm_summary { padding: 0 0 1 0; }
     CacheMaintenanceConfirm #confirm_irreversible {
         color: $error; text-style: bold; padding: 0 0 1 0;
     }
-    CacheMaintenanceConfirm #confirm_list { height: auto; }
-    CacheMaintenanceConfirm > #footer_hints {
-        dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
-    }
     """
+    )
 
     def __init__(
         self,
@@ -3991,7 +3994,7 @@ class DeleteSourceScreen(Screen[None]):
         Binding("enter", "activate", show=False),
     ]
 
-    CSS = DeleteCollectionScreen.CSS
+    CSS = chrome_css("DeleteSourceScreen", confirm=True)
 
     def __init__(self, *, collection_name: str, source_index: int) -> None:
         super().__init__()
@@ -4109,21 +4112,7 @@ class CloneSourcePickCollectionScreen(Screen[None]):
         Binding("enter", "activate", show=False),
     ]
 
-    CSS = """
-    CloneSourcePickCollectionScreen { background: $surface; }
-    CloneSourcePickCollectionScreen > #settings_box {
-        height: auto;
-        border: round $primary 50%;
-        padding: 0 1;
-        margin: 1 4;
-    }
-    CloneSourcePickCollectionScreen > #settings_box:focus-within { border: round $accent; }
-    CloneSourcePickCollectionScreen #clone_list { height: auto; }
-    CloneSourcePickCollectionScreen .info { color: $text-muted; padding: 0 0 1 0; }
-    CloneSourcePickCollectionScreen > #footer_hints {
-        dock: bottom; height: 1; background: $surface; padding: 0 1; color: $text-muted;
-    }
-    """
+    CSS = chrome_css("CloneSourcePickCollectionScreen")
 
     def __init__(self, *, target_collection: str) -> None:
         super().__init__()
@@ -4204,7 +4193,7 @@ class CloneSourcePickSourceScreen(Screen[None]):
         Binding("enter", "activate", show=False),
     ]
 
-    CSS = CloneSourcePickCollectionScreen.CSS
+    CSS = chrome_css("CloneSourcePickSourceScreen")
 
     def __init__(self, *, source_collection: str, target_collection: str) -> None:
         super().__init__()
@@ -4235,8 +4224,11 @@ class CloneSourcePickSourceScreen(Screen[None]):
                         )
                         or "all"
                     )
-                    label = f"{i + 1}. {base}  ·  {types}  ·  {src.path}"
-                    options.append(Option(label, id=str(i)))
+                    label = f"{i + 1}. {base}  ·  {types}  ·  {_display_path(str(src.path))}"
+                    # Wrapped, a long path reads as another source in the list.
+                    options.append(
+                        Option(Text(label, no_wrap=True, overflow="ellipsis"), id=str(i))
+                    )
             if not options:
                 options.append(Option("(collection has no sources)", id="__empty__"))
             yield OptionList(*options, id="clone_list")

@@ -642,3 +642,17 @@ async def test_unticking_custom_globs_keeps_them_on_offer(built_index: Path) -> 
         form._set_excludes([])
         assert form._fields["excludes_custom"] == "", "untick must stop applying them"
         assert _custom_seed(form, "excludes_custom") == "build/**, dist/**"
+
+
+def test_every_settings_screen_styles_itself() -> None:
+    """Textual selectors are type selectors and a widget's own CSS is scoped
+    to it, so a screen borrowing another's CSS rendered with no chrome."""
+    from fnd.tui import settings_screen as ss
+
+    borrowed = []
+    for name in dir(ss):
+        screen = getattr(ss, name)
+        css = getattr(screen, "CSS", "") if isinstance(screen, type) else ""
+        if css and "#settings_box" in css and f"{name} > #settings_box" not in css:
+            borrowed.append(name)
+    assert not borrowed, f"screens whose CSS names another type: {borrowed}"
