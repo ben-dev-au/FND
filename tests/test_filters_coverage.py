@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from fnd.config import CLEARABLE, DefaultFilters, SourceConfig, SourceFilters, resolve_filters
+from fnd.tui.settings_screen import _source_filters_or_none
 from fnd.walk import walk_sources
 
 #: Per field: a value for the defaults, and a different one for a source to
@@ -355,3 +356,63 @@ class TestConfigStampsResolvedFilters:
         assert overridden.effective_filters.max_size == 99
         assert overridden.effective_filters.kinds == ["md"], "defaults were not merged in"
         assert inherited.effective_filters.max_size == 10
+
+
+class TestClearDropsOverridesNotProtections:
+    """`c` on a source emptied the resolved set, which threw away the
+    inherited `no_index` exclusion — so undoing a file-type filter also
+    switched off the never-index opt-out, with no confirmation."""
+
+    @staticmethod
+    def _corpus(root: Path) -> None:
+        (root / "public.md").write_text("---\ntags: [ok]\n---\nhello\n")
+        (root / "private.md").write_text("---\ntags: [no_index]\n---\nsecret\n")
+        (root / "note.txt").write_text("plain\n")
+
+    @staticmethod
+    def _recorded(spec: Any, defaults: DefaultFilters) -> dict[str, Any]:
+        """What the browser's save writes for ``spec``: only what differs."""
+        from fnd.tui.settings_screen import _same_setting, _spec_to_mapping
+
+        values = _spec_to_mapping(spec)
+        values["respect_gitignore"] = defaults.respect_gitignore
+        values["respect_fndignore"] = defaults.respect_fndignore
+        return {k: v for k, v in values.items() if not _same_setting(v, getattr(defaults, k, None))}
+
+    def test_clearing_a_source_leaves_the_inherited_exclusion_standing(
+        self, tmp_path: Path
+    ) -> None:
+        from fnd.tui.settings_screen import _spec_from_filters
+
+        self._corpus(tmp_path)
+        defaults = DefaultFilters(exclude_tags=["no_index"])
+        inherited = _spec_from_filters(resolve_filters(SourceFilters(), defaults))
+        recorded = self._recorded(inherited, defaults)
+        assert recorded == {}, f"clearing to the inherited set is not an override: {recorded}"
+        walked = _walked(tmp_path, defaults, _source_filters_or_none(recorded))
+        assert "private.md" not in walked, walked
+        assert walked == {"public.md", "note.txt"}
+
+    def test_clearing_to_an_empty_set_would_have_readmitted_it(self, tmp_path: Path) -> None:
+        """The negative control: this is what the old behaviour wrote."""
+        from fnd.filters import FilterSpec
+
+        self._corpus(tmp_path)
+        defaults = DefaultFilters(exclude_tags=["no_index"])
+        recorded = self._recorded(FilterSpec(), defaults)
+        assert recorded == {"exclude_tags": []}
+        assert "private.md" in _walked(tmp_path, defaults, _source_filters_or_none(recorded))
+
+    def test_the_global_defaults_still_clear_to_nothing(self) -> None:
+        """They inherit from nothing, so there an empty set is the right one."""
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        screen = FilterBrowserScreen(
+            title="Index filters",
+            spec=FilterSpec(exclude_tags={"os": ("no_index",)}),
+            gitignore=True,
+            fndignore=True,
+            on_save=lambda *_a: None,
+        )
+        assert screen._inherited is None

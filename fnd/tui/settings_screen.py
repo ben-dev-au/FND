@@ -1884,6 +1884,11 @@ def open_source_filter_browser(
             fndignore=resolved.respect_fndignore,
             sample_provider=_sample,
             globs=list(globs or ()),
+            inherited=(
+                _spec_from_filters(defaults),
+                defaults.respect_gitignore,
+                defaults.respect_fndignore,
+            ),
             on_save=_save,
         )
     )
@@ -5186,9 +5191,13 @@ class FilterBrowserScreen(Screen[None]):
         fndignore: bool,
         sample_provider: Callable[[], Any] | None = None,
         globs: list[str] | None = None,
+        inherited: tuple[Any, bool, bool] | None = None,
         on_save: Callable[[Any, bool, bool], None],
     ) -> None:
         super().__init__()
+        # What this source falls back to with nothing of its own. `None` on the
+        # global defaults, which inherit from nothing.
+        self._inherited = inherited
         # Include globs restrict the file types too, but they cannot be shown
         # as ticked kinds: saving them back as kinds would widen a glob that
         # names one suffix of a multi-suffix type. Say so instead.
@@ -5381,16 +5390,19 @@ class FilterBrowserScreen(Screen[None]):
             self.notify(f"Could not copy: {e}", severity="error")
 
     def action_clear_all(self) -> None:
-        """Clear every rule set here, and only those.
+        """Drop what this screen overrides, back to what it inherits.
 
-        It used to keep the frontmatter rule and the expression while saying
-        everything was cleared, and to switch both ignore-file toggles off.
-        Turning those off *widens* what is indexed, which is the opposite of
-        what clearing suggests, and they have their own rows to do it from.
+        Emptying the resolved set instead widens the index: on a source it
+        threw away the inherited `no_index` exclusion, so undoing a file-type
+        filter also switched off the never-index opt-out, silently. The global
+        defaults inherit from nothing, so there it still empties.
         """
         from fnd.filters import FilterSpec
 
-        self._spec = FilterSpec()
+        if self._inherited is None:
+            self._spec = FilterSpec()
+        else:
+            self._spec, self._gitignore, self._fndignore = self._inherited
         self._rebuild()
 
     def action_edit_text(self) -> None:
