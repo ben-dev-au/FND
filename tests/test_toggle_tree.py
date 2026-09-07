@@ -458,3 +458,70 @@ async def test_a_tree_opens_with_a_cursor() -> None:
         tree = app.query_one("#tt", ToggleTree)
         assert tree.cursor_line == 0
         assert tree.cursor_node is not None
+
+
+@pytest.mark.asyncio
+async def test_both_ends_of_a_no_restriction_branch_read_alike() -> None:
+    """Ticking every file type is the same no-restriction as ticking none —
+    `kinds` collapses to () either way — but one painted `○ (every type)` and
+    the other a bare `●`, which the legend reads as "index ONLY these"."""
+
+    class _Kinds(App[None]):
+        def compose(self) -> ComposeResult:
+            yield ToggleTree(id="tt")
+
+        def on_mount(self) -> None:
+            self.query_one("#tt", ToggleTree).set_model(
+                [
+                    ToggleGroup(
+                        "kinds",
+                        "File types",
+                        (ToggleItem("md", "Markdown"), ToggleItem("pdf", "PDF")),
+                        empty_label="every type",
+                        full_label="every type",
+                        noun="types",
+                    )
+                ],
+                set(),
+                expanded=set(),
+            )
+
+    app = _Kinds()
+    async with app.run_test() as pilot:
+        tree = app.query_one("#tt", ToggleTree)
+        await pilot.pause()
+        assert "every type" in _labels(tree)["kinds"]
+        tree.set_model(
+            [
+                ToggleGroup(
+                    "kinds",
+                    "File types",
+                    (ToggleItem("md", "Markdown"), ToggleItem("pdf", "PDF")),
+                    empty_label="every type",
+                    full_label="every type",
+                    noun="types",
+                )
+            ],
+            {"md", "pdf"},
+            expanded=set(),
+        )
+        await pilot.pause()
+        label = _labels(tree)["kinds"]
+        assert label.startswith("●")
+        assert "every type" in label, label
+
+
+@pytest.mark.asyncio
+async def test_a_branch_without_a_full_label_is_unchanged() -> None:
+    """`Obey ignore files` with both on genuinely means both, not "no rule"."""
+    app = _Nested()
+    async with app.run_test() as pilot:
+        tree = app.query_one("#tt", ToggleTree)
+        await pilot.pause()
+        tree.set_model(
+            [ToggleGroup("pair", "Pair", (ToggleItem("a", "A"), ToggleItem("b", "B")))],
+            {"a", "b"},
+            expanded=set(),
+        )
+        await pilot.pause()
+        assert _labels(tree)["pair"] == "●  Pair"

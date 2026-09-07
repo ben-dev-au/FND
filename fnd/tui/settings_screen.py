@@ -5148,6 +5148,7 @@ def _branch_group(branch: Any) -> ToggleGroup:
         items=tuple(ToggleItem(*i) for i in branch.items),
         mode=branch.mode,
         empty_label=branch.empty_label,
+        full_label=branch.full_label,
         noun=branch.noun,
         groups=tuple(_branch_group(b) for b in branch.groups),
     )

@@ -74,6 +74,7 @@ class Branch:
     items: tuple[tuple[str, str], ...] = ()  # (item id, label)
     groups: tuple[Branch, ...] = ()
     empty_label: str = ""
+    full_label: str = ""
     noun: str = ""
 
 
@@ -188,6 +189,7 @@ def spec_branches(
                 "multi",
                 groups=categories,
                 empty_label="every type",
+                full_label="every type",
                 noun="types",
             )
         )

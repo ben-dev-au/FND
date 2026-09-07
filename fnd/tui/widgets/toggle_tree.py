@@ -75,6 +75,10 @@ class ToggleGroup:
     items: tuple[ToggleItem, ...]
     mode: str = "multi"
     empty_label: str = ""
+    full_label: str = ""
+    """What the branch means with everything on. Set it only where that is not
+    simply "all of them": ticking every file type is the same no-restriction
+    as ticking none, and `●` alone reads as the opposite."""
     noun: str = ""
     """Plural name of what the leaves are ("types", "tags"). Given one, a
     partly-on branch says how much is on rather than only that some is."""
@@ -279,6 +283,8 @@ class ToggleTree(Tree[dict[str, Any]]):
             return f"{marker}{_MARKER_GAP}{g.label}{suffix}"
         if not leaves:
             return f"{_EMPTY}{_MARKER_GAP}{g.label}"
+        if n == len(leaves) and g.full_label:
+            summary = f"  ({g.full_label})"
         return f"{tri_state_marker(n, len(leaves))}{_MARKER_GAP}{g.label}{summary}"
 
     def _item_label(self, item_id: str) -> str:
