@@ -5372,7 +5372,7 @@ class FilterBrowserScreen(Screen[None]):
         field_name = ev.item_id.removeprefix("rule:")
         titles = {
             "frontmatter": "Frontmatter rule · files with frontmatter",
-            "expression": "Custom expression · any file",
+            "expression": "Custom rule · any file",
         }
         if field_name not in titles:
             return

@@ -764,7 +764,7 @@ async def test_the_rule_editor_names_the_glob_trap(built_index: Path) -> None:
         await pilot.pause()
         app.push_screen(
             RuleTextScreen(
-                title="Custom expression",
+                title="Custom rule",
                 value="NOT file.path ~~ '*drafts*'",
                 note_scoped=False,
                 on_save=lambda _t: None,

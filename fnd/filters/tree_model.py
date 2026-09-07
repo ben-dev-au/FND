@@ -239,7 +239,7 @@ def spec_branches(
         branches.append(
             Branch(
                 "beyond",
-                f"Only in the expression  ({len(beyond)})",
+                f"Set in the text form  ({len(beyond)})",
                 "actions",
                 tuple((f"beyond:{name}", text) for name, text in beyond),
             )
@@ -254,7 +254,7 @@ def spec_branches(
             "actions",
             (
                 ("rule:frontmatter", _rule_label("Frontmatter rule", spec.frontmatter)),
-                ("rule:expression", _rule_label("Custom expression", spec.expression)),
+                ("rule:expression", _rule_label("Custom rule", spec.expression)),
             ),
         )
     )

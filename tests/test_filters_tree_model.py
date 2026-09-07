@@ -310,3 +310,14 @@ def test_a_window_names_the_date_it_freezes_to() -> None:
     week = (dt.date.today() - dt.timedelta(days=7)).isoformat()
     assert f"Last 7 days — from {week}" in labels
     assert "Any time" in labels, "the no-bound row names no date"
+
+
+def test_expression_names_one_thing() -> None:
+    """It named three: the whole rendered set, the free-text rule, and the
+    branch holding bounds no picker can show."""
+    spec = FilterSpec(min_size=100, expression="file.name ~~ 'a*'")
+    labels = [b.label for b in spec_branches(spec)]
+    labels += [label for b in spec_branches(spec) if b.id == "rules" for _i, label in b.items]
+    using = [text for text in labels if "expression" in text.lower()]
+    assert not using, f"'expression' still names a second thing: {using}"
+    assert any("Set in the text form" in text for text in labels)
