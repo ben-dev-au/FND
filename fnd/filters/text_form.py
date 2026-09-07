@@ -241,10 +241,14 @@ def parse(text: str) -> FilterSpec:
             continue
         name, value = found
         if name == "include_tags":
-            updates["include_tags"] = _merge_tags(
-                updates.get("include_tags", {}),  # type: ignore[arg-type]
-                value,  # type: ignore[arg-type]
-            )
+            # "index only files carrying any of these" is a disjunction, so
+            # merging a second top-level conjunct into it turns the user's AND
+            # into an OR. A multi-tag include renders as one OR clause, so the
+            # renderer never needs the merge; only typed text reaches here.
+            if "include_tags" in updates:
+                leftover.append(_unparse(clause) or stripped)
+            else:
+                updates["include_tags"] = value
         elif name == "exclude_tags":
             tags = _merge_tags(tags, value)  # type: ignore[arg-type]
         elif name in ("frontmatter", "expression"):

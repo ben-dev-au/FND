@@ -497,3 +497,47 @@ class TestATypoCannotOpenTheIndex:
 
         _pred, err = parse_or_error(text)
         assert err is None, err
+
+
+class TestATypedAndStaysAnAnd:
+    """ "Index only files carrying any of these" is a disjunction, so merging a
+    second top-level conjunct into it turned a typed AND into an OR — which
+    can only admit more files."""
+
+    def test_two_include_clauses_do_not_collapse_into_one_or(self) -> None:
+        from fnd.filters.text_form import parse, render
+
+        typed = "'keep' in file.tags.all AND 'private' in file.tags.all"
+        back = parse(typed)
+        assert " AND " in render(back), f"the AND became: {render(back)}"
+        assert back.expression, "the second clause has to survive somewhere"
+
+    def test_the_index_does_not_widen(self, tmp_path: Path) -> None:
+        from fnd.file_facts import FileFacts
+        from fnd.filters.text import build_gate
+        from fnd.filters.text_form import parse
+
+        both = tmp_path / "both.md"
+        both.write_text("---\ntags: [keep, private]\n---\nx\n")
+        (tmp_path / "keep.md").write_text("---\ntags: [keep]\n---\nx\n")
+        (tmp_path / "private.md").write_text("---\ntags: [private]\n---\nx\n")
+
+        from fnd.tags import providers_for
+
+        typed = "'keep' in file.tags.all AND 'private' in file.tags.all"
+        gate = build_gate(parse(typed))
+        providers = providers_for("linux", ["frontmatter"])  # frontmatter tags only
+        passed = {
+            p.name
+            for p in tmp_path.iterdir()
+            if gate.passes(FileFacts(p, root=tmp_path, tag_providers=providers))
+        }
+        assert passed == {"both.md"}, f"the AND admitted more than both-tagged files: {passed}"
+
+    def test_two_exclude_clauses_still_mean_neither(self) -> None:
+        """`NOT a AND NOT b` is exactly what excluding both means, so that
+        merge is correct and must stay."""
+        from fnd.filters.text_form import parse
+
+        back = parse("NOT ('a' in file.tags.all) AND NOT ('b' in file.tags.all)")
+        assert set(back.exclude_tags["os"]) == {"a", "b"}
