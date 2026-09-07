@@ -140,3 +140,41 @@ def test_the_suite_starts_with_xdist_unregistered() -> None:
     output = result.stdout + result.stderr
     assert "PluginValidationError" not in output, output[-1500:]
     assert result.returncode == 0, output[-1500:]
+
+
+def test_the_lock_path_is_per_user() -> None:
+    """Linux hands every account the same /tmp, where the second one to run
+    hits the first one's file and fails open instead of queueing."""
+    path = _WRAPPER._lock_path()
+    who = os.environ.get("USERNAME", "user") if sys.platform == "win32" else str(os.getuid())
+    assert who in path.name
+
+
+def test_a_timed_out_wait_still_bars_the_child_from_queueing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The wrapper gives up after 30 minutes and runs anyway; without the
+    handshake the child's own gate then waits 30 more."""
+    monkeypatch.delenv("FND_TEST_NO_LOCK", raising=False)
+    monkeypatch.delenv(_WRAPPER.LOCK_ENV, raising=False)
+    monkeypatch.setattr(_WRAPPER, "LOCK_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(_WRAPPER, "_try_acquire", lambda handle: False)
+    monkeypatch.setattr(_WRAPPER, "_notify", lambda message: None)
+
+    with _WRAPPER._machine_lock():
+        assert os.environ.get(_WRAPPER.LOCK_ENV) == "1"
+
+
+def test_an_unusable_lock_also_bars_the_child(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same handshake on the path where the lock itself is broken, so the
+    child reports it once rather than rediscovering it."""
+    monkeypatch.delenv("FND_TEST_NO_LOCK", raising=False)
+    monkeypatch.delenv(_WRAPPER.LOCK_ENV, raising=False)
+    monkeypatch.setattr(_WRAPPER, "_notify", lambda message: None)
+
+    def _broken(handle: object) -> bool:
+        raise OSError(9, "bad file descriptor")
+
+    monkeypatch.setattr(_WRAPPER, "_try_acquire", _broken)
+    with _WRAPPER._machine_lock():
+        assert os.environ.get(_WRAPPER.LOCK_ENV) == "1"

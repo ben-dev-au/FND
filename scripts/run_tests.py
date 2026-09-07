@@ -137,15 +137,26 @@ def _try_acquire(handle: IO[str]) -> bool:
     return True
 
 
+def _lock_path() -> Path:
+    """gettempdir() is already per-user on macOS and Windows. On Linux it is
+    /tmp, where the second account to run fails open on the first one's file."""
+    if sys.platform == "win32":
+        who = os.environ.get("USERNAME", "user")
+    else:
+        who = str(os.getuid())
+    return Path(tempfile.gettempdir()) / f"fnd-pytest-{who}.lock"
+
+
 @contextlib.contextmanager
 def _machine_lock() -> Generator[None]:
     if os.environ.get("FND_TEST_NO_LOCK"):
         yield
         return
     try:
-        handle = (Path(tempfile.gettempdir()) / "fnd-pytest.lock").open("a+")
+        handle = _lock_path().open("a+")
     except OSError as exc:
         _notify(f"test lock unavailable ({exc}); running unsynchronised")
+        os.environ[LOCK_ENV] = "1"
         yield
         return
     deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
@@ -154,7 +165,6 @@ def _machine_lock() -> Generator[None]:
         while True:
             try:
                 if _try_acquire(handle):
-                    os.environ[LOCK_ENV] = "1"
                     break
             except OSError as exc:
                 _notify(f"test lock unusable ({exc}); running unsynchronised")
@@ -166,6 +176,9 @@ def _machine_lock() -> Generator[None]:
                 _notify("another test run is in progress, waiting...")
                 announced = True
             time.sleep(2.0)
+        # However the wait ended: a timeout that left this unset spawned a
+        # second thirty-minute wait in the child, for sixty in total.
+        os.environ[LOCK_ENV] = "1"
         yield
     finally:
         handle.close()
