@@ -300,3 +300,13 @@ class TestBoundsNoPickerCanShow:
         live = FilterSpec(created_before=dt.date(2025, 6, 3))
         branch = next(b for b in spec_branches(live) if b.id == "beyond")
         assert [label for _i, label in branch.items] == ["Created before 2025-06-03"]
+
+
+def test_a_window_names_the_date_it_freezes_to() -> None:
+    """A window resolves to an absolute date at pick time — an index must not
+    change what it holds as the clock moves — so "Last 7 days" alone reads as
+    rolling when it is not."""
+    labels = {lbl for b in spec_branches(FilterSpec()) if b.id == "modified" for _i, lbl in b.items}
+    week = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+    assert f"Last 7 days — from {week}" in labels
+    assert "Any time" in labels, "the no-bound row names no date"

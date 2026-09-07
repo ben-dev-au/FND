@@ -215,7 +215,16 @@ def spec_branches(
     size_items = [(i, lbl) for _k, i, lbl in sorted(sized)]
     branches.append(Branch("size", "Maximum file size", "radio", tuple(size_items)))
     for field_name, label in (("modified", "Modified within"), ("created", "Created within")):
-        dated = [(-1 if d is None else d, f"{field_name}:{i}", lbl) for i, lbl, d in _WINDOWS]
+        # A window resolves to an absolute date the moment it is picked, so the
+        # row names that date: "Last 7 days" alone reads as rolling.
+        dated = [
+            (
+                -1 if d is None else d,
+                f"{field_name}:{i}",
+                lbl if d is None else f"{lbl} — from {_window_start(d).isoformat()}",
+            )
+            for i, lbl, d in _WINDOWS
+        ]
         for custom in _custom_offers(field_name, spec, keep_custom):
             since = custom.removeprefix(f"{CUSTOM}:")
             days = (dt.date.today() - dt.date.fromisoformat(since)).days
@@ -319,6 +328,11 @@ def _size_id(value: int | None) -> str:
     if value is None:
         return "any"
     return next((i for i, _l, v in _SIZES if v == value), f"{CUSTOM}:{value}")
+
+
+def _window_start(days: int) -> dt.date:
+    """The absolute date a window resolves to today."""
+    return dt.date.today() - dt.timedelta(days=days)
 
 
 def _window_id(value: dt.date | None) -> str:
