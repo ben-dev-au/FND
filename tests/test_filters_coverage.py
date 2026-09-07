@@ -570,3 +570,42 @@ class TestBoundsThatCannotBothHold:
         (tmp_path / "a.md").write_text("x" * 500)
         walked = _walked(tmp_path, DefaultFilters(), SourceFilters(min_size=5000, max_size=100))
         assert walked == set(), "the premise of the warning"
+
+
+class TestAnUnknownKindIsRefused:
+    """`kinds` means "only these", so a misspelt one indexes nothing at all.
+    The config accepted any string while `--kind` rejected the same value."""
+
+    @pytest.mark.parametrize("model", ["DefaultFilters", "SourceFilters"])
+    @pytest.mark.parametrize("bad", ["markdown", "nonsense", "MD"])
+    def test_both_models_refuse_it(self, model: str, bad: str) -> None:
+        import fnd.config as conf
+
+        with pytest.raises(ValueError, match="no such file type"):
+            getattr(conf, model)(kinds=[bad])
+
+    @pytest.mark.parametrize(
+        ("wrong", "right"),
+        [
+            ("markdown", "md"),
+            ("Markdown", "md"),
+            (".md", "md"),
+            (".py", "python"),
+            ("pythn", "python"),
+        ],
+    )
+    def test_it_names_the_id_that_was_meant(self, wrong: str, right: str) -> None:
+        """The usual wrong guess is the type's name or its extension, not a
+        typo of the id, so plain fuzzy matching would miss the common case."""
+        with pytest.raises(ValueError, match=f"did you mean '{right}'"):
+            DefaultFilters(kinds=[wrong])
+
+    @pytest.mark.parametrize("good", ["md", "pdf", "python", "javascript"])
+    def test_real_ids_still_pass(self, good: str) -> None:
+        assert DefaultFilters(kinds=[good]).kinds == [good]
+
+    def test_an_unknown_kind_would_have_indexed_nothing(self, tmp_path: Path) -> None:
+        """The premise: why this is refused rather than ignored."""
+        (tmp_path / "a.md").write_text("hello\n")
+        assert _walked(tmp_path, DefaultFilters(kinds=["md"])) == {"a.md"}
+        assert _walked(tmp_path, DefaultFilters.model_construct(kinds=["markdown"])) == set()

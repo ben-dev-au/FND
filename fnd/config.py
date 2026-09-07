@@ -223,6 +223,37 @@ class _ConfigModel(BaseModel):
     model_config = ConfigDict(use_attribute_docstrings=True, extra="forbid")
 
 
+def _known_kinds(values: list[str] | None) -> list[str] | None:
+    """Reject a file type that does not exist.
+
+    An unknown kind is not inert: `kinds` means "only these", so a misspelt
+    one indexes nothing at all, silently. The plausible guesses (`markdown`,
+    `python`) are the wrong ids, so name the nearest real one.
+    """
+    import difflib
+
+    from fnd.kinds import ALL_KIND_IDS, KIND_BY_ID
+
+    # A wrong guess is usually the type's NAME or its extension rather than a
+    # misspelling of the id — `markdown` for `md`, `.py` for `python` — so
+    # look those up before falling back to fuzzy matching.
+    by_word = {
+        word.lower().lstrip("."): kind
+        for kind, spec in KIND_BY_ID.items()
+        for word in (spec.label, *spec.suffixes)
+    }
+    for value in values or ():
+        if value in ALL_KIND_IDS:
+            continue
+        named = by_word.get(value.lower().lstrip("."))
+        near = named or next(
+            iter(difflib.get_close_matches(value, sorted(ALL_KIND_IDS), n=1, cutoff=0.6)), None
+        )
+        hint = f"; did you mean {near!r}?" if near else ""
+        raise ValueError(f"no such file type {value!r}{hint}")
+    return values
+
+
 class DefaultFilters(_ConfigModel):
     """``[defaults.filters]``; every field concrete, so it can be the base a
     per-source override resolves against."""
@@ -281,6 +312,11 @@ class DefaultFilters(_ConfigModel):
     def _validate_expression(cls, v: str | None) -> str | None:
         return _compiled_or_error(v, "filters")
 
+    @field_validator("kinds")
+    @classmethod
+    def _validate_kinds(cls, v: list[str] | None) -> list[str] | None:
+        return _known_kinds(v)
+
 
 #: Fields with no value meaning "nothing". A list clears with `[]`, a string
 #: with `""` and a bool with `false`; for these `None` already means inherit.
@@ -336,6 +372,11 @@ class SourceFilters(_ConfigModel):
         if v is not None and not v.strip():
             return ""
         return _compiled_or_error(v, "filters")
+
+    @field_validator("kinds")
+    @classmethod
+    def _validate_kinds(cls, v: list[str] | None) -> list[str] | None:
+        return _known_kinds(v)
 
 
 def _compiled_or_error(value: str | None, label: str) -> str | None:
