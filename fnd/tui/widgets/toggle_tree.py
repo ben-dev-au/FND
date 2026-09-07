@@ -225,7 +225,7 @@ class ToggleTree(Tree[dict[str, Any]]):
             )
 
     # ── Labels ───────────────────────────────────────────────────────────
-    def _branch_summary(self, g: ToggleGroup, mode: str, n: int, n_ex: int) -> str:
+    def _branch_summary(self, g: ToggleGroup, mode: str) -> str:
         """What a collapsed branch currently does, in its own words.
 
         A marker alone says only *that* a branch is partly on; the size and
@@ -233,15 +233,21 @@ class ToggleTree(Tree[dict[str, Any]]):
         """
         if not g.noun:
             return ""
+        # Count labels, not leaves: one tag is drawn under every source that
+        # can carry it, so counting rows called a single excluded `no_index`
+        # two.
+        seen = {it.label for it in g.leaves}
+        n_on = len({it.label for it in g.leaves if it.id in self._selected})
+        n_off = len({it.label for it in g.leaves if it.id in self._excluded})
         parts = []
         if mode == "cycle":
-            if n:
-                parts.append(f"only {n} {g.noun}")
-            if n_ex:
-                parts.append(f"{n_ex} excluded")
-        elif n and n < len(g.leaves):
+            if n_on:
+                parts.append(f"only {n_on} {g.noun}")
+            if n_off:
+                parts.append(f"{n_off} excluded")
+        elif n_on and n_on < len(seen):
             # ● already says "all of them"; a count there is noise.
-            parts.append(f"{n} of {len(g.leaves)} {g.noun}")
+            parts.append(f"{n_on} of {len(seen)} {g.noun}")
         return f"  ({', '.join(parts)})" if parts else ""
 
     def _group_label(self, g: ToggleGroup) -> str:
@@ -251,7 +257,7 @@ class ToggleTree(Tree[dict[str, Any]]):
             return f"{_MARKER_GAP}{g.label}"
         n_ex = sum(1 for it in leaves if it.id in self._excluded)
         n = sum(1 for it in leaves if it.id in self._selected)
-        summary = self._branch_summary(g, mode, n, n_ex)
+        summary = self._branch_summary(g, mode)
         if mode == "cycle" and n_ex:
             # ⊘ only when the whole branch is excluded; a single excluded
             # tag among many is a partial state, not a blanket exclusion.
@@ -319,6 +325,10 @@ class ToggleTree(Tree[dict[str, Any]]):
             else:
                 self._selected |= ids
             self._repaint_group(node, g)
+            # Repaints this node and everything under it; the roll-up above it
+            # is what goes stale, so a category toggle left "File types" still
+            # reading its old count for the rest of the session.
+            self._repaint_parent(node)
         elif kind == "item":
             item_id = str(data.get("id"))
             group = self._group_by_id(str(data.get("group")))
@@ -336,6 +346,7 @@ class ToggleTree(Tree[dict[str, Any]]):
                 parent = node.parent
                 if parent is not None:
                     self._repaint_group(parent, group)
+                    self._repaint_parent(parent)
             else:
                 self._selected.symmetric_difference_update({item_id})
                 node.set_label(self._item_label(item_id))

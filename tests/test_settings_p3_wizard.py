@@ -349,6 +349,8 @@ async def test_source_form_shows_include_globs_as_ticked_file_types(
     They are stated once now — as ``filters.kinds`` — so the guarantee lives
     in Index filters rather than a second picker beside it.
     """
+    from textual.widgets import Static
+
     from fnd.config import (
         CollectionConfig,
         SourceConfig,
@@ -401,7 +403,10 @@ async def test_source_form_shows_include_globs_as_ticked_file_types(
         # The globs are not shown as ticked kinds: saving them back as kinds
         # would widen ``**/*.md`` to the whole ``md`` kind, ``.markdown``
         # included. The browser says they are in force instead.
-        summary = str(browser.query_one("#filter_summary").render())
+        # Painted, not the stored renderable: the box refits to its width.
+        box = browser.query_one("#filter_summary", Static)
+        painted = " ".join(box.render_line(y).text for y in range(box.size.height))
+        summary = " ".join(painted.split())
         assert "restricted to paths" in summary, summary
         assert "**/*.md" in summary
 

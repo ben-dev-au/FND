@@ -27,6 +27,7 @@ naturally; no pre-popping or manual back stacks.
 from __future__ import annotations
 
 import copy
+import textwrap
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -234,6 +235,45 @@ _CONFIRM_CSS = """
 def chrome_css(cls: str, *, confirm: bool = False) -> str:
     """The shared Settings chrome, stamped with one screen's type name."""
     return (_CONFIRM_CSS if confirm else _PROMPT_CSS).format(cls=cls)
+
+
+#: Rows the browser's summary box shows before it scrolls; matches its CSS.
+_SUMMARY_ROWS = 5
+
+
+class _FilterSummary:
+    """The browser's summary, capped to the rows its box actually has.
+
+    Fits at paint time rather than on a stored width: the screen's size is not
+    settled when the summary is first built, and past five rows the terminal
+    cut the expression mid-token with nothing to say it had. Only reachable
+    below ~60 columns, which is why a pass at the default width never saw it.
+    """
+
+    def __init__(self, head: str, prefix: str, body: str) -> None:
+        self._head = head
+        self._prefix = prefix
+        self._body = body or "no filters"
+
+    def fitted(self, width: int) -> Text:
+        # Wrapped, not estimated: a row-count from character arithmetic assumes
+        # perfect packing and overflowed the box by a row.
+        usable = max(10, width)
+        rows_left = max(1, _SUMMARY_ROWS - len(textwrap.wrap(self._head, usable) or [""]))
+        rows = textwrap.wrap(self._prefix + self._body, usable) or [self._prefix]
+        if len(rows) <= rows_left:
+            # Fits: hand back the natural line and let the widget wrap it, so
+            # the common case is untouched.
+            return Text(str(self))
+        rows = rows[:rows_left]
+        rows[-1] = rows[-1][: usable - 1].rstrip()[:-1] + "…"
+        return Text(self._head + "\n" + "\n".join(rows))
+
+    def __str__(self) -> str:
+        return f"{self._head}\n{self._prefix}{self._body}"
+
+    def __rich_console__(self, console: Any, options: Any) -> Any:
+        yield self.fitted(options.max_width)
 
 
 def _render_row(
@@ -3161,21 +3201,30 @@ class AddCollectionWizard(Screen[None]):
             self._show_error(f"Collection {name!r} already exists.")
             return
 
-        source = SourceConfig(
-            path=p,
-            includes=includes_globs,
-            excludes=excludes_globs,
-            follow_symlinks=bool(self._fields["follow_symlinks"]),
-            frontmatter_filter=None,
-            filters=_source_filters_or_none(
-                _merge_frontmatter(
-                    dict(self._fields.get("filters", {})),
-                    str(self._fields["filter"]),
-                    _default_frontmatter(self.app),
-                    had_override=self._fields.get("filters", {}).get("frontmatter") is not None,
-                )
-            ),
-        )
+        # The row shows a live ✗ col N but nothing stopped a save, and the
+        # model validates the rule, so an invalid one reached the user as an
+        # unhandled ValidationError with the whole form's input lost.
+        try:
+            source = SourceConfig(
+                path=p,
+                includes=includes_globs,
+                excludes=excludes_globs,
+                follow_symlinks=bool(self._fields["follow_symlinks"]),
+                frontmatter_filter=None,
+                filters=_source_filters_or_none(
+                    _merge_frontmatter(
+                        dict(self._fields.get("filters", {})),
+                        str(self._fields["filter"]),
+                        _default_frontmatter(self.app),
+                        had_override=self._fields.get("filters", {}).get("frontmatter") is not None,
+                    )
+                ),
+            )
+        except ValueError as e:
+            # pydantic's ValidationError is a ValueError; `_summarise` renders
+            # it as the field and message the row already showed.
+            self._show_error(_summarise(e))
+            return
         new_collection = CollectionConfig(sources=[source])
         config_path = default_config_path()
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -5301,13 +5350,19 @@ class FilterBrowserScreen(Screen[None]):
             head.append("restricted to paths: " + ", ".join(self._globs))
         if self._scanning:
             head.append("scanning source for types and tags…")
+        elif getattr(self._sample, "truncated", False):
+            # The scan stopped at its time budget, so the branches below list
+            # some of the source's types and tags rather than all of them.
+            head.append("partial scan — this source has more types and tags")
         # Named separately because neither is a predicate over a file, so
         # neither can appear in the expression below.
-        lines = [
-            "not in the expression — " + " · ".join(head),
-            f"expression ('t' edits, 'y' copies):  {text or 'no filters'}",
-        ]
-        self.query_one("#filter_summary", Static).update("\n".join(lines))
+        self.query_one("#filter_summary", Static).update(
+            _FilterSummary(
+                "not in the expression — " + " · ".join(head),
+                "expression ('t' edits, 'y' copies):  ",
+                text,
+            )
+        )
 
     def action_copy_text(self) -> None:
         """Copy the expression. The app owns the mouse, so a terminal

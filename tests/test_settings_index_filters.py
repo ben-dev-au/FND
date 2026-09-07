@@ -11,6 +11,17 @@ from fnd.tui import FNDApp
 from tests._pilot_wait import settings_ready
 
 
+def _summary_text(screen: Any) -> str:
+    """The summary box as painted. It refits itself to the width it renders
+    at, so its stored renderable is not what the user sees."""
+    from textual.widgets import Static
+
+    box = screen.query_one("#filter_summary", Static)
+    painted = " ".join(box.render_line(y).text for y in range(box.size.height))
+    # Collapsed: the box wraps, so a phrase can straddle two painted rows.
+    return " ".join(painted.split())
+
+
 @pytest.fixture
 def built_index(fixtures_dir: Path, tmp_index_dir: Path) -> Path:
     from fnd.index import build_index
@@ -292,7 +303,7 @@ async def test_the_source_scan_does_not_block_the_screen(built_index: Path) -> N
         assert screen._scanning, "test setup — the scan should still be running"
         tree = screen.query_one(ToggleTree)
         assert tree.root.children, "the tree must be usable before the scan lands"
-        assert "scanning" in str(screen.query_one("#filter_summary").render())
+        assert "scanning" in _summary_text(screen)
 
         release.set()
         for _ in range(400):
@@ -303,7 +314,7 @@ async def test_the_source_scan_does_not_block_the_screen(built_index: Path) -> N
         # One tag source needs no parent level, so the branch is named for it.
         tags = next(n for n in tree.root.children if "tags" in str(n.label).lower())
         assert any("slowtag" in str(c.label) for c in tags.children)
-        assert "scanning" not in str(screen.query_one("#filter_summary").render())
+        assert "scanning" not in _summary_text(screen)
 
 
 @pytest.mark.asyncio
@@ -475,7 +486,7 @@ async def test_the_summary_says_what_the_expression_leaves_out(built_index: Path
         )
         for _ in range(20):
             await pilot.pause()
-        summary = str(app.screen.query_one("#filter_summary").render())
+        summary = _summary_text(app.screen)
 
     assert "not in the expression" in summary, summary
     assert ".gitignore" in summary
@@ -656,3 +667,83 @@ def test_every_settings_screen_styles_itself() -> None:
         if css and "#settings_box" in css and f"{name} > #settings_box" not in css:
             borrowed.append(name)
     assert not borrowed, f"screens whose CSS names another type: {borrowed}"
+
+
+class TestTheSummaryBoxTellsTheTruth:
+    """It is five rows; past them the terminal cut the expression mid-token
+    with nothing to say it had. Only reachable below ~60 columns."""
+
+    HEAD = "not in the expression — obeying .gitignore, .fndignore"
+    PREFIX = "expression ('t' edits, 'y' copies):  "
+    BODY = "(file.kind in ['pdf', 'docx', 'md', 'txt', 'pptx']) AND (NOT ('no_index' in file.tags.all))"
+
+    def test_a_narrow_box_marks_what_it_dropped(self) -> None:
+        from fnd.tui.settings_screen import _SUMMARY_ROWS, _FilterSummary
+
+        rendered = _FilterSummary(self.HEAD, self.PREFIX, self.BODY).fitted(44).plain
+        assert len(rendered.split("\n")) <= _SUMMARY_ROWS
+        assert rendered.rstrip().endswith("…")
+
+    def test_a_wide_box_shows_the_whole_expression(self) -> None:
+        from fnd.tui.settings_screen import _FilterSummary
+
+        rendered = _FilterSummary(self.HEAD, self.PREFIX, self.BODY).fitted(120).plain
+        assert self.BODY in rendered
+        assert "…" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_a_partial_scan_says_so(built_index: Path) -> None:
+    """`sample_source` stops at its time budget; presenting what it found as
+    the whole source makes the type and tag lists silently incomplete."""
+
+    from fnd.filters import FilterSpec
+    from fnd.filters.scan import SourceSample
+    from fnd.tui.settings_screen import FilterBrowserScreen
+
+    app = FNDApp(index_dir=built_index)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(),
+                gitignore=True,
+                fndignore=True,
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(15):
+            await pilot.pause()
+        screen = app.screen
+        assert "partial scan" not in _summary_text(screen)
+
+        screen._sample_arrived(SourceSample(kinds={"md": 1}, tags={}, truncated=True))
+        for _ in range(6):
+            await pilot.pause()
+        assert "partial scan" in _summary_text(screen)
+
+
+@pytest.mark.asyncio
+async def test_the_wizard_refuses_an_invalid_rule_instead_of_crashing(built_index: Path) -> None:
+    """The row shows a live ✗ col N but nothing stopped a save, and the model
+    validates the rule, so the whole form's input died with the exception."""
+    from textual.widgets import Static
+
+    from fnd.tui.settings_screen import AddCollectionWizard
+
+    app = FNDApp(index_dir=built_index)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.push_screen(AddCollectionWizard())
+        for _ in range(15):
+            await pilot.pause()
+        wizard = app.screen
+        wizard._fields.update({"name": "probe", "path": "~", "filter": "status =="})
+        wizard.action_save_close()
+        for _ in range(8):
+            await pilot.pause()
+        assert isinstance(app.screen, AddCollectionWizard), "the form must survive"
+        error = wizard.query_one("#wizard_error", Static)
+        assert "-hidden" not in error.classes
+        assert "frontmatter" in str(error.render())

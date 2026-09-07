@@ -133,7 +133,9 @@ def _maximal() -> conf.Config:
                         includes=["**/*.md"],
                         excludes=["**/.git/**"],
                         follow_symlinks=True,
-                        filters=conf.SourceFilters(**filters),
+                        # `clears` exists only on a source, so the shared
+                        # `filters` dict cannot carry it.
+                        filters=conf.SourceFilters(**filters, clears=["min_size"]),
                         app="obsidian",
                         app_for={"md": "obsidian"},
                         app_params={"vault": "Main"},

@@ -360,3 +360,89 @@ class TestABranchSaysHowMuchIsOn:
             label = _labels(tt)["kinds"]
             assert label.startswith("●")
             assert "of 2 types" not in label, label
+
+
+class TestARollupSurvivesACategoryToggle:
+    """`_repaint_group` repaints a node and everything BELOW it. Only the item
+    path repainted ancestors, so toggling a category left its parent reading
+    its old count for the rest of the session."""
+
+    class _TwoDeep(App[None]):
+        def compose(self) -> ComposeResult:
+            yield ToggleTree(id="tt")
+
+        def on_mount(self) -> None:
+            groups = [
+                ToggleGroup(
+                    "kinds",
+                    "File types",
+                    (),
+                    noun="types",
+                    groups=(
+                        ToggleGroup("docs", "Documents", (ToggleItem("pdf", "PDF"),)),
+                        ToggleGroup("notes", "Notes", (ToggleItem("md", "Markdown"),)),
+                    ),
+                )
+            ]
+            self.query_one("#tt", ToggleTree).set_model(
+                groups, {"pdf"}, expanded={"kinds", "docs", "notes"}
+            )
+
+    @pytest.mark.asyncio
+    async def test_toggling_a_category_updates_the_branch_above_it(self) -> None:
+        app = self._TwoDeep()
+        async with app.run_test() as pilot:
+            tt = app.query_one("#tt", ToggleTree)
+            await pilot.pause()
+            assert "1 of 2 types" in _labels(tt)["kinds"]
+            notes = next(
+                n
+                for n in tt.root.children[0].children
+                if isinstance(n.data, dict) and n.data.get("id") == "notes"
+            )
+            tt.cursor_line = notes.line
+            await pilot.press("enter")
+            await pilot.pause()
+            assert tt.selected == frozenset({"pdf", "md"})
+            assert "of 2 types" not in _labels(tt)["kinds"], _labels(tt)["kinds"]
+
+
+@pytest.mark.asyncio
+async def test_one_tag_under_two_sources_counts_once() -> None:
+    """A tag is drawn under every source that can carry it, so counting rows
+    reported a single excluded `no_index` as two."""
+
+    class _Tags(App[None]):
+        def compose(self) -> ComposeResult:
+            yield ToggleTree(id="tt")
+
+        def on_mount(self) -> None:
+            self.query_one("#tt", ToggleTree).set_model(
+                [
+                    ToggleGroup(
+                        "tags",
+                        "Tags",
+                        (),
+                        mode="cycle",
+                        noun="tags",
+                        groups=(
+                            ToggleGroup(
+                                "tags:os", "System", (ToggleItem("tag:os:no_index", "no_index"),)
+                            ),
+                            ToggleGroup(
+                                "tags:fm",
+                                "Note",
+                                (ToggleItem("tag:frontmatter:no_index", "no_index"),),
+                            ),
+                        ),
+                    )
+                ],
+                set(),
+                excluded={"tag:os:no_index", "tag:frontmatter:no_index"},
+                expanded=set(),
+            )
+
+    app = _Tags()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert "1 excluded" in _labels(app.query_one("#tt", ToggleTree))["tags"]

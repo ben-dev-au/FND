@@ -311,13 +311,10 @@ class SourceFilters(_ConfigModel):
     expression: str | None = None
 
     clears: list[str] = Field(default_factory=list)
-    """Numeric and date fields this source drops rather than inherits.
+    """Numeric and date bounds dropped rather than inherited.
 
-    A list overrides to nothing with `[]` and a string with `""`, but a number
-    or a date has no such value: `None` already means inherit, so "no size
-    limit here" and "use the global limit" were the same config and the choice
-    silently reverted. Naming the field is the only way to say it in TOML,
-    which has no null.
+    TOML has no null and `None` means inherit, so clearing a bound means
+    naming it.
     """
 
     @field_validator("clears")
