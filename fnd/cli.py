@@ -712,11 +712,19 @@ def collection_add(
     )
     write_collection_source(config_path=cfg_path, collection_name=name, source=new_source)
     typer.echo(f"added source {source[0]} to collection {name} in {cfg_path}")
-    if not Path(source[0]).expanduser().exists():
+    root = Path(source[0]).expanduser()
+    if not root.exists():
         # Indexing it yields nothing and says nothing, so a typo looks like a
         # working collection until the first search comes back empty.
         typer.echo(
             f"fnd: {source[0]} does not exist — indexing it will find no files.",
+            err=True,
+        )
+    elif root.is_symlink() and not follow_symlinks:
+        typer.echo(
+            f"fnd: {source[0]} is a symlink and follow-symlinks is off, so this "
+            f"source will index nothing. Re-add it with --follow-symlinks, or "
+            f"point it at the real folder.",
             err=True,
         )
 

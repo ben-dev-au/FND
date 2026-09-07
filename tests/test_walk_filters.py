@@ -6,6 +6,8 @@ import datetime as dt
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -632,3 +634,64 @@ class TestASymlinkCycleTerminates:
         (root / "a.md").write_text("x\n")
         (root / "loop").symlink_to(root)
         assert {p.name for p in walk(roots=[root])} == {"a.md"}
+
+
+class TestASymlinkedRootIsNotSilent:
+    """A symlinked root is deliberately refused unless the user opts in — it
+    is the only way the index would follow a link target. The defect was that
+    it said nothing: the source indexed zero files while every column read
+    healthy."""
+
+    def test_the_premise_still_holds(self, tmp_path: Path) -> None:
+        from fnd.walk import walk
+
+        base = tmp_path.resolve()
+        real = base / "real"
+        real.mkdir()
+        (real / "a.md").write_text("x\n")
+        link = base / "linked"
+        link.symlink_to(real)
+
+        assert list(walk(roots=[link])) == [], "the guard itself"
+        assert {p.name for p in walk(roots=[link], follow_symlinks=True)} == {"a.md"}
+
+    def test_the_sources_row_says_so(self, tmp_path: Path) -> None:
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.menu import _provider_sources
+
+        base = tmp_path.resolve()
+        real = base / "real"
+        real.mkdir()
+        link = base / "linked"
+        link.symlink_to(real)
+
+        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path=link)])})
+        app = SimpleNamespace(_config=config)
+        rows = _provider_sources(cast("Any", app), "c")
+        summaries = [
+            item.value_getter(cast("Any", app)) for item in rows if item.value_getter is not None
+        ]
+        assert any("symlink" in str(s) for s in summaries), summaries
+
+    def test_a_followed_symlink_row_is_unmarked(self, tmp_path: Path) -> None:
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.menu import _provider_sources
+
+        base = tmp_path.resolve()
+        real = base / "real"
+        real.mkdir()
+        link = base / "linked"
+        link.symlink_to(real)
+
+        config = Config(
+            collections={
+                "c": CollectionConfig(sources=[SourceConfig(path=link, follow_symlinks=True)])
+            }
+        )
+        app = SimpleNamespace(_config=config)
+        summaries = [
+            item.value_getter(cast("Any", app))
+            for item in _provider_sources(cast("Any", app), "c")
+            if item.value_getter is not None
+        ]
+        assert not any("symlink" in str(s) for s in summaries), summaries

@@ -1618,6 +1618,11 @@ def _source_trailing(collection_name: str, idx: int) -> Callable[[FNDApp], str]:
             p = Path(src.path)
             if not p.exists():
                 suffix = " · ⚠ path not found"
+            elif p.is_symlink() and not src.follow_symlinks:
+                # A symlinked root is refused unless the user opts in, so this
+                # source indexes nothing at all — and every other column reads
+                # perfectly healthy while it does.
+                suffix = " · ⚠ symlink, not followed — indexes nothing"
         except Exception:
             suffix = " · ⚠ path not found"
         return f"{types}{suffix}"
