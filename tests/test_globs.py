@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -96,6 +97,32 @@ class TestTheLanguage:
 
     def test_matching_is_case_sensitive(self) -> None:
         assert not PathGlob("*.md").matches("A.MD")
+
+
+class TestOnePathThroughTheEngine:
+    """Several `*` in one segment used to let the engine try every way of
+    splitting the text between them, and it tried them all before failing."""
+
+    def test_a_multi_star_segment_does_not_stall(self) -> None:
+        """Five stars against a 255-character name did not finish. The corpus
+        this was found on has PDF names over 140 characters."""
+        started = time.perf_counter()
+        assert not PathGlob("*a*a*a*a*a*b.md").matches("a" * 255 + ".md")
+        assert time.perf_counter() - started < 1.0
+
+    def test_the_final_run_is_not_forced_leftmost(self) -> None:
+        """Taking the leftmost run is only sound when a star follows it and
+        can absorb what is left. `*a` has none, so it must still match `aa`."""
+        assert PathGlob("*a").matches("aa")
+        assert PathGlob("*a*b").matches("aab")
+        assert PathGlob("*ab*b").matches("abb")
+
+    def test_a_character_class_never_matches_the_separator(self) -> None:
+        """git ignores `bb` for `*[!a]*[!a]` and keeps `b/b`; `[^a]` alone
+        matches the slash and lets one segment span two."""
+        assert PathGlob("*[!a]*[!a]").matches("bb")
+        assert not PathGlob("*[!a]*[!a]").matches("b/b")
+        assert not PathGlob("[!a]").matches("/")
 
 
 class TestGlobSet:

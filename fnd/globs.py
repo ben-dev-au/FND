@@ -7,9 +7,12 @@ globs and the filter DSL's ``~~`` from answering differently about one path —
 they were separate ``fnmatch`` call sites and disagreed on every ``**/``-prefixed
 pattern.
 
-``*`` and ``?`` stop at ``/``; a whole ``**`` segment spans zero or more
-directories. A pattern the regex engine cannot compile never matches, rather
-than aborting the scan that used it.
+``*``, ``?`` and a character class all stop at ``/``; a whole ``**`` segment
+spans zero or more directories. A pattern the regex engine cannot compile never
+matches, rather than aborting the scan that used it.
+
+Each segment compiles so the engine has a single path to try; see
+:func:`_translate_segment` for why, and for the one place that would be unsound.
 """
 
 from __future__ import annotations
@@ -34,18 +37,18 @@ def _class_span(pattern: str, i: int) -> int:
     return j + 1 if j < len(pattern) else i
 
 
-def _translate_segment(segment: str, *, fold_case: bool = False) -> str:
-    out: list[str] = []
+def _segment_tokens(segment: str, *, fold_case: bool) -> list[str | None]:
+    """Regex source per glob token, with ``None`` marking a ``*``."""
+    out: list[str | None] = []
     i = 0
     while i < len(segment):
         ch = segment[i]
         if ch == "*":
-            # Collapse a run of stars into one. Consecutive ``[^/]*`` groups
-            # mean the same thing but backtrack exponentially, so a hostile
-            # pattern in any cloned repo's .gitignore would hang the scan.
+            # A run of stars is one star. Consecutive groups mean the same
+            # thing but multiply the search space.
             while i < len(segment) and segment[i] == "*":
                 i += 1
-            out.append("[^/]*")
+            out.append(None)
         elif ch == "?":
             out.append("[^/]")
             i += 1
@@ -58,7 +61,10 @@ def _translate_segment(segment: str, *, fold_case: bool = False) -> str:
             body = segment[i + 1 : end - 1]
             if body.startswith(("!", "^")):
                 body = "^" + body[1:]
-            out.append("[" + body.replace("\\", "\\\\") + "]")
+            # A class never matches the separator, as `?` never does: git
+            # ignores "bb" for `*[!a]*[!a]` but not "b/b", and `[^a]` alone
+            # would match the slash and let one segment span two.
+            out.append("(?=[^/])[" + body.replace("\\", "\\\\") + "]")
             i = end
         elif ch == "\\" and i + 1 < len(segment):
             nxt = segment[i + 1]
@@ -67,6 +73,42 @@ def _translate_segment(segment: str, *, fold_case: bool = False) -> str:
         else:
             out.append(re.escape(ch.lower() if fold_case else ch))
             i += 1
+    return out
+
+
+def _translate_segment(segment: str, *, fold_case: bool = False) -> str:
+    """One path segment, compiled so the engine has a single path to try.
+
+    ``[^/]*a[^/]*b`` lets the engine partition the text between the two stars
+    in exponentially many ways, and it tries them all before failing: five
+    stars against a 255-character name does not finish. Each star whose run is
+    followed by another star becomes a tempered token, ``(?:(?!run)[^/])*run``,
+    which can only reach the FIRST occurrence of that run, so there is one path
+    and matching is linear.
+
+    Tempering is sound exactly where it is applied. Taking the leftmost run
+    leaves more text for the rest of the pattern, and a star follows, which can
+    absorb it. The final run has no star after it and is pinned to the end of
+    the segment, so it stays a plain scan: ``*a`` must still match ``aa``.
+    """
+    tokens = _segment_tokens(segment, fold_case=fold_case)
+    runs: list[list[str]] = [[]]
+    stars: list[bool] = []
+    for token in tokens:
+        if token is None:
+            stars.append(True)
+            runs.append([])
+        else:
+            runs[-1].append(token)
+
+    out: list[str] = ["".join(runs[0])]
+    for index in range(len(stars)):
+        run = "".join(runs[index + 1])
+        followed_by_star = index + 1 < len(stars)
+        if run and followed_by_star:
+            out.append(f"(?:(?!{run})[^/])*{run}")
+        else:
+            out.append(f"[^/]*{run}")
     return "".join(out)
 
 
@@ -105,7 +147,9 @@ def translate(pattern: str, *, anchored: bool, fold_case: bool = False) -> re.Pa
     # No re.IGNORECASE: that folds a character class too, so "*.[CH]" would
     # match "x.c" where git keeps it. The literals are lowered above and the
     # path is lowered at match time, which is what git's WM_CASEFOLD does.
-    return re.compile(f"^{prefix}{body}$")
+    # \Z, not $: $ also matches before a trailing newline, so a file
+    # literally named "report.md\n" would match the glob "report.md".
+    return re.compile(f"^{prefix}{body}\\Z")
 
 
 @functools.lru_cache(maxsize=2048)

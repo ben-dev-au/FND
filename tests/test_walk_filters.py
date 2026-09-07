@@ -382,10 +382,15 @@ class TestTypeGlobAbsorption:
         for rel in ("a.md", "b.pdf", "c.txt", "sub/d.md", "sub/e.txt", "sub/deep/f.markdown"):
             _write(tmp_path, rel)
         globs = ["**/*.md", "**/*.markdown"]
-        globbed = {p.name for p in walk(roots=[tmp_path], includes=globs)}
+        # Root-relative, not basenames: this test exists to tell a root-level
+        # file from a nested one, which p.name discards.
+        rel = {p.relative_to(tmp_path).as_posix() for p in walk(roots=[tmp_path], includes=globs)}
         assert _sources(tmp_path, includes=globs)[0].includes == [], "absorption did not run"
-        kinded = {p.name for p in walk_sources(sources=_sources(tmp_path, includes=globs))}
-        assert globbed == kinded == {"a.md", "d.md", "f.markdown"}
+        folded = {
+            p.relative_to(tmp_path).as_posix()
+            for p in walk_sources(sources=_sources(tmp_path, includes=globs))
+        }
+        assert rel == folded == {"a.md", "sub/d.md", "sub/deep/f.markdown"}
 
 
 class TestTagsAreNotConflated:
