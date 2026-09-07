@@ -46,10 +46,10 @@ _WINDOWS: tuple[tuple[str, str, int | None], ...] = (
 
 _SIZES: tuple[tuple[str, str, int | None], ...] = (
     ("any", "Any size", None),
-    ("1mb", "Under 1 MB", 1_000_000),
-    ("10mb", "Under 10 MB", 10_000_000),
-    ("50mb", "Under 50 MB", 50_000_000),
-    ("200mb", "Under 200 MB", 200_000_000),
+    ("1mb", "Up to 1 MB", 1_000_000),
+    ("10mb", "Up to 10 MB", 10_000_000),
+    ("50mb", "Up to 50 MB", 50_000_000),
+    ("200mb", "Up to 200 MB", 200_000_000),
 )
 
 BRANCHES = ("kinds", "tags", "ignore", "size", "modified", "created")
@@ -196,7 +196,7 @@ def spec_branches(
     sized = [(-1 if v is None else v, f"size:{i}", lbl) for i, lbl, v in _SIZES]
     for custom in _custom_offers("size", spec, keep_custom):
         value = int(custom.removeprefix(f"{CUSTOM}:"))
-        sized.append((value, f"size:{custom}", f"Under {_human_size(value)}"))
+        sized.append((value, f"size:{custom}", f"Up to {_human_size(value)}"))
     size_items = [(i, lbl) for _k, i, lbl in sorted(sized)]
     branches.append(Branch("size", "Maximum file size", "radio", tuple(size_items)))
     for field_name, label in (("modified", "Modified within"), ("created", "Created within")):
@@ -272,7 +272,7 @@ and made a window stop matching two days after it was picked.
 The id carries the value — ``size:custom:5000000`` — rather than meaning
 "whatever the spec holds". The tree's labels are built when it is rebuilt
 while a selection is resolved as it is made, so an id that referred to the
-current spec resolved a row still reading "Under 5 MB" to a bound the user
+current spec resolved a row still reading "Up to 5 MB" to a bound the user
 had since changed.
 """
 

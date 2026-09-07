@@ -227,8 +227,8 @@ class TestACustomBoundStaysOnOffer:
         held = FilterSpec(max_size=7_000_000)
         keep = custom_ids(held)
         moved = replace(held, max_size=1_000_000)
-        assert "Under 7 MB" not in self._labels(moved, "size", {})
-        assert "Under 7 MB" in self._labels(moved, "size", keep)
+        assert "Up to 7 MB" not in self._labels(moved, "size", {})
+        assert "Up to 7 MB" in self._labels(moved, "size", keep)
 
     def test_selecting_it_again_restores_the_exact_bound(self) -> None:
         moved = FilterSpec(max_size=1_000_000)
@@ -240,4 +240,18 @@ class TestACustomBoundStaysOnOffer:
     def test_rows_stay_ordered_by_the_bound_they_set(self) -> None:
         keep = custom_ids(FilterSpec(max_size=7_000_000))
         labels = self._labels(FilterSpec(), "size", keep)
-        assert labels.index("Under 7 MB") == labels.index("Under 1 MB") + 1
+        assert labels.index("Up to 7 MB") == labels.index("Up to 1 MB") + 1
+
+
+def test_the_size_rows_say_what_the_gate_does(tmp_path: Path) -> None:
+    """``max_size`` is inclusive, so a row reading "Under 1 MB" was wrong about
+    a file of exactly 1,000,000 bytes."""
+    from fnd.file_facts import FileFacts
+    from fnd.filters.text import build_gate
+
+    exact = tmp_path / "exact.md"
+    exact.write_bytes(b"x" * 1_000_000)
+    assert build_gate(FilterSpec(max_size=1_000_000)).passes(FileFacts(exact, root=tmp_path))
+
+    labels = [lbl for b in spec_branches(FilterSpec()) if b.id == "size" for _i, lbl in b.items]
+    assert not any(lbl.startswith("Under") for lbl in labels), labels

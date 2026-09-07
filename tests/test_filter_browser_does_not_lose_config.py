@@ -77,7 +77,7 @@ class TestKindsTheSampleNeverSaw:
 class TestTheCustomRowMeansItsLabel:
     """The tree's labels are built when it rebuilds; a selection is resolved
     when it is made. An id meaning "whatever the spec holds now" resolved a
-    row still reading "Under 5 MB" to a bound the user had since changed —
+    row still reading "Up to 5 MB" to a bound the user had since changed —
     F1's own failure mode, reinstated inside its fix.
 
     These deliberately do NOT re-derive the selection from the spec: doing so
