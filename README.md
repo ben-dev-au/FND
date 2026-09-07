@@ -10,24 +10,19 @@ Fast, free, keyboard-driven document search for macOS. Indexes PDF, DOCX, PPTX,
 MD and 60 different file types, with strong BM25 ranking, in-file navigation, an
 "Open with…" launcher, and a lazygit-style TUI.
 
-> **Linux and Windows are early beta — barely tested.** The code paths exist and
-> the automated suite runs against all three OSes in CI, but fnd is developed and
-> used daily on macOS only. Nobody has put real day-to-day use on the Linux
-> build, and the Windows build has had essentially none at all. Expect rough
-> edges, and please [open an issue](https://github.com/ben-dev-au/fnd/issues) when
-> you hit one. See [Platform support](#platform-support) for what that means in
-> practice.
+> **Linux and Windows are early beta**: CI-tested, never used in anger.
+> [Open an issue](https://github.com/ben-dev-au/fnd/issues) when you hit
+> something. See [Platform support](#platform-support).
 
 ## Status
 
-On macOS, core features are complete and stable; the project is in a refinement
-period of finding, fixing, and polishing. On Linux and Windows, treat everything
-as unproven — see the note above.
+On macOS, core features are complete and stable, in a refinement period. On
+Linux and Windows, treat everything as unproven.
 
 ## Requirements
 
-- **macOS** (Apple Silicon or Intel) — the supported, tested platform.
-- **Linux** or **Windows** — early beta, largely untested. See
+- **macOS** (Apple Silicon or Intel): the supported, tested platform.
+- **Linux** or **Windows**: early beta, largely untested. See
   [Platform support](#platform-support).
 - Nothing else to set up. Each install option below brings Python 3.13 with it.
 - A modern terminal is recommended (see [Terminal compatibility](#terminal-compatibility)).
@@ -88,19 +83,10 @@ Releases carry build provenance; see [`SECURITY.md`](SECURITY.md) to verify a do
 
 ## Platform support
 
-**macOS is the supported platform.** It is where fnd is developed, run daily, and
-where every feature has been exercised by hand against a real corpus.
+macOS is developed and used daily. Linux and Windows are implemented and run in
+CI on `ubuntu-latest` and `windows-latest`, but have had almost no hands-on use.
 
-**Linux and Windows are early beta.** Platform-specific behaviour is isolated
-behind four seams — where files live, how to open and reveal them, what the OS
-calls things, and how cloud-backed files behave — and each has a Linux and
-Windows implementation. The automated suite runs on `macos-14`, `ubuntu-latest`
-and `windows-latest` in CI. That establishes the code runs; it does not establish
-that the app is pleasant, correct, or even usable in daily work on those OSes,
-because nobody has yet done that. Windows in particular has had almost no
-hands-on use.
-
-So read the table below as **what is implemented**, not as what is verified:
+Read the table as **what is implemented**, not what is verified:
 
 | Capability                        | macOS          | Linux (beta)                     | Windows (beta)     |
 | --------------------------------- | -------------- | -------------------------------- | ------------------ |
@@ -112,21 +98,17 @@ So read the table below as **what is implemented**, not as what is verified:
 | Structured PDF extra (docling)    | ✓              | ✓                                | ✓                  |
 | Created-date filter               | ✓ (birth time) | best-effort (statx)              | ✓ (creation time)  |
 | Cloud-only file handling          | iCloud Drive   | not detectable                   | OneDrive & co.     |
-| Finder tag filtering              | ✓              | —                                | —                  |
+| Finder tag filtering              | ✓              | no OS equivalent                 | no OS equivalent   |
 | YAML `tags:` filtering            | ✓              | ✓                                | ✓                  |
 
-Where an OS has no equivalent for something, fnd degrades rather than erroring.
-Built-in PDF viewers are auto-detected — the "Open with…" picker lists only the
-ones actually installed. On Linux/Windows, point `[app_defaults].pdf` at your
-preferred viewer, or add any app with a small `[apps.<id>]` block (see
-[`docs/apps.md`](docs/apps.md)); the bundled Linux and Windows handlers are
-written from each app's documented CLI and have not been confirmed against a
-live install. **Frontmatter tags** (`tags:` in YAML) work on every OS; **Finder
-tags** are macOS-only. Install with `uv`/`pipx` on any OS; Homebrew is
-macOS-only.
+Where an OS has no equivalent, fnd degrades rather than errors. PDF viewers are
+auto-detected, so the "Open with…" picker lists only what is installed. On
+Linux/Windows point `[app_defaults].pdf` at your viewer, or add one with an
+`[apps.<id>]` block ([`docs/apps.md`](docs/apps.md)); those handlers are written
+from each app's documented CLI and unconfirmed against a live install. Homebrew
+is macOS-only; `uv`/`pipx` work anywhere.
 
-If you run fnd on Linux or Windows, reports are genuinely valuable — including
-"it worked fine", which is the datapoint the table is currently missing.
+Reports from Linux and Windows are valuable, "it worked fine" included.
 
 ## Quick start
 
@@ -152,7 +134,7 @@ and the [query language](#search-how-to) works exactly as it does from the CLI.
 | Key            | What it does                                                                                                                                                                                                                                       |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `↑` / `↓`      | Move the cursor up/down through results (vim's `k` / `j` also work).                                                                                                                                                                               |
-| `⌥↑` / `⌥↓`    | **Skim**: hold Option (Alt) and arrow to move through results _without_ loading each preview — browse fast with no per-row mount/lag. The preview loads again on a normal `↑`/`↓` (the row you land on) or `Enter` (the exact row you skimmed to). |
+| `⌥↑` / `⌥↓`    | **Skim**: hold Option (Alt) and arrow to move through results _without_ loading each preview. Browse fast with no per-row mount/lag. The preview loads again on a normal `↑`/`↓` (the row you land on) or `Enter` (the exact row you skimmed to). |
 | `Enter`        | Load the highlighted result into the preview (handy right after an Option-skim).                                                                                                                                                                   |
 | `→`            | Expand the focused file to its matching sections; press again to drill into the first.                                                                                                                                                             |
 | `←`            | Collapse the focused node, or back out to its parent (lazygit-style).                                                                                                                                                                              |
@@ -166,10 +148,10 @@ and the [query language](#search-how-to) works exactly as it does from the CLI.
 > _Settings → Profiles → Keys → Left Option key → Esc+_. iTerm2 and most modern
 > terminals work without any change.
 >
-> **Expand/collapse-all — Ctrl or Option?** These are bound to _both_ `Ctrl` and
+> **Expand/collapse-all: Ctrl or Option?** These are bound to _both_ `Ctrl` and
 > `Alt`+arrow, because a single physical combo reaches the app under different
 > names per terminal. On macOS, `⌃←`/`⌃→` are usually captured by Mission
-> Control ("Move a space"), so use **`⌥←`/`⌥→`** — your terminal forwards it as
+> Control ("Move a space"), so use **`⌥←`/`⌥→`**; your terminal forwards it as
 > whichever of the two the app has bound. On Windows/Linux, `Ctrl`+arrow works
 > directly.
 
@@ -179,7 +161,7 @@ and the [query language](#search-how-to) works exactly as it does from the CLI.
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `o`            | Open the hit in its resolved app, jumping to the matching page / slide / line / heading.                                                                                           |
 | `O`            | **Open with…**: a picker of every app that handles this file type. Use `↑↓` then `Enter`, or press the letter shown next to an app; `Esc` cancels.                                 |
-| `R`            | **Reveal**: show the file in your file manager (Finder on macOS, File Explorer on Windows) with it selected, without opening it — also on the last row of the `O` picker. |
+| `R`            | **Reveal**: show the file in your file manager (Finder on macOS, File Explorer on Windows) with it selected, without opening it. Also on the last row of the `O` picker. |
 | `Space`        | Quick Look the file.                                                                                                                                                               |
 | `:`            | Open the **Settings & Commands** menu: every setting and action in one searchable, full-screen list.                                                                               |
 | `?`            | Keybindings cheat sheet (press again to dismiss).                                                                                                                                  |
@@ -200,7 +182,7 @@ A modern terminal is required for optimal formatting. For example:
   formatting varies by font (Menlo is a reasonable default); a modern terminal
   is strongly suggested.
 - **Linux**: Kitty, WezTerm, Alacritty, GNOME Terminal, or Konsole should all be
-  fine — expected to work, not yet confirmed.
+  fine: expected to work, not yet confirmed.
 - **Windows**: **Windows Terminal** (bundled with Windows 11) or WezTerm. The
   legacy `conhost.exe` console renders box-drawing and colours poorly. Untested;
   if the TUI looks wrong, the terminal is the first thing to change.
@@ -247,43 +229,39 @@ fnd search "risotto" --tag recipe --not-tag draft --created month
 ```
 
 Tags come from Obsidian-style YAML frontmatter (`tags:`) and, on macOS, from
-Finder tags. Nested tags work as a hierarchy — `--tag project` also matches
+Finder tags. Nested tags work as a hierarchy: `--tag project` also matches
 `project/alpha`. Tag matching is case-insensitive, and a leading `#` is
 optional. Which sources are read is set by `defaults.tag_sources` in the config
 TOML; disabling one takes effect immediately, with no re-index.
 
-Created dates come from the filesystem's creation time — macOS birth time,
+Created dates come from the filesystem's creation time: macOS birth time,
 Windows creation time, and statx-capable Linux filesystems (e.g. ext4). Files
 without one match only the default (unfiltered) window. Only the macOS path has
 been exercised against a real corpus.
 
 ## Open with… apps
 
-In the TUI, `o` opens a hit in its resolved app and `O` opens the **Open with…**
-picker. Built-in handlers ship per OS — **Skim, Preview, PDF Expert** (macOS),
-**Zathura, Okular** (Linux, beta), **SumatraPDF** (Windows, beta), plus
-cross-platform **Obsidian, VS Code, System Default** — and each is offered only
-where it's installed. The non-macOS handlers are written from each app's
-documented command line and have not been confirmed against a live install. Where the app and file type allow it, fnd jumps to the matching page,
-slide, line, or heading. Set a per-file-type default with `[app_defaults]`, or a
-per-source app, in your config.
+`o` opens a hit in its resolved app, jumping to the matching page, slide, line
+or heading where the app allows. `O` opens the **Open with…** picker, listing
+only installed apps: **Skim, Preview, PDF Expert** (macOS), **Zathura, Okular**
+(Linux), **SumatraPDF** (Windows), plus **Obsidian, VS Code, System Default**.
 
-You can add your own apps with a small `[apps.<id>]` block in your config; see
-the catalogue and schema in [`docs/apps.md`](docs/apps.md). User templates are passed
-to apps as argv lists (never a shell) or as percent-encoded URLs handed to
-`open`, so file paths can't inject commands.
+Set a default per file type with `[app_defaults]`, or per source. Add your own
+with an `[apps.<id>]` block ([`docs/apps.md`](docs/apps.md)). Templates are
+passed as argv lists, never a shell, so a path cannot inject commands.
 
 ## Collections & sources
 
 A **collection** is a named group of source folders you search together; each
 **source** is a folder plus the include/exclude globs that decide which files in
-it get indexed. Globs are matched against the path relative to the source root:
-`*` and `?` stop at a `/`, and a whole `**` segment spans zero or more folders,
-so `**/*.md` catches `a.md` and `notes/deep/a.md` alike. The same language backs
-the `~~` operator in a filter expression. Out of the box fnd searches **all** your collections; tick
+it get indexed. Out of the box fnd searches **all** your collections; tick
 individual ones in the sidebar to narrow that, and the selection is remembered
 for next launch. `-c <name>` scopes a single launch, and `-c all` widens it back
 out again without touching what's remembered.
+
+Globs match the path relative to the source root. `*`, `?` and `[abc]` stop at a
+`/`; a whole `**` segment spans zero or more folders, so `**/*.md` catches both
+`a.md` and `notes/deep/a.md`. The `~~` operator uses the same language.
 
 There are three ways to manage collections, and they're interchangeable, because
 the UI writes the same config file you can edit by hand.
@@ -318,73 +296,69 @@ fnd collection reindex papers   # build/update the index (--rebuild to start fre
 
 ### From the config file
 
-Run `fnd config edit` to open the TOML in `$EDITOR` (the first run writes a
-commented starter template), then `fnd config validate` to check it. UI edits
-preserve your comments and formatting, so hand-editing and the Settings UI mix
-freely.
+Run `fnd config edit` to open the TOML in `$EDITOR`, then `fnd config validate`
+to check it.
+
+fnd generates the file: every key is listed with what it does, and a
+commented-out line is its default, so uncommenting one changes it. Hand-edit
+freely; your values are kept, but layout and comments are regenerated whenever
+fnd writes the file.
+
+Put anything you want kept between the notes markers:
+
+```toml
+# >>> notes: kept verbatim when fnd rewrites this file
+# Vault re-indexed 2026-09-01.
+# parked: exclude_tags = ["no_index", "draft"]
+# <<< notes
+```
+
+`config_version` at the top records the format. fnd upgrades an older file on
+first launch and leaves a `config.toml.bak-<timestamp>` beside it. A file from a
+newer fnd is refused rather than silently misread.
 
 ### Keeping files out of the index
 
-Filters at index time decide what gets indexed at all, as opposed to the
-Filters pane, which narrows what an already-built index returns. They live in
-`[defaults.filters]` and, per source, in a `[…sources.filters]` table that
-overrides the defaults field by field. Settings → **Filters → Index filters**
-edits the defaults; a source's own **Index filters** row edits its overrides.
+Index-time filters decide what gets indexed; the Filters pane narrows what an
+existing index returns. They live in `[defaults.filters]`, and per source in
+`[…sources.filters]` which overrides field by field. Settings → **Filters →
+Index filters** edits the defaults; a source's **Index filters** row edits it.
 
 | Filter | What it does |
 | --- | --- |
-| `respect_gitignore` | Honours every `.gitignore` down the tree, with git's rules — negation, directory patterns, nearest file wins. **On by default.** |
-| `respect_fndignore` | The same syntax in a `.fndignore`, read only by fnd — how to hide something from search without hiding it from git. **On by default.** |
-| `include_tags` | Index only files carrying one of these tags — the tag rows' `●`. Empty means the tag is not consulted. |
-| `exclude_tags` | Tags that keep a file out — the tag rows' `⊘`. From any source fnd reads: macOS Finder tags and a note's YAML `tags:`. Defaults to `["no_index"]`, so tagging a file `no_index` either way keeps it out. |
-| `kinds` | Restrict to given file types. Empty means every supported type. When a source's `includes` is exactly a set of complete file-type globs — every suffix of each type, so `["**/*.md", "**/*.markdown"]` and not `["**/*.md"]` alone — it says the same thing as `kinds` and is folded into it on load. Any other list is left as globs, because `includes` are ORed while `kinds` is a separate rule ANDed with them. |
+| `respect_gitignore` | Honours every `.gitignore` down the tree, with git's rules: negation, directory patterns, nearest file wins. **On by default.** |
+| `respect_fndignore` | The same syntax in a `.fndignore`, read only by fnd: how to hide something from search without hiding it from git. **On by default.** |
+| `include_tags` | Index only files carrying one of these tags; the tag rows' `●`. Empty means the tag is not consulted. |
+| `exclude_tags` | Tags that keep a file out; the tag rows' `⊘`. From any source fnd reads: macOS Finder tags and a note's YAML `tags:`. Defaults to `["no_index"]`, so tagging a file `no_index` either way keeps it out. |
+| `kinds` | Restrict to given file types. Empty means every supported type. A source's `includes` folds into this when it names every suffix of a type (`["**/*.md", "**/*.markdown"]`, not `["**/*.md"]` alone). Anything else stays a glob. |
 | `min_size` / `max_size` | Bytes. Keeps stubs, and multi-hundred-megabyte scans, out. |
-| `created_after` / `created_before` | ISO dates (`2024-01-01`). A fixed bound, not the Filters pane's rolling window — a window would change what the index holds as time passed. A file with no creation date (best-effort on Linux) is kept. |
+| `created_after` / `created_before` | ISO dates (`2024-01-01`). A fixed bound, not the Filters pane's rolling window: a window would change what the index holds as time passed. A file with no creation date (best-effort on Linux) is kept. |
 | `modified_after` / `modified_before` | ISO dates, same semantics. |
-| `frontmatter` | A frontmatter predicate — the same `[…]` syntax as a query, e.g. `type == 'note' AND status != 'draft'`. It applies to a file **that has a frontmatter block**, whatever its extension, and is skipped for one that has none: a PDF, or a plain `.txt`, passes through untouched rather than failing a question it cannot answer. A block that is present but does not parse fails the rule, since that file did answer. |
+| `frontmatter` | A frontmatter predicate, same syntax as a query: `type == 'note' AND status != 'draft'`. Applies to any file **with a frontmatter block**, whatever the extension. A file without one passes. A block that fails to parse fails the rule. |
 | `expression` | A predicate over any file, using `file.kind`, `file.size`, `file.modified`, `file.tags.os`, `file.path` and the like. The rows above are written in terms of it. |
 
-The tree shows one branch per rule, with the file types nested under a single
-parent, and a legend for the markers: `●` keep only these, `⊘` never these,
-`○` no rule. A branch with nothing switched on says what that means — the file
-types read `(every type)` — so an untouched filter is never mistaken for one
-that excludes everything.
+The tree shows one branch per rule. Markers: `●` keep only these, `⊘` never
+these, `○` no rule. An empty branch says what that means, so the file types read
+`(every type)`.
 
-Beneath the tree the whole set is shown as the expression it compiles to, and
-`t` opens that for editing. The rows and the text are two views of the same
-filter, so editing
-either updates the other — typing `file.kind in ['pdf']` fills the file-type
-row in, and ticking that row writes the same clause back out. Anything the
-rows cannot express stays in `expression` verbatim. A per-source row set to
-`-` overrides to *nothing*, which is how one source opts out of a global
-exclusion; leaving a row empty inherits instead.
+Beneath the tree the set is shown as the expression it compiles to; `t` edits
+it. Rows and text are two views of one filter and update each other. Anything
+the rows cannot express stays in `expression`. A per-source row set to `-`
+overrides to nothing; left empty it inherits.
 
-Enabling a filter does not need a rebuild: the next update prunes anything
-newly excluded. Two things worth knowing before you turn `respect_gitignore`
-off and on:
+No rebuild needed: the next update prunes what a new filter excludes.
 
-> **A `.gitignore` says what git should not track, which is not always what you
-> want unsearchable.** Large PDFs — textbooks, lecture slides — are commonly
-> kept out of a repository precisely because they are big, and those are often
-> exactly the documents you want to find.
->
-> Ignore files apply from a source's own folder **downwards**. A repository
-> that happens to enclose the source does not govern it: a dotfiles repo in
-> your home directory would otherwise make everything under `~/Documents`
-> ignored.
+**Ignore files** apply from the source folder downwards, so an enclosing repo
+does not govern it. Note that a `.gitignore` often excludes large PDFs
+precisely because they are big, and those may be what you want to find.
 
-> **Upgrading an existing index.** These defaults are new, so the first update
-> after upgrading prunes anything they now exclude — on a 4,700-file corpus
-> that was about 260 files, mostly build artefacts, but it can include
-> documents kept out of a repository on purpose. Set `respect_gitignore =
-> false` under `[defaults.filters]`, or per source, to keep the old
-> behaviour.
+**Upgrading an existing index.** These defaults are new, so the first update
+after upgrading prunes what they exclude: about 260 files on a 4,700-file
+corpus, mostly build artefacts. Set `respect_gitignore = false` to keep the old
+behaviour.
 
-> **Finder tags are macOS-only, but `exclude_tags` is not.** On Linux and
-> Windows there are no Finder tags to read, so tag a note `tags: [no_index]` in
-> its frontmatter and the same setting keeps it out. Reading YAML tags means
-> opening each note as it is enumerated; cloud-only files are fetched under the
-> same bound and reported the same way as for the `frontmatter` filter.
+**`exclude_tags` is cross-platform.** Finder tags are macOS-only, but the same
+setting reads a note's `tags: [no_index]` on any OS.
 
 ## Configuration
 
@@ -395,10 +369,13 @@ see the exact location): `~/Library/Application Support/fnd/` (macOS),
 prints the effective merged config; `fnd config validate` checks it before you
 rely on it.
 
-Each collection is one or more `[[collections.<name>.sources]]` tables. A
-minimal, annotated config:
+Each collection is one or more `[[collections.<name>.sources]]` tables. The
+file fnd writes documents every key inline; this is the shape, with the
+generated comments stripped:
 
 ```toml
+config_version = 1
+
 [defaults]
 collection    = "all"      # scope a fresh profile starts with: "all" or a name
 result_limit  = 200        # max results per query
@@ -423,7 +400,7 @@ frontmatter = "Status == 'published' AND NOT ('private' in tags)"  # notes only
 [defaults.filters]
 respect_gitignore = true            # honour .gitignore, with git's own rules
 respect_fndignore = true            # same syntax, read only by fnd
-exclude_tags      = ["no_index"]    # Finder tags and YAML tags: — see below
+exclude_tags      = ["no_index"]    # Finder tags and YAML tags:, see below
 # include_tags    = ["reference"]   # index only files carrying one of these
 # kinds           = ["md", "pdf"]   # omit to index every supported type
 # max_size        = 50_000_000
@@ -444,10 +421,10 @@ handles      = ["md"]
 argv         = ["open", "-a", "Marked 2", "{path}"]
 ```
 
-The `[defaults]` table also controls preview behaviour and auto-resume; run
-`fnd config edit` to see every option documented inline. After changing
-collections or sources, run `fnd collection reindex <name>` (or Reindex from the
-Settings UI) to apply it.
+`[defaults]` also controls preview behaviour and auto-resume. Every option is
+documented in the file itself: run `fnd config edit` to read it. After changing
+collections or sources, run `fnd collection reindex <name>`, or Reindex from the
+Settings UI.
 
 ## Indexing
 
@@ -478,7 +455,7 @@ automatically.
 
 Two packages: `pymupdf4llm` (which pulls `pymupdf-layout`, Polyform
 Noncommercial 1.0) and `docling-slim[standard]` (Apache-2.0). fnd redistributes
-neither — the install fetches them onto your machine, so Polyform's
+neither: the install fetches them onto your machine, so Polyform's
 non-commercial restriction binds your use of `pymupdf-layout` directly. Check it
 before installing this extra in a commercial setting. ML weights (~400 MB)
 download on first use. Uninstall removes the packages; indexed structured chunks
@@ -492,7 +469,7 @@ reindexes only re-process changed files.
 
 ### Cache
 
-Extracted chunks are content-addressed in fnd's cache directory —
+Extracted chunks are content-addressed in fnd's cache directory:
 `~/Library/Caches/fnd/pdf-structure/` on macOS, the platform cache dir elsewhere
 (`fnd cache info` prints it). Shared across collections: the same file in two
 collections is extracted once.
@@ -536,7 +513,7 @@ markdown frontmatter filters. They compose freely.
 
 ### Phrases
 
-Quoting is the biggest precision win — quote any common phrase:
+Quoting is the biggest precision win. Quote any common phrase:
 
 | You type              | Matches                                                              |
 | --------------------- | -------------------------------------------------------------------- |
@@ -545,7 +522,7 @@ Quoting is the biggest precision win — quote any common phrase:
 
 ### Proximity
 
-Find terms near each other, in any order — `{N}` and `NEAR/N` are equivalent:
+Find terms near each other, in any order. `{N}` and `NEAR/N` are equivalent:
 
 | You type                           | Means                                        |
 | ---------------------------------- | -------------------------------------------- |
@@ -556,7 +533,7 @@ Find terms near each other, in any order — `{N}` and `NEAR/N` are equivalent:
 | `{500} race condition mitigations` | Within ~one page.                            |
 
 - **Scale:** `5` ≈ very near, `20` ≈ a line, `60` ≈ a few lines, `500` ≈ a page.
-- **Order doesn't matter** — quote (`"cross entropy"`) when it does.
+- **Order doesn't matter.** Quote (`"cross entropy"`) when it does.
 - `{N}` covers the words right after it, up to the first operator, `(`, or
   filter, so `{10} buffer overflow kind:pdf` slops only `buffer overflow`.
 - Can't cross a chunk boundary; if terms are far apart, drop the `{N}`.
@@ -564,7 +541,7 @@ Find terms near each other, in any order — `{N}` and `NEAR/N` are equivalent:
 
 ### Fuzzy matching for typos and variants
 
-Suffix `~1` or `~2` to allow that many edits per term — an adjacent transposition
+Suffix `~1` or `~2` to allow that many edits per term. An adjacent transposition
 (`ir` ↔ `ri`) counts as one edit:
 
 | You type         | Matches                               |
@@ -590,7 +567,7 @@ boost), so you can combine it with search terms to constrain them.
 | `title:(rust OR golang)`   | Group alternatives within one field.                   |
 | `has:author`               | Only documents that have a non-empty `author` field.   |
 
-Combine with terms to constrain them — `kind:pdf "diffusion model"` finds the
+Combine with terms to constrain them: `kind:pdf "diffusion model"` finds the
 phrase in **PDFs only**.
 
 ### Collections
@@ -629,7 +606,7 @@ Numeric ranges use `[low TO high]`. Shorthand for one-sided comparisons:
 | `/cryp.*/` | A regular expression over indexed words.     |
 
 > **`*` only works at the end of a word.** Leading or infix wildcards (`*tion`,
-> `de*ce`) match almost nothing — search strips word endings before matching.
+> `de*ce`) match almost nothing: search strips word endings before matching.
 > Use a trailing `crypto*` or a `/regex/` instead.
 
 You rarely need `*`: search already matches word variants (`entropy` finds
@@ -638,18 +615,15 @@ You rarely need `*`: search already matches word variants (`entropy` finds
 
 ### Markdown frontmatter filter
 
-Filter markdown notes by their YAML frontmatter with a `[…]` predicate. The
-same expression is a source's `filters.frontmatter` in the config, editable
-from its **Frontmatter rule** row. (A legacy `frontmatter_filter` key is still
-honoured, and moves into `filters.frontmatter` the next time the source is
-saved from Settings.)
-**String values use single quotes**; double quotes mark a field name with
-spaces (`"Due Date"`):
+Filter notes by their YAML frontmatter with a `[…]` predicate. The same
+expression is a source's `filters.frontmatter`, editable from its **Frontmatter
+rule** row. **String values use single quotes**; double quotes mark a field name
+with spaces (`"Due Date"`):
 
 | You type                                                | What it does                                          |
 | ------------------------------------------------------- | ----------------------------------------------------- |
 | `mitm [Course == 'Security Foundations']`               | Notes where the `Course` field equals that value.     |
-| `[Notes_Type == 'Lecture' OR Notes_Type == 'Tutorial']` | Either value (there are no list literals — use `OR`). |
+| `[Notes_Type == 'Lecture' OR Notes_Type == 'Tutorial']` | Either value (there are no list literals, use `OR`). |
 | `entropy [Course == 'ML' AND Year >= 2024]`             | Compound predicate.                                   |
 | `['urgent' in tags]`                                    | `urgent` is an element of the `tags` list.            |
 | `[NOT ('private' in tags)]`                             | Exclude a tag, **keeping notes that have no `tags:`**. |
@@ -693,13 +667,13 @@ crypto* AND wallet                                 # a wildcard required inside 
   `entropy`. Quotes only help for multi-word phrases.
 - **`OR` and `AND` are case-sensitive.** Lowercase `or` / `and` are treated
   as ordinary terms. Always uppercase boolean operators.
-- **Standalone stopwords are dropped.** `the man` searches just `man` — common
+- **Standalone stopwords are dropped.** `the man` searches just `man`; common
   words (`the`, `in`, `of`, …) are removed from unquoted queries. To match a
   phrase that includes them, quote it: `"man in the middle"`.
 - **Proximity is per-chunk.** A phrase or `{N}` query can't span a chunk
   boundary. If the terms are paragraphs apart, drop to a loose multi-term query.
 - **`*` only works at the end of a word.** Leading/infix wildcards (`*tion`,
-  `de*ce`) match almost nothing — use `crypto*` or `/regex/`.
+  `de*ce`) match almost nothing: use `crypto*` or `/regex/`.
 
 ## Contributing
 
@@ -722,7 +696,7 @@ Much gratitude if you do, but I hope you find the tool useful either way.
 
 [GNU AGPL-3.0-or-later](LICENSE) © 2026 Ben Davidson
 
-Use it, read it, modify it, run it — privately, for any purpose, with no
+Use it, read it, modify it, run it, privately, for any purpose, with no
 obligations at all. If you distribute it, or run a modified version as a network
 service, that version has to ship its source under this same licence. Put
 plainly: your use is either private, or it is open source.

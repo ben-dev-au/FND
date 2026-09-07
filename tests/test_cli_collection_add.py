@@ -115,13 +115,16 @@ def test_collection_add_appends_to_existing_collection(
     assert cw.sources[1].filters.kinds == ["pdf"]
 
 
-def test_collection_add_preserves_user_comments(
+def test_collection_add_keeps_the_notes_block(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """A write regenerates the file, so notes are where a user's own text
+    survives; anything outside is replaced by the generated documentation."""
     initial = """
+        # >>> notes: kept verbatim when fnd rewrites this file
         # I love this collection.
+        # <<< notes
         [defaults]
-        # global default
         collection = "coursework"
     """
     runner, cfg_path = _runner_with_config(monkeypatch, tmp_path, initial)
@@ -131,7 +134,7 @@ def test_collection_add_preserves_user_comments(
     assert result.exit_code == 0, result.output
     text = cfg_path.read_text(encoding="utf-8")
     assert "# I love this collection." in text
-    assert "# global default" in text
+    assert 'collection = "coursework"' in text
 
 
 def test_collection_list_counts_sources_not_roots(

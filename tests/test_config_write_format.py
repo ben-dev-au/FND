@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fnd.config import write_setting
@@ -29,28 +30,45 @@ def test_the_spacing_is_idempotent(tmp_path: Path) -> None:
     assert _write(cfg) == _write(cfg)
 
 
-def test_a_commented_out_key_stays_in_its_own_table(tmp_path: Path) -> None:
-    """A new sub-table must not be inserted above the parent's trailing
-    comments. The shipped template documents optional keys that way, and a
-    relocated one, once uncommented, lands in ``[defaults.filters]`` where it
-    is not a valid key — the whole config then fails to load."""
-    from fnd.config import load
+def test_every_commented_key_can_be_uncommented_and_still_load(tmp_path: Path) -> None:
+    """The renderer offers each unset key as a commented example, so each one
+    must sit in the table it belongs to — uncommenting it is the documented way
+    to change a setting, and a misplaced key fails the whole config."""
+    from fnd.config import load, starter_config
 
     cfg = tmp_path / "config.toml"
-    cfg.write_text(
-        "[defaults]\nresult_limit = 50\n"
-        '# tag_frontmatter_keys = ["Course"]\n\n'
-        '[[collections.a.sources]]\npath = "~/x"\n'
-    )
-    text = _write(cfg)
-    body, _, _rest = text.partition("[defaults.filters]")
-    assert "tag_frontmatter_keys" in body, "the comment was moved into the sub-table"
+    text = starter_config()
+    lines = text.splitlines()
+    checked = 0
+    key_line = re.compile(r"# ([A-Za-z_][A-Za-z0-9_]*) = .+")
+    in_example = False
+    for n, line in enumerate(lines):
+        if not line.strip():
+            in_example = False
+        elif line.startswith("# ["):
+            # A commented-out table is an example uncommented as a block.
+            in_example = True
+        if in_example or not key_line.fullmatch(line.rstrip()):
+            continue
+        body = line[2:].rstrip()
+        cfg.write_text("\n".join([*lines[:n], body, *lines[n + 1 :]]), encoding="utf-8")
+        load(cfg)  # raises if the key landed in the wrong table
+        checked += 1
+    # Derived, not a fixed floor: a renderer that stopped emitting commented
+    # examples would still clear an arbitrary number. A field defaulting to
+    # None renders as a bare `# key =`, which is not uncommentable, so only
+    # fields with a value count. `filters` is a table, not a key.
+    from fnd.config import DefaultFilters, Defaults
 
-    uncommented = text.replace(
-        '# tag_frontmatter_keys = ["Course"]', 'tag_frontmatter_keys = ["Course"]'
-    )
-    cfg.write_text(uncommented)
-    assert load(cfg).defaults.tag_frontmatter_keys == ["Course"]
+    def with_values(model: type) -> int:
+        return sum(
+            1
+            for name, info in model.model_fields.items()
+            if name != "filters" and info.get_default(call_default_factory=True) is not None
+        )
+
+    expected = with_values(Defaults) + with_values(DefaultFilters)
+    assert checked >= expected, f"only {checked} commented keys exercised, expected {expected}"
 
 
 def test_a_byte_size_is_written_with_digit_groups(tmp_path: Path) -> None:
@@ -65,20 +83,3 @@ def test_a_byte_size_is_written_with_digit_groups(tmp_path: Path) -> None:
     from fnd.config import load
 
     assert load(cfg).defaults.filters.max_size == 50_000_000
-
-
-def test_only_a_real_table_header_gets_a_blank_line(tmp_path: Path) -> None:
-    """The spacing pass rewrites the whole document, so it must not mistake a
-    value for a header — a multi-line string can contain a line that looks
-    exactly like one, and a blank inserted there changes the value."""
-    from fnd.config import _spaced_tables
-
-    quotes = '"""'
-    unchanged = [
-        "[section] not a table\nmore\n",
-        f"a = {quotes}\n[not a table]\nstill\n{quotes}\nb = 1\n",
-        "[one]\nk = 1\n\n[two]\nj = 2\n",
-    ]
-    for text in unchanged:
-        assert _spaced_tables(text) == text, text
-    assert _spaced_tables("[one]\nk = 1\n[two]\nj = 2\n") == "[one]\nk = 1\n\n[two]\nj = 2\n"

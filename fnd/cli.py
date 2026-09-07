@@ -77,7 +77,42 @@ def _rewrite_default_command(argv: list[str]) -> list[str]:
 
 def main() -> None:
     """Console-script entry point: rewrite argv, then dispatch to Typer."""
-    app(args=_rewrite_default_command(sys.argv[1:]))
+    from pydantic import ValidationError
+
+    _migrate_config()
+    try:
+        app(args=_rewrite_default_command(sys.argv[1:]))
+    except ValidationError as e:
+        # An unknown or malformed key is refused rather than ignored, so it has
+        # to be legible here: a pydantic dump is not an answer to "why will fnd
+        # not start".
+        from fnd.config import default_config_path
+
+        typer.echo(f"fnd: {default_config_path()} could not be loaded.", err=True)
+        for problem in e.errors():
+            where = ".".join(str(part) for part in problem["loc"])
+            typer.echo(f"  {where}: {problem['msg']}", err=True)
+        typer.echo("Edit it with `fnd config edit`, or check `fnd config validate`.", err=True)
+        raise SystemExit(1) from e
+
+
+def _migrate_config() -> None:
+    """Bring the config file up to the current shape once, before anything
+    reads it. A failure here must not stop the app starting — the config is
+    still loadable in its old shape, and the recovery screen handles the rest.
+    """
+    from fnd.config import ensure_current
+    from fnd.config_migrations import ConfigTooNewError
+
+    try:
+        applied = ensure_current()
+    except ConfigTooNewError as e:
+        typer.echo(f"fnd: {e}", err=True)
+        raise SystemExit(1) from e
+    except Exception:
+        return
+    for step in applied:
+        typer.echo(f"fnd: config updated, {step.lower()}", err=True)
 
 
 # ── Top-level commands ────────────────────────────────────────────────────
@@ -422,7 +457,7 @@ def search(
         typer.echo(f"invalid filter: {e.message} (col {e.column})", err=True)
         raise typer.Exit(code=1) from e
     except QuerySyntaxError as e:
-        typer.echo(e.message if not e.hint else f"{e.message} — {e.hint}", err=True)
+        typer.echo(e.message if not e.hint else f"{e.message}: {e.hint}", err=True)
         raise typer.Exit(code=1) from e
     except QueryTooLargeError as e:
         typer.echo(str(e), err=True)
@@ -490,7 +525,8 @@ def config_path() -> None:
 @config_app.command("edit")
 def config_edit() -> None:
     """Open the config TOML in $EDITOR; create from template if missing."""
-    from fnd.config import CONFIG_TEMPLATE, app_data_dir, default_config_path
+    from fnd._perms import secure_write_text
+    from fnd.config import app_data_dir, default_config_path, starter_config
 
     path = default_config_path()
     if not path.exists():
@@ -500,7 +536,7 @@ def config_edit() -> None:
             # Fallback path was returned; create primary instead.
             path = app_data_dir() / "config.toml"
             path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(CONFIG_TEMPLATE, encoding="utf-8")
+        secure_write_text(path, starter_config())
         typer.echo(f"wrote starter template to {path}")
 
     editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
@@ -566,7 +602,7 @@ def collection_list() -> None:
         set(cfg.collections) if is_all_collections(want, known=set(cfg.collections)) else {want}
     )
     if not cfg.collections:
-        typer.echo("(no collections configured — run `fnd config edit`)")
+        typer.echo("(no collections configured; run `fnd config edit`)")
         return
     for name, c in sorted(cfg.collections.items()):
         marker = " *" if name in default_names else "  "
@@ -667,7 +703,7 @@ def collection_reindex(
 
     cfg = load()
     if name is not None and collection is not None and name != collection:
-        typer.echo(f"-c: given twice — {collection!r} and {name!r}. Use one.", err=True)
+        typer.echo(f"-c: given twice, {collection!r} and {name!r}. Use one.", err=True)
         raise typer.Exit(code=2)
     raw = collection if collection is not None else name
     # A typo here used to surface as a raw KeyError traceback.
@@ -691,7 +727,7 @@ def collection_reindex(
     resolve_or_exit(issues)
     targets = scoped if scoped is not None else list(cfg.collections)
     if not targets:
-        typer.echo("no collections configured — add one with `fnd collection add`")
+        typer.echo("no collections configured; add one with `fnd collection add`")
         raise typer.Exit(1)
     if len(targets) > 1:
         typer.echo(f"indexing {len(targets)} collections: {', '.join(targets)}")
@@ -749,7 +785,7 @@ def extras_status() -> None:
 
 def _print_install_disclosure(extra) -> None:  # type: ignore[no-untyped-def]
     total_mb = sum(p.disk_mb for p in extra.packages)
-    typer.echo(f"\nInstall '{extra.name}' — {extra.description}\n")
+    typer.echo(f"\nInstall '{extra.name}': {extra.description}\n")
     typer.echo("Will install:")
     for p in extra.packages:
         typer.echo(f"  - {p.display}  (~{p.disk_mb} MB)")
@@ -773,7 +809,7 @@ def _print_install_disclosure(extra) -> None:  # type: ignore[no-untyped-def]
 def _print_uninstall_disclosure(extra) -> None:  # type: ignore[no-untyped-def]
     from fnd.extras import actual_disk_mb, installed_packages
 
-    typer.echo(f"\nUninstall '{extra.name}' — {extra.description}\n")
+    typer.echo(f"\nUninstall '{extra.name}': {extra.description}\n")
     typer.echo("Will remove:")
     for p in installed_packages(extra):
         typer.echo(f"  - {p.display}")
@@ -867,7 +903,7 @@ def extras_uninstall(
         return
     cmds = uninstall_commands(extra)
     if not cmds:
-        typer.echo(f"\n{name} is not currently installed — nothing to do.")
+        typer.echo(f"\n{name} is not currently installed; nothing to do.")
         return
     _require_uv()
     if not yes and not typer.confirm("Continue?", default=False):
@@ -995,7 +1031,7 @@ def cache_prune_orphans(
         typer.echo("No orphaned texturings.")
         return
     if not yes:
-        typer.echo(f"About to remove {n} orphaned texturing(s) — files no longer on disk.")
+        typer.echo(f"About to remove {n} orphaned texturing(s); files no longer on disk.")
         if not typer.confirm("Continue?", default=False):
             typer.echo("aborted")
             raise typer.Exit(code=1)

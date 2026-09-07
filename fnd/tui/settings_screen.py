@@ -1766,7 +1766,7 @@ def _seeded_filters(source: Any) -> dict[str, Any]:
     clearing it there actually clears it.
     """
     values: dict[str, Any] = source.filters.model_dump(exclude_none=True) if source.filters else {}
-    legacy = str(source.frontmatter_filter or "")
+    legacy = str(source.legacy_frontmatter or "")
     if legacy and not values.get("frontmatter"):
         values["frontmatter"] = legacy
     return values
@@ -1777,7 +1777,7 @@ def _source_frontmatter(source: Any) -> str:
     override = getattr(source.filters, "frontmatter", None) if source.filters else None
     if override is not None:
         return str(override)
-    return str(source.frontmatter_filter or "")
+    return str(source.legacy_frontmatter or "")
 
 
 def _merge_frontmatter(filters: dict[str, Any], text: str, default: str) -> dict[str, Any]:
