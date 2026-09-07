@@ -239,6 +239,22 @@ def test_a_source_override_records_only_what_differs() -> None:
     assert delta == {"exclude_tags": []}, delta
 
 
+def test_the_override_count_counts_settings_not_config_keys() -> None:
+    """``clears`` is one key naming any number of fields."""
+    from fnd.config import SourceConfig
+    from fnd.tui.settings_screen import (
+        _overridden_fields,
+        _seeded_filters,
+        _source_filters_or_none,
+    )
+
+    filters = _source_filters_or_none({"max_size": None, "min_size": None, "kinds": ["pdf"]})
+    seeded = _seeded_filters(SourceConfig(path="~/x", filters=filters))
+    assert len(seeded) == 2, "the two cleared bounds share one key"
+    assert _overridden_fields(seeded) == ["kinds", "max_size", "min_size"]
+    assert _overridden_fields({}) == []
+
+
 @pytest.mark.asyncio
 async def test_the_source_scan_does_not_block_the_screen(built_index: Path) -> None:
     """The picker scan opens files; on the event loop one cloud-evicted note

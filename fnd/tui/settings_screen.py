@@ -1837,6 +1837,17 @@ def _source_filters_or_none(raw: dict[str, Any] | None) -> Any:
     return SourceFilters.model_validate(cleaned) if cleaned else None
 
 
+def _overridden_fields(overrides: dict[str, Any] | None) -> list[str]:
+    """The settings a source overrides, one name each.
+
+    ``clears`` is one key naming any number of fields, so counting keys
+    reports three cleared bounds as one override.
+    """
+    names = {k for k, v in (overrides or {}).items() if k != "clears" and v is not None}
+    names.update((overrides or {}).get("clears") or ())
+    return sorted(names)
+
+
 def _includes_groups() -> list[ToggleGroup]:
     """Category → kind model for the Includes nested picker (all registry
     kinds, since a source can index any supported type)."""
@@ -2158,8 +2169,8 @@ class SourceFormScreen(Screen[None]):
         open_source_filter_browser(app, self._fields["filters"], root, self._populate_fields, globs)
 
     def _filters_summary(self) -> str:
-        overrides = self._fields.get("filters") or {}
-        return f"{len(overrides)} overridden" if overrides else "inherited"
+        count = len(_overridden_fields(self._fields.get("filters")))
+        return f"{count} overridden" if count else "inherited"
 
     def _populate_fields(self) -> None:
         self.query_one(SettingsList).set_items(self._build_field_items())
