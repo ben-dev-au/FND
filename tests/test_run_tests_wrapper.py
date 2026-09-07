@@ -68,6 +68,46 @@ def test_signal_deaths_use_the_shell_convention(
     """subprocess returns -N for a signal; sys.exit would wrap that to 256-N."""
     monkeypatch.setenv("FND_TEST_NO_LOCK", "1")
     monkeypatch.setenv("FND_TEST_WORKERS", "1")
+    # _notify writes to the tty, which pytest cannot capture.
+    monkeypatch.setattr(_WRAPPER, "_notify", lambda message: None)
     monkeypatch.setattr(_WRAPPER.subprocess, "call", lambda cmd: status)
     monkeypatch.setattr(_WRAPPER.sys, "argv", ["run_tests.py", "-q"])
     assert _WRAPPER.main() == wanted
+
+
+@pytest.mark.parametrize(
+    ("workers", "announced"),
+    [(1, "pytest: 1 worker"), (2, "pytest: 2 workers")],
+)
+def test_every_sized_run_announces_its_worker_count(
+    workers: int, announced: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Silence reads as a hang, and a serial run is the longest silence."""
+    notices: list[str] = []
+    commands: list[list[str]] = []
+
+    def _record(cmd: list[str]) -> int:
+        commands.append(cmd)
+        return 0
+
+    monkeypatch.setenv("FND_TEST_NO_LOCK", "1")
+    monkeypatch.setenv("FND_TEST_WORKERS", str(workers))
+    monkeypatch.setattr(_WRAPPER, "_notify", notices.append)
+    monkeypatch.setattr(_WRAPPER.subprocess, "call", _record)
+    monkeypatch.setattr(_WRAPPER.sys, "argv", ["run_tests.py", "-q"])
+
+    assert _WRAPPER.main() == 0
+    assert notices == [announced]
+    assert ("-n" in commands[0]) is (workers > 1)
+
+
+def test_an_explicit_worker_count_announces_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No sizing decision was made, so there is no honest number to report."""
+    notices: list[str] = []
+    monkeypatch.setenv("FND_TEST_NO_LOCK", "1")
+    monkeypatch.setattr(_WRAPPER, "_notify", notices.append)
+    monkeypatch.setattr(_WRAPPER.subprocess, "call", lambda cmd: 0)
+    monkeypatch.setattr(_WRAPPER.sys, "argv", ["run_tests.py", "-n", "2"])
+
+    assert _WRAPPER.main() == 0
+    assert notices == []
