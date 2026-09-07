@@ -548,3 +548,33 @@ class TestEnumerationOpensOnlyMarkdown:
         # Note formats only: a .txt carries frontmatter just as happily, a
         # PDF or a CSV does not and reading one finds nothing.
         assert {p.suffix for p in reads} <= {".md", ".markdown", ".txt"}, f"opened {reads}"
+
+
+class TestAFrontmatterOnlyExpression:
+    """`FilterSpec` reclassifies an expression naming only frontmatter fields
+    into `frontmatter`. The walk read the config's own value instead, so such
+    a rule was dropped by both paths and filtered nothing."""
+
+    @staticmethod
+    def _corpus(root: Path) -> None:
+        _write(root, "a.md", "---\nCourse: A\n---\nbody\n")
+        _write(root, "b.md", "---\nCourse: B\n---\nbody\n")
+        _write(root, "c.txt", "plain\n")
+
+    def test_it_filters_exactly_as_the_frontmatter_field_would(self, tmp_path: Path) -> None:
+        self._corpus(tmp_path)
+        as_expression = _names(tmp_path, defaults=DefaultFilters(expression="Course == 'A'"))
+        as_frontmatter = _names(tmp_path, defaults=DefaultFilters(frontmatter="Course == 'A'"))
+        assert as_expression == as_frontmatter
+        assert "b.md" not in as_expression, "the rule filtered nothing"
+
+    def test_a_file_without_frontmatter_still_passes(self, tmp_path: Path) -> None:
+        """Strict null would otherwise drop every PDF on a frontmatter compare."""
+        self._corpus(tmp_path)
+        assert "c.txt" in _names(tmp_path, defaults=DefaultFilters(expression="Course == 'A'"))
+
+    def test_a_file_expression_is_untouched(self, tmp_path: Path) -> None:
+        self._corpus(tmp_path)
+        got = _names(tmp_path, defaults=DefaultFilters(expression="file.name != 'b.md'"))
+        assert "b.md" not in got
+        assert "a.md" in got

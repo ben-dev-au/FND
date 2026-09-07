@@ -304,25 +304,29 @@ def walk_sources(
     for source in sources:
         assert isinstance(source, SourceConfig)
         resolved = source.effective_filters
-        gate = build_gate(
-            FilterSpec(
-                kinds=tuple(resolved.kinds),
-                include_tags=tag_selection(resolved.include_tags),
-                exclude_tags=tag_selection(resolved.exclude_tags),
-                min_size=resolved.min_size,
-                max_size=resolved.max_size,
-                created_after=resolved.created_after,
-                created_before=resolved.created_before,
-                modified_after=resolved.modified_after,
-                modified_before=resolved.modified_before,
-                expression=resolved.expression or "",
-            )
+        # Built once and then read back: `FilterSpec` reclassifies an
+        # expression naming only frontmatter fields into `frontmatter`, so
+        # reading the config's own value here dropped such a rule from both
+        # paths and it filtered nothing at all.
+        spec = FilterSpec(
+            kinds=tuple(resolved.kinds),
+            include_tags=tag_selection(resolved.include_tags),
+            exclude_tags=tag_selection(resolved.exclude_tags),
+            min_size=resolved.min_size,
+            max_size=resolved.max_size,
+            created_after=resolved.created_after,
+            created_before=resolved.created_before,
+            modified_after=resolved.modified_after,
+            modified_before=resolved.modified_before,
+            expression=resolved.expression or "",
+            frontmatter=resolved.frontmatter or "",
         )
+        gate = build_gate(spec)
         # Scoped to note kinds: strict null would otherwise fail a frontmatter
         # comparison on every PDF and drop the lot.
         scoped = [
             rule_from_text(text, needs_frontmatter=True)
-            for text in (source.legacy_frontmatter, resolved.frontmatter)
+            for text in (source.legacy_frontmatter, spec.frontmatter)
             if text
         ]
         # One gate, not a second `all(...)` beside it: the walk reimplementing
