@@ -137,6 +137,23 @@ class FilterSpec:
 
         return tag_selection(self.exclude_tags)
 
+    def impossible_bounds(self) -> tuple[str, ...]:
+        """Pairs that cannot both hold, so the set matches nothing.
+
+        Decidable without touching a corpus, and worth saying: contradictory
+        bounds are accepted everywhere and index nothing, silently.
+        """
+        pairs = (
+            ("size", self.min_size, self.max_size, "smallest is above largest"),
+            ("created", self.created_after, self.created_before, "starts after it ends"),
+            ("modified", self.modified_after, self.modified_before, "starts after it ends"),
+        )
+        return tuple(
+            f"{name}: {why}"
+            for name, low, high, why in pairs
+            if low is not None and high is not None and low > high  # type: ignore[operator]
+        )
+
     def __post_init__(self) -> None:
         # Tags are a set per source: order carries no meaning, and the
         # dimensions render them sorted, so an unsorted spec would not survive

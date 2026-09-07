@@ -541,3 +541,32 @@ class TestATypedAndStaysAnAnd:
 
         back = parse("NOT ('a' in file.tags.all) AND NOT ('b' in file.tags.all)")
         assert set(back.exclude_tags["os"]) == {"a", "b"}
+
+
+class TestBoundsThatCannotBothHold:
+    """Contradictory bounds are accepted everywhere and index nothing,
+    silently. They are decidable without touching a corpus."""
+
+    def test_a_size_range_the_wrong_way_round_is_named(self) -> None:
+        from fnd.filters import FilterSpec
+
+        assert FilterSpec(min_size=5000, max_size=100).impossible_bounds() == (
+            "size: smallest is above largest",
+        )
+
+    def test_a_backwards_date_range_is_named(self) -> None:
+        from fnd.filters import FilterSpec
+
+        spec = FilterSpec(created_after=dt.date(2026, 6, 1), created_before=dt.date(2026, 1, 1))
+        assert spec.impossible_bounds() == ("created: starts after it ends",)
+
+    def test_a_workable_range_is_not_flagged(self) -> None:
+        from fnd.filters import FilterSpec
+
+        assert FilterSpec(min_size=100, max_size=5000).impossible_bounds() == ()
+        assert FilterSpec().impossible_bounds() == ()
+
+    def test_it_really_does_index_nothing(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("x" * 500)
+        walked = _walked(tmp_path, DefaultFilters(), SourceFilters(min_size=5000, max_size=100))
+        assert walked == set(), "the premise of the warning"

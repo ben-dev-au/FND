@@ -5485,6 +5485,9 @@ class FilterBrowserScreen(Screen[None]):
             head.append("restricted to paths: " + ", ".join(self._globs))
         if self._excludes:
             head.append("skipping paths: " + ", ".join(self._excludes))
+        for clash in self._spec.impossible_bounds():
+            # Decidable without a corpus, and the outcome is an empty index.
+            head.append(f"nothing can match — {clash}")
         if self._save_note:
             head.append(self._save_note)
         if self._scanning:

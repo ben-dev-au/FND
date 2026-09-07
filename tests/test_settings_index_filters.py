@@ -1165,3 +1165,26 @@ def test_a_bound_no_picker_holds_is_still_visible() -> None:
     spec = FilterSpec(created_before=dt.date(2026, 1, 1))
     beyond = next(b for b in spec_branches(spec) if b.id == "beyond")
     assert [label for _i, label in beyond.items] == ["Created before 2026-01-01"]
+
+
+@pytest.mark.asyncio
+async def test_the_summary_says_when_nothing_can_match(built_index: Path) -> None:
+    """A contradictory pair indexes nothing and said nothing about it."""
+    from fnd.filters import FilterSpec
+    from fnd.tui.settings_screen import FilterBrowserScreen
+
+    app = FNDApp(index_dir=built_index)
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(min_size=5000, max_size=100),
+                gitignore=True,
+                fndignore=True,
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(15):
+            await pilot.pause()
+        assert "nothing can match" in _summary_text(app.screen)
