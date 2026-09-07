@@ -277,3 +277,44 @@ async def test_root_has_open_config_file_row(built_index: Path) -> None:
         lst = screen.query_one(SettingsList)
         labels = [item.label for item in lst._items]
         assert "Config file" in labels
+
+
+class TestSourceRowsCanBeToldApart:
+    """A basename alone left two rows both reading `notes`, with the column
+    spare to say which."""
+
+    def test_colliding_names_gain_a_parent(self) -> None:
+        from fnd.tui.menu import _source_labels
+
+        assert _source_labels(["/a/notes", "/b/notes"]) == ["a/notes", "b/notes"]
+
+    def test_it_keeps_going_past_a_shared_middle_segment(self) -> None:
+        """Stopping when one step did not help gave up one short of the
+        segment that separates."""
+        from fnd.tui.menu import _source_labels
+
+        assert _source_labels(["/x/uni/2026/notes", "/x/work/2026/notes"]) == [
+            "uni/2026/notes",
+            "work/2026/notes",
+        ]
+
+    def test_a_lone_source_stays_short(self) -> None:
+        from fnd.tui.menu import _source_labels
+
+        assert _source_labels(["/a/notes"]) == ["notes"]
+
+    def test_two_rows_for_one_path_do_not_grow_forever(self) -> None:
+        from fnd.tui.menu import _source_labels
+
+        labels = _source_labels(["/a/notes", "/a/notes"])
+        assert labels == ["a/notes", "a/notes"]
+        assert not any(label.startswith("/") for label in labels)
+
+    def test_only_the_colliding_rows_grow(self) -> None:
+        from fnd.tui.menu import _source_labels
+
+        assert _source_labels(["/a/notes", "/b/notes", "/c/other"]) == [
+            "a/notes",
+            "b/notes",
+            "c/other",
+        ]

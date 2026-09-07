@@ -1661,6 +1661,34 @@ def _make_open_clone_source(name: str) -> Callable[[FNDApp], None]:
     return _open
 
 
+def _source_labels(paths: list[str]) -> list[str]:
+    """Names that tell the sources apart.
+
+    A basename alone left two rows both reading `notes`, with the column
+    spare to say which. Where basenames collide, enough trailing segments are
+    added to separate them.
+    """
+    from pathlib import Path
+
+    parts = [Path(p).parts for p in paths]
+
+    def at(depth: int) -> list[str]:
+        return ["/".join(p[-depth:]).lstrip("/") or paths[i] for i, p in enumerate(parts)]
+
+    labels = at(1)
+    depth = 1
+    while len(set(labels)) < len(labels) and depth < 6:
+        deeper = at(depth + 1)
+        # Stop only when a deeper label says nothing new — two rows for the
+        # same path can never be separated. Stopping merely because THIS step
+        # did not help gave up at a shared middle segment, one short of the
+        # one that separates.
+        if deeper == labels:
+            break
+        labels, depth = deeper, depth + 1
+    return labels
+
+
 def _provider_sources(app: FNDApp, name: str) -> tuple[MenuItem, ...]:
     """Per-collection Sources list."""
     cfg = app._config  # type: ignore[attr-defined]
@@ -1691,12 +1719,13 @@ def _provider_sources(app: FNDApp, name: str) -> tuple[MenuItem, ...]:
         ),
     ]
     col = cfg.collections[name]
+    labels = _source_labels([str(s.path) if s.path else "(no path)" for s in col.sources])
     for i, src in enumerate(col.sources):
         path_display = str(src.path) if src.path else "(no path)"
         items.append(
             MenuItem(
                 id=f"sources.{name}.{i}",
-                label=f"{i + 1}. {Path(path_display).name or path_display}",
+                label=f"{i + 1}. {labels[i]}",
                 description=path_display,
                 kind=KIND_EXTERNAL,
                 external=_make_open_source_form(name, i),
