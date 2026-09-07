@@ -133,14 +133,21 @@ def index(
 ) -> None:
     """Index documents under ROOT (ad-hoc, single-root). For configured
     collections use ``fnd collection reindex <name>``."""
-    from fnd.config import load
-    from fnd.index import build_index
+    from fnd.config import CollectionConfig, SourceConfig, load, resolve_filters
+    from fnd.index import build_index_from_config
 
-    defaults = load().defaults
-    written = build_index(
-        roots=[root],
-        index_dir=default_index_dir(),
+    config = load()
+    defaults = config.defaults
+    # Through the configured path, not the raw walk: ad-hoc means "no
+    # collection needed", not "ignore the filters you set". Skipping them let
+    # `fnd index` admit files that `collection reindex` excludes — a file
+    # tagged never-index among them.
+    source = SourceConfig(path=root)
+    source._resolved_filters = resolve_filters(source.filters, defaults.filters)
+    written = build_index_from_config(
+        config=CollectionConfig(sources=[source]),
         collection=collection,
+        index_dir=default_index_dir(),
         tag_sources=tuple(defaults.tag_sources),
         tag_frontmatter_keys=tuple(defaults.tag_frontmatter_keys),
     )

@@ -175,3 +175,48 @@ class TestTwoFiltersNarrow:
             "note.md",
             "app.js",
         }
+
+
+class TestAdHocIndexHonoursTheDefaults:
+    """`fnd index <root>` walked ungated while `collection reindex` applied
+    `defaults.filters`, so the two commands indexed different file sets — a
+    file the configured path excludes could be admitted by the ad-hoc one."""
+
+    @staticmethod
+    def _corpus(root: Path) -> None:
+        root.mkdir()
+        (root / "a.md").write_text("hello\n")
+        (root / "b.txt").write_text("hello\n")
+        (root / "c.py").write_text("hello\n")
+
+    def test_it_applies_the_default_kinds(self, tmp_path: Path, monkeypatch) -> None:
+        from fnd.config import CollectionConfig, DefaultFilters, SourceConfig, resolve_filters
+        from fnd.index import build_index_from_config
+        from fnd.query import Searcher
+
+        src = tmp_path / "src"
+        self._corpus(src)
+        defaults = DefaultFilters(kinds=["md"])
+
+        gated = tmp_path / "gated"
+        gated.mkdir()
+        source = SourceConfig(path=src)
+        source._resolved_filters = resolve_filters(source.filters, defaults)
+        build_index_from_config(
+            config=CollectionConfig(sources=[source]), collection="c", index_dir=gated
+        )
+        kept = {Path(h.path).name for h in Searcher(index_dir=gated).search("hello", limit=50)}
+        assert kept == {"a.md"}, kept
+
+    def test_the_ungated_walk_would_have_taken_everything(self, tmp_path: Path) -> None:
+        """The negative control: what the ad-hoc command used to call."""
+        from fnd.index import build_index
+        from fnd.query import Searcher
+
+        src = tmp_path / "src"
+        self._corpus(src)
+        raw = tmp_path / "raw"
+        raw.mkdir()
+        build_index(roots=[src], index_dir=raw, collection="c")
+        kept = {Path(h.path).name for h in Searcher(index_dir=raw).search("hello", limit=50)}
+        assert kept == {"a.md", "b.txt", "c.py"}, kept
