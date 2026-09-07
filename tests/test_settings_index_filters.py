@@ -1210,7 +1210,9 @@ async def test_a_text_editor_advertises_only_keys_that_work(built_index: Path) -
         painted = screen.query_one("#footer_hints", Static).render_line(0).text
         for dead in ("Search", "Menu", "Keys", "Quit"):
             assert dead not in painted, f"{dead} is advertised but types into the box: {painted}"
-        assert "Save" in painted
+        # The commit key, whatever it is called: this editor applies rather
+        # than saves, since it hands back to the browser.
+        assert "^S" in painted
         assert "Cancel" in painted
 
         for key in ("slash", "colon", "question_mark", "q"):
@@ -1706,3 +1708,22 @@ class TestTheCollectionsTitleCountsWhatIsSearched:
         """The negative control: counting only ● for three partial ones."""
         panel = self._panel({"a": "◐", "b": "◐", "c": "◐"})
         assert sum(1 for n in "abc" if panel.collection_marker(n) == "●") == 0
+
+
+def test_only_a_screen_that_writes_says_save() -> None:
+    """Four nested screens said "Save" and one of them saved. The rule now:
+    "Apply" hands the value up, "Save" reaches disk."""
+    import inspect
+    import re
+
+    from fnd.tui import settings_screen as module
+
+    staging = ("FilterTextScreen", "RuleTextScreen")
+    for name in staging:
+        source = inspect.getsource(getattr(module, name))
+        labels = dict(re.findall(r'\("(\^S|Ctrl\+S)",\s*"([^"]+)"\)', source))
+        assert labels, f"{name} names no commit key"
+        assert set(labels.values()) == {"Apply"}, f"{name} says {labels}, but it never writes"
+
+    writes = inspect.getsource(module.SourceFormScreen)
+    assert '("Ctrl+S", "Save")' in writes, "the screen that does write still says Save"

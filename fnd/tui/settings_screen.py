@@ -5112,7 +5112,9 @@ class FilterTextScreen(Screen[None]):
         self.query_one("#filter_text", TextArea).focus()
         self._refresh_status()
         self.query_one("#footer_hints", Static).update(
-            _editor_hint_bar((("^S", "Save"), ("Esc", "Cancel")))
+            # Applies, never saves: both editors hand back to the filter
+            # browser, which decides whether anything reaches disk.
+            _editor_hint_bar((("^S", "Apply"), ("Esc", "Cancel")))
         )
 
     @on(TextArea.Changed, "#filter_text")
@@ -5328,7 +5330,9 @@ class RuleTextScreen(Screen[None]):
         self.query_one("#rule_text", TextArea).focus()
         self._refresh_status()
         self.query_one("#footer_hints", Static).update(
-            _editor_hint_bar((("^S", "Save"), ("Esc", "Cancel")))
+            # Applies, never saves: both editors hand back to the filter
+            # browser, which decides whether anything reaches disk.
+            _editor_hint_bar((("^S", "Apply"), ("Esc", "Cancel")))
         )
 
     @on(TextArea.Changed, "#rule_text")
