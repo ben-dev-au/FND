@@ -2160,10 +2160,14 @@ def _open_filter_browser(app: FNDApp) -> None:
 
 
 def _sample_first_source(app: FNDApp) -> Any:
-    """Values seen in the configured sources, for the pickers to offer.
+    """Tag values seen in the configured sources, for the picker to offer.
 
     Bounded: a picker wants suggestions, not an inventory, and a cloud-backed
-    folder must not stall the screen opening.
+    folder must not stall the screen opening. Kinds are deliberately NOT
+    sampled here — these are the defaults for every collection, and the scan
+    reaches only the first few, so offering the types it happened to see made
+    file-type groups vanish from this screen as collections were added. Tags
+    have no registry to fall back on, so they stay sampled.
     """
     from pathlib import Path
 
@@ -2181,8 +2185,6 @@ def _sample_first_source(app: FNDApp) -> Any:
             part = sample_source(root, budget_s=0.6)
             merged.files_seen += part.files_seen
             merged.truncated = merged.truncated or part.truncated
-            for kind, n in part.kinds.items():
-                merged.kinds[kind] = merged.kinds.get(kind, 0) + n
             for src, values in part.tags.items():
                 bucket = merged.tags.setdefault(src, {})
                 for value, n in values.items():

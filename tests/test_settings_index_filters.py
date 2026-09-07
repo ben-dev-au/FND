@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -1727,3 +1728,44 @@ def test_only_a_screen_that_writes_says_save() -> None:
 
     writes = inspect.getsource(module.SourceFormScreen)
     assert '("Ctrl+S", "Save")' in writes, "the screen that does write still says Save"
+
+
+class TestTheDefaultsScreenOffersEveryType:
+    """It sampled the first few collections for kinds, so file-type groups
+    vanished from it as collections were added — while the defaults it edits
+    apply to every collection, including the ones never scanned."""
+
+    def test_the_sample_carries_tags_but_not_kinds(self, tmp_path: Path) -> None:
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.menu import _sample_first_source
+
+        source = tmp_path / "src"
+        source.mkdir()
+        (source / "a.md").write_text("---\ntags: [alpha]\n---\nx\n")
+        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path=source)])})
+        app = SimpleNamespace(_config=config)
+        sample = _sample_first_source(cast("Any", app))
+        assert sample.kinds == {}, "kinds must not come from a partial scan here"
+        assert sample.tags, "tags have no registry, so they stay sampled"
+
+    def test_every_registry_kind_is_offered(self) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.filters.scan import SourceSample
+        from fnd.filters.tree_model import spec_branches
+        from fnd.kinds import ALL_KIND_IDS
+
+        sample = SourceSample(kinds={}, tags={"os": {"x": 1}})
+        kinds = next(b for b in spec_branches(FilterSpec(), sample) if b.id == "kinds")
+        offered = {i.removeprefix("kind:") for g in kinds.groups for i, _l in g.items}
+        assert offered == set(ALL_KIND_IDS)
+
+    def test_a_sampled_screen_still_narrows(self) -> None:
+        """The per-source screen keeps its short, relevant list."""
+        from fnd.filters import FilterSpec
+        from fnd.filters.scan import SourceSample
+        from fnd.filters.tree_model import spec_branches
+
+        sample = SourceSample(kinds={"md": 3}, tags={})
+        kinds = next(b for b in spec_branches(FilterSpec(), sample) if b.id == "kinds")
+        offered = {i.removeprefix("kind:") for g in kinds.groups for i, _l in g.items}
+        assert offered == {"md"}
