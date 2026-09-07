@@ -590,3 +590,35 @@ def test_a_long_path_row_marks_what_it_dropped() -> None:
     assert len(rendered) <= 60, rendered
     assert rendered.rstrip().endswith("Cloud"), "the leaf tells two sources apart"
     assert "…" in rendered
+
+
+@pytest.mark.asyncio
+async def test_the_sample_tester_appears_only_with_a_rule_to_test(built_index: Path) -> None:
+    """It cost a third of the form on every source, and named a rule that
+    lives two screens away without saying which."""
+    from textual.widgets import Static
+
+    from fnd.config import CollectionConfig, Config, SourceConfig, SourceFilters
+    from fnd.tui.settings_screen import SourceFormScreen
+
+    def _config(rule: str | None) -> Config:
+        filters = SourceFilters(frontmatter=rule) if rule else None
+        return Config(
+            collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x", filters=filters)])}
+        )
+
+    async def _separator(rule: str | None) -> tuple[bool, str]:
+        app = FNDApp(index_dir=built_index, config=_config(rule))
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+            for _ in range(20):
+                await pilot.pause()
+            sep = app.screen.query_one("#form_sample_sep", Static)
+            return sep.display, str(sep.render())
+
+    shown, _text = await _separator(None)
+    assert not shown, "nothing to test without a rule"
+    shown, text = await _separator("status == 'done'")
+    assert shown
+    assert "status == 'done'" in text, text

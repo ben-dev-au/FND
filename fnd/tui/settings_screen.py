@@ -2077,10 +2077,7 @@ class SourceFormScreen(Screen[None]):
         with Vertical(id="settings_box") as box:
             box.border_title = title
             yield SettingsList()
-            yield Static(
-                "─── Test filter against sample frontmatter ─────────────",
-                classes="form_separator",
-            )
+            yield Static("", id="form_sample_sep", classes="form_separator")
             yield TextArea("", id="frontmatter_sample")
             yield Static("(no sample)", id="match_status")
             yield Static("", id="form_error", classes="-hidden")
@@ -2201,6 +2198,27 @@ class SourceFormScreen(Screen[None]):
 
     def _populate_fields(self) -> None:
         self.query_one(SettingsList).set_items(self._build_field_items())
+        self._refresh_sample_tester()
+
+    def _refresh_sample_tester(self) -> None:
+        """The tester only appears once there is a rule for it to test.
+
+        It cost a third of the form on every source, and named a rule that
+        lives two screens away without saying which.
+        """
+        rule, inherited = self._effective_frontmatter()
+        for wid in ("#form_sample_sep", "#frontmatter_sample", "#match_status"):
+            self.query_one(wid).display = bool(rule)
+        if not rule:
+            return
+        source = " (inherited)" if inherited else ""
+        shown = sanitise_display_text(rule)
+        width = max(20, self.size.width - 12)
+        if len(shown) > width:
+            shown = shown[: width - 1] + "…"
+        self.query_one("#form_sample_sep", Static).update(
+            f"─── Paste frontmatter to test:  {shown}{source} ───"
+        )
 
     def _build_field_items(self) -> list[MenuItem]:
         from fnd.config import EXCLUDES_PRESETS
