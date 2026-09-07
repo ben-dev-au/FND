@@ -77,8 +77,23 @@ def _rewrite_default_command(argv: list[str]) -> list[str]:
 
 def main() -> None:
     """Console-script entry point: rewrite argv, then dispatch to Typer."""
+    from pydantic import ValidationError
+
     _migrate_config()
-    app(args=_rewrite_default_command(sys.argv[1:]))
+    try:
+        app(args=_rewrite_default_command(sys.argv[1:]))
+    except ValidationError as e:
+        # An unknown or malformed key is refused rather than ignored, so it has
+        # to be legible here: a pydantic dump is not an answer to "why will fnd
+        # not start".
+        from fnd.config import default_config_path
+
+        typer.echo(f"fnd: {default_config_path()} could not be loaded.", err=True)
+        for problem in e.errors():
+            where = ".".join(str(part) for part in problem["loc"])
+            typer.echo(f"  {where}: {problem['msg']}", err=True)
+        typer.echo("Edit it with `fnd config edit`, or check `fnd config validate`.", err=True)
+        raise SystemExit(1) from e
 
 
 def _migrate_config() -> None:

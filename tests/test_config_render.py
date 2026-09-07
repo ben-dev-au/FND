@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import inspect
+import os
 import tomllib
 from collections.abc import Callable
 from pathlib import Path
@@ -483,6 +484,33 @@ class TestUnknownKeysFailLoudly:
         path = tmp_path / "config.toml"
         path.write_text(conf.starter_config(), encoding="utf-8")
         conf.load(path)
+
+
+class TestABadConfigIsLegible:
+    """Refusing an unknown key is only an improvement if the refusal reads."""
+
+    def test_the_cli_names_the_key_instead_of_dumping_a_validation_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        import sys
+
+        home = tmp_path / "data"
+        (home / "fnd").mkdir(parents=True)
+        (home / "fnd" / "config.toml").write_text(
+            "[defaults]\nresult_limitt = 5\n", encoding="utf-8"
+        )
+        result = subprocess.run(
+            [sys.executable, "-m", "fnd", "search", "x"],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "XDG_DATA_HOME": str(home), "PYTHONPATH": str(Path.cwd())},
+            timeout=120,
+        )
+        assert result.returncode == 1
+        assert "could not be loaded" in result.stderr
+        assert "defaults.result_limitt" in result.stderr
+        assert "Traceback" not in result.stderr
 
 
 class TestMigration:
