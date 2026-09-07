@@ -85,6 +85,29 @@ def _wizard_hints(screen: Any, app: Any) -> Any:
     return _editor_hint_bar(hints) if _typing_in(screen) else _hint_bar(app, hints)
 
 
+def _commit_then(screen: Any, resume: Callable[[], None]) -> bool:
+    """Land an open edit before saving, and say whether the caller should wait.
+
+    The commit travels as a message, so the value is not in `_fields` until
+    the next refresh. If it is rejected the bar stays open showing why, and
+    the save does not happen.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        bar = screen.query_one(EditBar)
+        if bar.is_open:
+            bar.commit_pending()
+
+            def _resume() -> None:
+                if not screen.query_one(EditBar).is_open:
+                    resume()
+
+            screen.call_after_refresh(_resume)
+            return True
+    return False
+
+
 def _typing_in(screen: Any) -> bool:
     """Whether a text box on ``screen`` has focus, so the anchors are inert.
 
@@ -797,6 +820,21 @@ class EditBar(Horizontal):
             self.show_error(f"invalid: {e}")
             return
         self.post_message(self.EditCommitted(self._item, value))
+
+    @property
+    def is_open(self) -> bool:
+        return "-hidden" not in self.classes
+
+    def commit_pending(self) -> None:
+        """Submit what is typed, as Enter would.
+
+        `^S` bypassed the open bar entirely, so a value the user had just
+        typed was dropped without a word while the form saved without it.
+        """
+        if self._item is None or not self.is_open:
+            return
+        field = self.query_one("#editor_input", Input)
+        self._on_submit(Input.Submitted(field, field.value))
 
     def on_key(self, ev: events.Key) -> None:
         if ev.key == "escape":
@@ -2800,6 +2838,10 @@ class SourceFormScreen(Screen[None]):
         )
 
     def action_save_close(self) -> None:
+        # An open edit bar holds a value the user has typed but not submitted;
+        # saving over the top of it dropped that value silently.
+        if _commit_then(self, self.action_save_close):
+            return
         from pathlib import Path
 
         from fnd.config import (
@@ -3300,6 +3342,10 @@ class AddCollectionWizard(Screen[None]):
         self.app.pop_screen()
 
     def action_save_close(self) -> None:
+        # An open edit bar holds a value the user has typed but not submitted;
+        # saving over the top of it dropped that value silently.
+        if _commit_then(self, self.action_save_close):
+            return
         from pathlib import Path
 
         from fnd.config import (

@@ -1564,3 +1564,60 @@ class TestNothingIsThrownAwayInSilence:
             screen.action_back()
             await pilot.pause()
             assert said, "typed text was discarded in silence"
+
+
+class TestSavingLandsAnOpenEdit:
+    """`^S` bypassed an open edit bar entirely, so a value the user had just
+    typed was dropped without a word while the form saved without it."""
+
+    @pytest.mark.asyncio
+    async def test_the_typed_value_is_committed(self, built_index: Path) -> None:
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.settings_screen import SettingsList, SourceFormScreen
+
+        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        app = FNDApp(index_dir=built_index, config=config)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+            for _ in range(20):
+                await pilot.pause()
+            form = app.screen
+            rows = form.query_one(SettingsList)
+            rows.cursor_index = next(
+                i for i, it in enumerate(rows._items) if it.id == "form.includes_custom"
+            )
+            await pilot.press("enter")
+            for _ in range(8):
+                await pilot.pause()
+            for char in "notes":
+                await pilot.press(char)
+            await pilot.pause()
+            assert form._fields["includes_custom"] == "", "the premise: not committed yet"
+            await pilot.press("ctrl+s")
+            for _ in range(14):
+                await pilot.pause()
+            assert form._fields["includes_custom"] == "notes"
+
+    @pytest.mark.asyncio
+    async def test_a_rejected_value_neither_saves_nor_loops(self, built_index: Path) -> None:
+        """The bar stays open showing why, and the save does not happen."""
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.settings_screen import EditBar, SourceFormScreen, _commit_then
+
+        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        app = FNDApp(index_dir=built_index, config=config)
+        async with app.run_test(size=(100, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+            for _ in range(20):
+                await pilot.pause()
+            form = app.screen
+            bar = form.query_one(EditBar)
+            bar.remove_class("-hidden")  # an open bar that will not close
+            calls: list[int] = []
+            waited = _commit_then(form, lambda: calls.append(1))
+            assert waited, "an open bar must make the caller wait"
+            for _ in range(10):
+                await pilot.pause()
+            assert calls == [], "the save must not run while the bar is still open"
