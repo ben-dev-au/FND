@@ -212,3 +212,24 @@ class TestIncludeTags:
         spec = parse("'a' in file.tags.all OR file.size > 10")
         assert spec.include_tags == {}
         assert "file.size" in spec.expression
+
+
+class TestAConjunctiveRuleSurvives:
+    """Two recognised clauses are two conjuncts of one rule. Assigning kept
+    only the last, so opening the text editor and saving a real rule dropped
+    half of it and widened the source."""
+
+    @pytest.mark.parametrize(
+        "rule",
+        [
+            "Course == 'A'",
+            "Course == 'A' AND NOT ('private' in tags)",
+            "Course == 'A' AND Status == 'done' AND NOT ('private' in tags)",
+            "(Course == 'A' OR Course == 'B') AND NOT ('private' in tags)",
+            "NOT ('private' in tags)",
+        ],
+    )
+    def test_a_frontmatter_rule_round_trips_whole(self, rule: str) -> None:
+        from fnd.filters import FilterSpec, text_form
+
+        assert text_form.parse(text_form.render(FilterSpec(frontmatter=rule))).frontmatter == rule

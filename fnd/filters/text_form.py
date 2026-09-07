@@ -247,6 +247,12 @@ def parse(text: str) -> FilterSpec:
             )
         elif name == "exclude_tags":
             tags = _merge_tags(tags, value)  # type: ignore[arg-type]
+        elif name in ("frontmatter", "expression"):
+            # These carry arbitrary text, so two recognised clauses are two
+            # conjuncts of one rule. Assigning kept only the last: a rule of
+            # `Course == 'X' AND NOT ('private' in tags)` came back as the
+            # tag half alone, widening the source to the whole vault.
+            updates[name] = _and_join(updates.get(name), value)  # type: ignore[arg-type]
         else:
             updates[name] = value
     if tags:
@@ -256,6 +262,29 @@ def parse(text: str) -> FilterSpec:
         if len(leftover) > 1:
             updates["raw"] = tuple(leftover[1:])
     return replace(FilterSpec(), **updates)  # type: ignore[arg-type]
+
+
+def _wrapped(text: str) -> bool:
+    """Whether ``text`` is already one bracketed group."""
+    if not text.startswith("(") or not text.endswith(")"):
+        return False
+    depth = 0
+    for index, ch in enumerate(text):
+        depth += (ch == "(") - (ch == ")")
+        if depth == 0:
+            return index == len(text) - 1
+    return False
+
+
+def _bracket(text: str) -> str:
+    """An OR binds looser than the AND we are about to add, so it needs the
+    brackets; anything already bracketed does not need a second pair."""
+    return text if _wrapped(text) or " OR " not in text else f"({text})"
+
+
+def _and_join(existing: str | None, addition: str) -> str:
+    """Two recognised clauses are two conjuncts of one rule."""
+    return _bracket(addition) if not existing else f"{_bracket(existing)} AND {_bracket(addition)}"
 
 
 def parse_or_error(text: str) -> tuple[FilterSpec | None, FilterError | None]:

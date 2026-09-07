@@ -87,9 +87,10 @@ def test_save_is_atomic(tmp_path: Path) -> None:
     intermediate ``.tmp`` file is gone after a successful write."""
     p = tmp_path / "scope.toml"
     save(UiState(collections=["a"]), p)
-    tmp_marker = p.with_suffix(p.suffix + ".tmp")
     assert p.exists()
-    assert not tmp_marker.exists()
+    # Any sibling: the temp name carries a pid and a counter, so asserting one
+    # spelling of `.tmp` held however the write behaved.
+    assert [f.name for f in tmp_path.iterdir()] == [p.name]
 
 
 def test_load_unreadable_file_returns_empty(tmp_path: Path) -> None:

@@ -43,6 +43,7 @@ from textual.widget import Widget
 from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
+from fnd.display_text import sanitise_display_text
 from fnd.tui.menu import (
     KIND_ACTION,
     KIND_DISPLAY,
@@ -231,8 +232,14 @@ def _render_row(
     # the row width. Without this the action label (`[ Clear… ]`,
     # `[ Rebuild ]`, etc.) clips at the right border, hiding the
     # primary signal of "what Enter does."
-    pending_segments = _trailing_segments(item, app) if not breadcrumb else []
-    label_to_render = item.label
+    # Sanitised here rather than at the inputs: a path, a filter expression or
+    # a tag can also arrive from a hand-edited config, and a tab measures zero
+    # cells, so one would shear the row it is painted into.
+    pending_segments = [
+        (sanitise_display_text(seg), style)
+        for seg, style in (_trailing_segments(item, app) if not breadcrumb else [])
+    ]
+    label_to_render = sanitise_display_text(item.label)
     if width is not None and pending_segments:
         affordance_len = sum(
             len(seg_text) for seg_text, seg_style in pending_segments if "dim" not in seg_style
@@ -421,7 +428,7 @@ def _render_header(item: MenuItem, width: int | None) -> Text:
     Accent colour throughout (rule + label). The rule fills the row to
     the same right edge content rows reach so the buffer between text
     and the bordered subsection's right edge stays consistent."""
-    label_part = f" {item.label} "
+    label_part = f" {sanitise_display_text(item.label)} "
     if width is not None:
         # `used` already includes the leading ─; tail should just fill
         # whatever budget remains. The previous `- 1` over-subtracted
@@ -1780,14 +1787,19 @@ def _source_frontmatter(source: Any) -> str:
     return str(source.legacy_frontmatter or "")
 
 
-def _merge_frontmatter(filters: dict[str, Any], text: str, default: str) -> dict[str, Any]:
+def _merge_frontmatter(
+    filters: dict[str, Any], text: str, default: str, *, had_override: bool = True
+) -> dict[str, Any]:
     """Fold the rule into ``filters``, keeping "same as the default" unset.
 
-    An empty rule where the default has one is a real override, not an absence
-    — dropping the key there would silently reinstate the inherited rule.
+    Emptying a rule the source owned is a real override to nothing, and
+    dropping the key there would reinstate the inherited rule. A source that
+    never had one renders the same empty field, so without ``had_override``
+    opening the form and saving unchanged converted "inherit" into "no rule"
+    and, because nothing else differed, fired no reindex to reveal it.
     """
     value = text.strip()
-    if value == default.strip():
+    if value == default.strip() or (not value and not had_override):
         filters.pop("frontmatter", None)
     else:
         filters["frontmatter"] = value
@@ -1801,9 +1813,16 @@ def _source_filters_or_none(raw: dict[str, Any] | None) -> Any:
     nothing — the row's ``-`` — so dropping it here would silently reinstate
     the global value the user was overriding.
     """
-    from fnd.config import SourceFilters
+    from fnd.config import DefaultFilters, SourceFilters
 
-    cleaned = {k: v for k, v in (raw or {}).items() if v is not None}
+    items = raw or {}
+    cleaned = {k: v for k, v in items.items() if v is not None}
+    # A scalar set to None is the user choosing "no limit here" over an
+    # inherited one. Dropping it made that choice indistinguishable from
+    # never having made it, so it silently reverted on the next open.
+    cleared = sorted(k for k, v in items.items() if v is None and k in DefaultFilters.model_fields)
+    if cleared:
+        cleaned["clears"] = cleared
     return SourceFilters.model_validate(cleaned) if cleaned else None
 
 
@@ -1941,6 +1960,9 @@ class SourceFormScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
+        # `q` reaches the app's quit otherwise, and unsaved edits die with
+        # it. On a screen that edits something, `q` leaves the screen.
+        Binding("q", "back", "Back", show=False),
         Binding("tab", "cycle_focus(1)", show=False),
         Binding("shift+tab", "cycle_focus(-1)", show=False),
         Binding("ctrl+s", "save_close", show=False),
@@ -2081,6 +2103,18 @@ class SourceFormScreen(Screen[None]):
         """
         return str(self._fields["filters"].get("frontmatter") or "")
 
+    def _effective_frontmatter(self) -> tuple[str, bool]:
+        """The rule that actually applies, and whether it came from the
+        defaults. A source with no override of its own still has files dropped
+        by `[defaults.filters].frontmatter`, and testing a sample against
+        nothing told the user the opposite."""
+        own = self._frontmatter_text().strip()
+        if own:
+            return own, False
+        cfg = getattr(self.app, "_config", None)
+        inherited = getattr(getattr(cfg, "defaults", None), "filters", None)
+        return str(getattr(inherited, "frontmatter", None) or "").strip(), True
+
     def _frontmatter_into_filters(self, text: str) -> dict[str, Any]:
         """The frontmatter rule as part of this source's filter overrides.
 
@@ -2088,7 +2122,10 @@ class SourceFormScreen(Screen[None]):
         disagree about the same rule and neither showed the other's value.
         """
         return _merge_frontmatter(
-            dict(self._fields["filters"]), text, _default_frontmatter(self.app)
+            dict(self._fields["filters"]),
+            text,
+            _default_frontmatter(self.app),
+            had_override=self._fields["filters"].get("frontmatter") is not None,
         )
 
     def _open_filters(self) -> None:
@@ -2372,7 +2409,7 @@ class SourceFormScreen(Screen[None]):
 
     def _refresh_match_status(self) -> None:
         sample = self.query_one("#frontmatter_sample", TextArea).text
-        filter_text = self._frontmatter_text().strip()
+        filter_text, inherited = self._effective_frontmatter()
         status = self.query_one("#match_status", Static)
         status.remove_class("-match")
         status.remove_class("-no-match")
@@ -2389,18 +2426,19 @@ class SourceFormScreen(Screen[None]):
             status.add_class("-no-match")
             return
         if not filter_text:
-            status.update("(no filter)")
+            status.update("(no rule, here or in the defaults)")
             return
+        source = " (inherited from the defaults)" if inherited else ""
         pred, err = parse_or_error(filter_text)
         if err is not None or pred is None:
             status.update(f"✗ filter syntax: col {err.column}" if err else "✗ syntax error")
             status.add_class("-no-match")
             return
         if pred(fm):
-            status.update("✓ sample matches filter")
+            status.update(f"✓ sample matches the rule{source}")
             status.add_class("-match")
         else:
-            status.update("✗ sample does not match filter")
+            status.update(f"✗ sample does not match the rule{source}")
             status.add_class("-no-match")
 
     def _parse_status(self, filter_text: str) -> str:
@@ -2575,6 +2613,9 @@ class AddCollectionWizard(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Cancel", show=False),
+        # `q` reaches the app's quit otherwise, and unsaved edits die with it.
+        # On a screen that edits something, `q` leaves the screen.
+        Binding("q", "back", "Cancel", show=False),
         Binding("ctrl+s", "save_close", "Save", show=False),
         Binding("tab", "cycle_focus(1)", show=False),
         Binding("shift+tab", "cycle_focus(-1)", show=False),
@@ -4340,6 +4381,9 @@ class StillFlatDrillIn(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
+        # `q` reaches the app's quit otherwise, and unsaved edits die with
+        # it. On a screen that edits something, `q` leaves the screen.
+        Binding("q", "back", "Back", show=False),
         Binding("up,k", "move(-1)", show=False),
         Binding("down,j", "move(1)", show=False),
         Binding("enter,r", "retry", "Retry", show=True),
@@ -4641,6 +4685,9 @@ class FilterTextScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape", "back", "Back", show=False),
+        # `q` reaches the app's quit otherwise, and unsaved edits die with
+        # it. On a screen that edits something, `q` leaves the screen.
+        Binding("q", "back", "Back", show=False),
         Binding("ctrl+s", "save_close", show=False),
     ]
 
@@ -4837,6 +4884,9 @@ class RuleTextScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape", "back", "Back", show=False),
+        # `q` reaches the app's quit otherwise, and unsaved edits die with
+        # it. On a screen that edits something, `q` leaves the screen.
+        Binding("q", "back", "Back", show=False),
         Binding("ctrl+s", "save_close", show=False),
     ]
 
@@ -4903,7 +4953,7 @@ class RuleTextScreen(Screen[None]):
             status.update(f"✗ col {err.column}: {err.message}")
             return
         status.add_class("-ok")
-        scope = "Markdown only; every other type passes" if self._note_scoped else "every file"
+        scope = "any file with a frontmatter block" if self._note_scoped else "every file"
         status.update(f"✓ {scope}")
 
     def action_back(self) -> None:
@@ -4927,6 +4977,9 @@ class FilterBrowserScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
+        # `q` reaches the app's quit otherwise, and unsaved filter edits die
+        # with it. On a screen that edits something, `q` leaves the screen.
+        Binding("q", "back", "Back", show=False),
         Binding("ctrl+s", "save_close", show=False),
         Binding("t", "edit_text", show=False),
         Binding("c", "clear_all", show=False),
@@ -4999,7 +5052,7 @@ class FilterBrowserScreen(Screen[None]):
 
         field_name = ev.item_id.removeprefix("rule:")
         titles = {
-            "frontmatter": "Frontmatter rule · Markdown only",
+            "frontmatter": "Frontmatter rule · files with frontmatter",
             "expression": "Custom expression · any file",
         }
         if field_name not in titles:

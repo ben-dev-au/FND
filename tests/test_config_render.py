@@ -453,6 +453,35 @@ class TestRefusingBadOutput:
         assert path.read_text(encoding="utf-8") == before, "the old config was not kept"
 
 
+class TestSlashlessGlobsKeepTheirReach:
+    """`*` used to cross `/`, so `includes = ["*.md"]` took the whole tree. It
+    stops at a separator now, which would narrow such a source to its root and
+    let the next update prune everything below it out of the index."""
+
+    def test_a_slashless_glob_is_anchored_on_migration(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.toml"
+        path.write_text(
+            '[[collections.n.sources]]\npath = "~/N"\n'
+            'includes = ["*.md", "*.txt"]\nexcludes = ["drafts/**", "*.tmp"]\n',
+            encoding="utf-8",
+        )
+        conf.ensure_current(path)
+        source = conf.load(path).collections["n"].sources[0]
+        assert source.includes == ["**/*.md", "**/*.txt"]
+        assert source.excludes == ["drafts/**", "**/*.tmp"], "a glob with a / is left alone"
+
+    def test_the_anchored_glob_still_reaches_a_nested_file(self, tmp_path: Path) -> None:
+        """The point of the migration, not just its text."""
+        from fnd.walk import walk
+
+        (tmp_path / "sub").mkdir()
+        for rel in ("a.md", "sub/b.md"):
+            (tmp_path / rel).write_text("x", encoding="utf-8")
+        root = tmp_path.resolve()
+        got = {p.relative_to(root).as_posix() for p in walk(roots=[root], includes=["**/*.md"])}
+        assert got == {"a.md", "sub/b.md"}
+
+
 class TestUnknownKeysFailLoudly:
     """The renderer only knows the schema and every writer replaces the whole
     file, so a key the models ignore is deleted on the next save. Refusing at

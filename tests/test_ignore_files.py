@@ -344,3 +344,24 @@ class TestCaseFollowsGit:
             == 0
         )
         assert (rel not in kept) == git_ignores
+
+
+def test_a_nested_repo_does_not_switch_off_fndignore(tmp_path: Path) -> None:
+    """git ignores an outer .gitignore inside a repo; a .fndignore is ours and
+    says what the user does not want searched, which a clone has no say over."""
+    from fnd.walk import walk
+
+    (tmp_path / "repo" / ".git").mkdir(parents=True)
+    (tmp_path / ".fndignore").write_text("secret.md\n", encoding="utf-8")
+    (tmp_path / ".gitignore").write_text("gitonly.md\n", encoding="utf-8")
+    for rel in ("keep.md", "repo/secret.md", "repo/ok.md", "repo/gitonly.md"):
+        (tmp_path / rel).write_text("x", encoding="utf-8")
+
+    root = tmp_path.resolve()
+    got = {
+        p.relative_to(root).as_posix()
+        for p in walk(roots=[root], ignore_names=(".gitignore", ".fndignore"))
+    }
+    assert "repo/secret.md" not in got, ".fndignore stopped applying inside the repo"
+    assert "repo/gitonly.md" in got, "the outer .gitignore reached inside the repo"
+    assert {"keep.md", "repo/ok.md"} <= got

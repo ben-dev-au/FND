@@ -185,8 +185,10 @@ def _scandir_walk(
             present = {e.name for e in entries}
             # A directory holding .git is a repository root: git applies no
             # outer .gitignore inside it, so neither do we. Nested repos are
-            # common in a corpus of cloned assignments.
-            outer = IgnoreStack() if ".git" in present else inherited
+            # common in a corpus of cloned assignments. Only git's own files
+            # are dropped: a .fndignore is ours and says what the user does
+            # not want searched, which a cloned repo has no say over.
+            outer = inherited.without(".gitignore") if ".git" in present else inherited
             scope = outer.push(
                 *(load_ignore_file(current, n) for n in ignore_names if n in present)
             )

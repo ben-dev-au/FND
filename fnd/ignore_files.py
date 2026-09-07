@@ -196,6 +196,10 @@ class IgnoreStack:
         real = tuple(f for f in added if f is not None)
         return IgnoreStack(self.files + real) if real else self
 
+    def without(self, filename: str) -> IgnoreStack:
+        """The stack with every file of that name dropped."""
+        return IgnoreStack(tuple(f for f in self.files if f.path.name != filename))
+
     def match(self, target: Path, *, is_dir: bool) -> IgnoreMatch | None:
         decided: IgnoreMatch | None = None
         for ignore_file in self.files:

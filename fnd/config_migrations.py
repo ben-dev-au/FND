@@ -19,7 +19,7 @@ from collections.abc import Callable, MutableMapping
 from typing import Any, Final
 
 #: What this build writes. Bump when adding a migration.
-CONFIG_VERSION: Final = 1
+CONFIG_VERSION: Final = 2
 
 VERSION_KEY: Final = "config_version"
 
@@ -51,8 +51,32 @@ def _to_v1(raw: MutableMapping[str, Any]) -> None:
                 filters.setdefault("frontmatter", legacy)
 
 
+def _to_v2(raw: MutableMapping[str, Any]) -> None:
+    """Anchor a slashless glob, which used to match at any depth.
+
+    Globs were `fnmatch`, whose `*` crosses `/`, so `includes = ["*.md"]` took
+    every `.md` in the tree. They are path globs now and `*` stops at a
+    separator, which would silently narrow such a source to its root and let
+    the next update prune everything below it out of the index. `**/` restores
+    the reach the pattern had when it was written.
+    """
+    for collection in (raw.get("collections") or {}).values():
+        if not isinstance(collection, dict):
+            continue
+        for source in collection.get("sources") or ():
+            if not isinstance(source, dict):
+                continue
+            for key in ("includes", "excludes"):
+                globs = source.get(key)
+                if isinstance(globs, list):
+                    source[key] = [
+                        f"**/{g}" if isinstance(g, str) and "/" not in g else g for g in globs
+                    ]
+
+
 MIGRATIONS: Final[tuple[tuple[int, str, Transform], ...]] = (
     (1, "Adopt the canonical layout and record a config version", _to_v1),
+    (2, "Anchor slashless globs so they still match at any depth", _to_v2),
 )
 
 

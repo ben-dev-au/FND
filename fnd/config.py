@@ -303,6 +303,24 @@ class SourceFilters(_ConfigModel):
     frontmatter: str | None = None
     expression: str | None = None
 
+    clears: list[str] = Field(default_factory=list)
+    """Fields this source drops rather than inherits.
+
+    A list overrides to nothing with `[]` and a string with `""`, but a number
+    or a date has no such value: `None` already means inherit, so "no size
+    limit here" and "use the global limit" were the same config and the choice
+    silently reverted. Naming the field is the only way to say it in TOML,
+    which has no null.
+    """
+
+    @field_validator("clears")
+    @classmethod
+    def _known_fields(cls, names: list[str]) -> list[str]:
+        unknown = sorted(set(names) - set(DefaultFilters.model_fields))
+        if unknown:
+            raise ValueError(f"clears names no such filter: {', '.join(unknown)}")
+        return names
+
     @field_validator("frontmatter", "expression")
     @classmethod
     def _validate_expression(cls, v: str | None) -> str | None:
@@ -333,8 +351,10 @@ def resolve_filters(source: SourceFilters | None, defaults: DefaultFilters) -> D
         return defaults
     merged = defaults.model_dump()
     for field_name, value in source.model_dump().items():
-        if value is not None:
+        if value is not None and field_name != "clears":
             merged[field_name] = value
+    for field_name in source.clears:
+        merged[field_name] = None if field_name not in ("kinds",) else []
     return DefaultFilters.model_validate(merged)
 
 
@@ -978,13 +998,12 @@ def starter_config() -> str:
     """The file a fresh install gets: the canonical rendering of the defaults
     with one example collection. Generated, so it cannot drift from the models.
     """
-    from fnd.config_migrations import CONFIG_VERSION
     from fnd.config_render import render_config
 
     config = Config(
         collections={"default": CollectionConfig(sources=[SourceConfig(path=Path("~/Documents"))])}
     )
-    return render_config(config, version=CONFIG_VERSION)
+    return render_config(config)
 
 
 def _rewrite(config_path: Path, mutate: Callable[[dict[str, Any]], None]) -> Config:

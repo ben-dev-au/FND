@@ -284,12 +284,18 @@ def _example_block(table: str, model: BaseModel) -> list[str]:
     return out
 
 
-def render_config(config: Config, *, preserved: str = "", version: int = 1) -> str:
+def render_config(config: Config, *, preserved: str = "", version: int | None = None) -> str:
     from fnd.config import (
         DefaultFilters,
         RankingProfileConfig,
         SourceConfig,
     )
+    from fnd.config_migrations import CONFIG_VERSION
+
+    # Defaulting to a literal let the constant and the renderer drift, and they
+    # did the moment a second migration landed.
+    if version is None:
+        version = CONFIG_VERSION
 
     lines = _comment(
         "fnd configuration.\n"
