@@ -2798,18 +2798,25 @@ class AddCollectionWizard(Screen[None]):
             MenuItem(
                 id="wiz.name",
                 label="Name",
+                description="What this collection is called in the sidebar and in `-c`.",
                 kind=KIND_SCALAR,
                 value_getter=lambda _app: self._fields["name"] or "(required)",
             ),
             MenuItem(
                 id="wiz.path",
                 label="Source path",
+                description="The folder to index. Add more sources to it afterwards.",
                 kind=KIND_SCALAR,
                 value_getter=lambda _app: self._fields["path"] or "(required)",
+                elide="head",
             ),
             MenuItem(
                 id="wiz.includes",
-                label="Includes",
+                label="File types",
+                description=(
+                    "Which types to index. Tick none for every supported type, "
+                    "which also picks up ones added in later versions."
+                ),
                 kind=KIND_PICKER,
                 multi=True,
                 groups_provider=lambda _app: _includes_groups(),
@@ -2819,6 +2826,10 @@ class AddCollectionWizard(Screen[None]):
             MenuItem(
                 id="wiz.excludes",
                 label="Excludes",
+                description=(
+                    "Paths to skip, as presets or your own globs. Applied "
+                    "before any filter, so an excluded folder is never read."
+                ),
                 kind=KIND_PICKER,
                 multi=True,
                 choices_provider=lambda _app: [
@@ -2841,7 +2852,11 @@ class AddCollectionWizard(Screen[None]):
             ),
             MenuItem(
                 id="wiz.filter",
-                label="Frontmatter filter",
+                label="Frontmatter rule",
+                description=(
+                    "Index only notes whose YAML frontmatter matches, e.g. "
+                    "status == 'done'. Files without frontmatter are unaffected."
+                ),
                 kind=KIND_SCALAR,
                 hint="frontmatter DSL",
                 value_getter=lambda _app: self._filter_with_status(),
@@ -2849,6 +2864,7 @@ class AddCollectionWizard(Screen[None]):
             MenuItem(
                 id="wiz.follow_symlinks",
                 label="Follow symlinks",
+                description="Index through symlinked folders. Off avoids indexing a tree twice.",
                 kind=KIND_TOGGLE,
                 toggle_getter=lambda _app: bool(self._fields["follow_symlinks"]),
                 toggle_setter=lambda _app, v: self._set_follow(v),

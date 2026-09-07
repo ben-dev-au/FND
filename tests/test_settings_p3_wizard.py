@@ -34,8 +34,11 @@ def test_excludes_presets_exposed() -> None:
 
 @pytest.mark.asyncio
 async def test_add_collection_pushes_wizard_with_expected_fields(built_index: Path) -> None:
-    """Spec: Wizard › Single screen — Name, Source path, Includes,
-    Excludes, Frontmatter filter, Follow symlinks, plus the sample tester."""
+    """Wizard rows, named as the rest of Settings names them.
+
+    "Includes" picked file types here and path globs on the source form, from
+    the same TOML key; each row also has to say what it does.
+    """
     from fnd.tui import FNDApp
     from fnd.tui.menu import SECTION_COLLECTIONS
     from fnd.tui.settings_screen import (
@@ -64,12 +67,14 @@ async def test_add_collection_pushes_wizard_with_expected_fields(built_index: Pa
         for required in (
             "Name",
             "Source path",
-            "Includes",
+            "File types",
             "Excludes",
-            "Frontmatter filter",
+            "Frontmatter rule",
             "Follow symlinks",
         ):
             assert required in labels, f"missing field {required!r}; got {labels}"
+        undescribed = [it.label for it in wlst._items if not it.description]
+        assert not undescribed, f"rows with nothing to explain them: {undescribed}"
 
 
 @pytest.mark.asyncio
