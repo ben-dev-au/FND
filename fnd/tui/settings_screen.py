@@ -78,11 +78,21 @@ def _wizard_hints(screen: Any, app: Any) -> Any:
     """The wizard's footer, without the anchors while a box has focus."""
     hints = (
         ("⏎", "Edit"),
-        ("Tab", "Sample"),
+        *((("Tab", "Test a sample"),) if len(_focus_targets(screen)) > 1 else ()),
         ("Ctrl+S", "Save & Index"),
         ("Esc", "Cancel"),
     )
     return _editor_hint_bar(hints) if _typing_in(screen) else _hint_bar(app, hints)
+
+
+def _focus_targets(screen: Any) -> list[Any]:
+    """Panes Tab can reach. The sample tester is hidden without a rule to
+    test, and focusing a hidden pane put the cursor somewhere invisible."""
+    targets: list[Any] = [screen.query_one(SettingsList)]
+    sample = screen.query_one("#frontmatter_sample", TextArea)
+    if sample.display:
+        targets.append(sample)
+    return targets
 
 
 def _commit_then(screen: Any, resume: Callable[[], None]) -> bool:
@@ -2812,8 +2822,10 @@ class SourceFormScreen(Screen[None]):
     def _render_footer(self) -> None:
         app: FNDApp = self.app  # type: ignore[assignment]
         # Ctrl+D only meaningful when editing an existing source.
+        # Tab is only named while there is a second pane to reach: the sample
+        # tester is hidden without a rule to test.
         hints: tuple[tuple[str, str], ...] = (
-            ("Tab", "Fields ↔ sample"),
+            *((("Tab", "Test a sample"),) if len(_focus_targets(self)) > 1 else ()),
             ("⏎", "Edit"),
             ("Ctrl+S", "Save"),
             ("Esc", "Cancel"),
@@ -2958,7 +2970,7 @@ class SourceFormScreen(Screen[None]):
     # ── Tab cycles field list ↔ sample TextArea ───────────────
 
     def action_cycle_focus(self, direction: int) -> None:
-        widgets = [self.query_one(SettingsList), self.query_one("#frontmatter_sample", TextArea)]
+        widgets = _focus_targets(self)
         focused = self.focused
         # Find current index (default: 0 if not in list).
         idx = 0
@@ -3456,10 +3468,7 @@ class AddCollectionWizard(Screen[None]):
         app._indexer.reindex_with_warning(name, rebuild=True)  # type: ignore[attr-defined]
 
     def action_cycle_focus(self, direction: int) -> None:
-        widgets = [
-            self.query_one(SettingsList),
-            self.query_one("#frontmatter_sample", TextArea),
-        ]
+        widgets = _focus_targets(self)
         focused = self.focused
         idx = 0
         for i, w in enumerate(widgets):

@@ -1621,3 +1621,59 @@ class TestSavingLandsAnOpenEdit:
             for _ in range(10):
                 await pilot.pause()
             assert calls == [], "the save must not run while the bar is still open"
+
+
+class TestTabIsOfferedOnlyWhenItGoesSomewhere:
+    """The sample tester is hidden without a rule to test, so Tab put the
+    cursor in an invisible pane while the footer advertised it. "Sample" also
+    read as "a sample of files", which is what a user wants there."""
+
+    @pytest.mark.asyncio
+    async def test_the_wizard_neither_offers_nor_focuses_it(self, built_index: Path) -> None:
+        from fnd.tui.settings_screen import AddCollectionWizard, _focus_targets, _wizard_hints
+
+        app = FNDApp(index_dir=built_index)
+        async with app.run_test(size=(140, 26)) as pilot:
+            await pilot.pause()
+            app.push_screen(AddCollectionWizard())
+            for _ in range(20):
+                await pilot.pause()
+            wizard = app.screen
+            assert len(_focus_targets(wizard)) == 1
+            assert "Tab" not in _wizard_hints(wizard, app).plain
+            await pilot.press("tab")
+            await pilot.pause()
+            assert type(app.focused).__name__ != "TextArea", "focus entered a hidden pane"
+
+            wizard._fields["filter"] = "status == 'done'"
+            wizard._populate_fields()
+            for _ in range(8):
+                await pilot.pause()
+            assert len(_focus_targets(wizard)) == 2
+            assert "Test a sample" in _wizard_hints(wizard, app).plain
+            await pilot.press("tab")
+            await pilot.pause()
+            assert type(app.focused).__name__ == "TextArea"
+
+    @pytest.mark.asyncio
+    async def test_the_source_form_does_the_same(self, built_index: Path) -> None:
+        from fnd.config import CollectionConfig, Config, SourceConfig, SourceFilters
+        from fnd.tui.settings_screen import SourceFormScreen, _focus_targets
+
+        def _app(rule: str | None) -> FNDApp:
+            filters = SourceFilters(frontmatter=rule) if rule else None
+            config = Config(
+                collections={
+                    "c": CollectionConfig(sources=[SourceConfig(path="~/x", filters=filters)])
+                }
+            )
+            return FNDApp(index_dir=built_index, config=config)
+
+        for rule, panes in ((None, 1), ("status == 'done'", 2)):
+            app = _app(rule)
+            async with app.run_test(size=(140, 26)) as pilot:
+                await pilot.pause()
+                app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
+                for _ in range(20):
+                    await pilot.pause()
+                assert len(_focus_targets(app.screen)) == panes, rule
