@@ -9,8 +9,9 @@ exists to stop comes from sibling worktrees with their own ``.git``. Workers
 are sized after the lock is held, so a queued run measures the machine it will
 actually get rather than the one it is waiting behind.
 
-``FND_TEST_WORKERS`` forces the worker count; ``FND_TEST_NO_LOCK`` skips the
-gate. An explicit ``-n`` on the command line disables both defaults.
+``FND_TEST_WORKERS`` forces the worker count and ``FND_TEST_NO_LOCK`` skips the
+gate; the two are independent. An explicit ``-n`` suppresses the sizing only,
+and still queues behind the lock.
 """
 
 from __future__ import annotations
@@ -162,8 +163,10 @@ def main() -> int:
         with _machine_lock():
             if _wants_workers(args):
                 workers = pick_workers()
+                # Announced even at one worker: silence is what _notify exists
+                # to prevent, and a serial run is the longest silence there is.
+                _notify(f"pytest: {workers} worker{'s' if workers > 1 else ''}")
                 if workers > 1:
-                    _notify(f"pytest: {workers} workers")
                     # loadfile keeps a module's tests on one worker, which the
                     # module-scoped fixture in test_query_acceptance.py wants.
                     # Costs 19s against --dist load.

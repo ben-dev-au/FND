@@ -60,7 +60,7 @@ def test_forced_worker_count_never_drops_below_one(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.parametrize(
     ("status", "wanted"),
-    [(0, 0), (1, 1), (4, 4), (-9, 137), (-15, 143)],
+    [(0, 0), (1, 1), (4, 4), (-9, 137), (-15, 143), (-16, 144)],
 )
 def test_signal_deaths_use_the_shell_convention(
     status: int, wanted: int, monkeypatch: pytest.MonkeyPatch
