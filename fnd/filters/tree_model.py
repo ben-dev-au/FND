@@ -74,6 +74,7 @@ class Branch:
     items: tuple[tuple[str, str], ...] = ()  # (item id, label)
     groups: tuple[Branch, ...] = ()
     empty_label: str = ""
+    noun: str = ""
 
 
 def _kind_items(
@@ -142,7 +143,7 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
         return None
     if len(groups) == 1:
         return replace(groups[0], id="tags", empty_label="any tag")
-    return Branch("tags", "Tags", "cycle", groups=tuple(groups), empty_label="any tag")
+    return Branch("tags", "Tags", "cycle", groups=tuple(groups), empty_label="any tag", noun="tags")
 
 
 def spec_branches(
@@ -175,6 +176,7 @@ def spec_branches(
                 "multi",
                 groups=categories,
                 empty_label="every type",
+                noun="types",
             )
         )
 
@@ -189,6 +191,7 @@ def spec_branches(
             "multi",
             (("ignore:git", ".gitignore"), ("ignore:fnd", ".fndignore")),
             empty_label="none",
+            noun="files",
         )
     )
     # Rows stay ordered by the bound they set, so a custom one lands among the
@@ -207,10 +210,13 @@ def spec_branches(
             dated.append((days, f"{field_name}:{custom}", f"Since {since}"))
         items = [(i, lbl) for _k, i, lbl in sorted(dated)]
         branches.append(Branch(field_name, label, "radio", tuple(items)))
+    # An actions branch carries no marker, so a collapsed one has to say in
+    # its label whether a rule is set.
+    set_rules = sum(1 for v in (spec.frontmatter, spec.expression) if (v or "").strip())
     branches.append(
         Branch(
             "rules",
-            "Rules you type",
+            "Rules you type" + (f"  ({set_rules} set)" if set_rules else "  (none)"),
             "actions",
             (
                 ("rule:frontmatter", _rule_label("Frontmatter rule", spec.frontmatter)),

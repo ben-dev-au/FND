@@ -255,3 +255,10 @@ def test_the_size_rows_say_what_the_gate_does(tmp_path: Path) -> None:
 
     labels = [lbl for b in spec_branches(FilterSpec()) if b.id == "size" for _i, lbl in b.items]
     assert not any(lbl.startswith("Under") for lbl in labels), labels
+
+
+def test_a_typed_rule_is_visible_while_the_branch_is_shut() -> None:
+    """An actions branch carries no marker, so its label has to say it."""
+    spec = FilterSpec(frontmatter="status == 'done'")
+    assert "(1 set)" in next(b.label for b in spec_branches(spec) if b.id == "rules")
+    assert "(none)" in next(b.label for b in spec_branches(FilterSpec()) if b.id == "rules")

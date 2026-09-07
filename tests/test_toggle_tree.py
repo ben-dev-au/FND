@@ -295,3 +295,68 @@ async def test_enter_on_a_tag_branch_does_not_discard_the_exclusions() -> None:
         await pilot.press("enter")
         await pilot.pause()
         assert set(tt.excluded) == before, "the branch row discarded the exclusions"
+
+
+class TestABranchSaysHowMuchIsOn:
+    """A marker says only *that* a branch is partly on, so a collapsed one hid
+    how much — while the radio branches beside it named their choice."""
+
+    class _Counted(App[None]):
+        def compose(self) -> ComposeResult:
+            yield ToggleTree(id="tt")
+
+        def on_mount(self) -> None:
+            groups = [
+                ToggleGroup(
+                    "kinds",
+                    "File types",
+                    (ToggleItem("pdf", "PDF"), ToggleItem("md", "Markdown")),
+                    noun="types",
+                ),
+                ToggleGroup(
+                    "tags",
+                    "Tags",
+                    (ToggleItem("a", "a"), ToggleItem("b", "b")),
+                    mode="cycle",
+                    noun="tags",
+                ),
+            ]
+            self.query_one("#tt", ToggleTree).set_model(
+                groups, {"pdf"}, excluded={"a"}, expanded=set()
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_partly_ticked_branch_counts_what_is_on(self) -> None:
+        app = self._Counted()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert "1 of 2 types" in _labels(app.query_one("#tt", ToggleTree))["kinds"]
+
+    @pytest.mark.asyncio
+    async def test_an_excluding_branch_counts_the_exclusions(self) -> None:
+        app = self._Counted()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert "1 excluded" in _labels(app.query_one("#tt", ToggleTree))["tags"]
+
+    @pytest.mark.asyncio
+    async def test_an_all_ticked_branch_does_not_repeat_its_marker(self) -> None:
+        app = self._Counted()
+        async with app.run_test() as pilot:
+            tt = app.query_one("#tt", ToggleTree)
+            tt.set_model(
+                [
+                    ToggleGroup(
+                        "kinds",
+                        "File types",
+                        (ToggleItem("pdf", "PDF"), ToggleItem("md", "Markdown")),
+                        noun="types",
+                    )
+                ],
+                {"pdf", "md"},
+                expanded=set(),
+            )
+            await pilot.pause()
+            label = _labels(tt)["kinds"]
+            assert label.startswith("●")
+            assert "of 2 types" not in label, label

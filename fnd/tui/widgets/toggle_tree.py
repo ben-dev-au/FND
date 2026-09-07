@@ -75,6 +75,9 @@ class ToggleGroup:
     items: tuple[ToggleItem, ...]
     mode: str = "multi"
     empty_label: str = ""
+    noun: str = ""
+    """Plural name of what the leaves are ("types", "tags"). Given one, a
+    partly-on branch says how much is on rather than only that some is."""
     groups: tuple[ToggleGroup, ...] = ()
     """Sub-categories. A group carries items or sub-groups, not usually both."""
 
@@ -222,18 +225,38 @@ class ToggleTree(Tree[dict[str, Any]]):
             )
 
     # ── Labels ───────────────────────────────────────────────────────────
+    def _branch_summary(self, g: ToggleGroup, mode: str, n: int, n_ex: int) -> str:
+        """What a collapsed branch currently does, in its own words.
+
+        A marker alone says only *that* a branch is partly on; the size and
+        date branches already name their choice, so the ticked ones do too.
+        """
+        if not g.noun:
+            return ""
+        parts = []
+        if mode == "cycle":
+            if n:
+                parts.append(f"only {n} {g.noun}")
+            if n_ex:
+                parts.append(f"{n_ex} excluded")
+        elif n and n < len(g.leaves):
+            # ● already says "all of them"; a count there is noise.
+            parts.append(f"{n} of {len(g.leaves)} {g.noun}")
+        return f"  ({', '.join(parts)})" if parts else ""
+
     def _group_label(self, g: ToggleGroup) -> str:
         mode = self._mode(g)
         leaves = g.leaves
         if mode == "actions":
             return f"{_MARKER_GAP}{g.label}"
-        if mode == "cycle":
-            n_ex = sum(1 for it in leaves if it.id in self._excluded)
-            if n_ex:
-                # ⊘ only when the whole branch is excluded; a single excluded
-                # tag among many is a partial state, not a blanket exclusion.
-                return f"{_EXCLUDED if n_ex == len(leaves) else _PARTIAL}{_MARKER_GAP}{g.label}"
+        n_ex = sum(1 for it in leaves if it.id in self._excluded)
         n = sum(1 for it in leaves if it.id in self._selected)
+        summary = self._branch_summary(g, mode, n, n_ex)
+        if mode == "cycle" and n_ex:
+            # ⊘ only when the whole branch is excluded; a single excluded
+            # tag among many is a partial state, not a blanket exclusion.
+            marker = _EXCLUDED if n_ex == len(leaves) else _PARTIAL
+            return f"{marker}{_MARKER_GAP}{g.label}{summary}"
         if not n and g.empty_label:
             return f"{_EMPTY}{_MARKER_GAP}{g.label}  ({g.empty_label})"
         if mode == "radio":
@@ -246,7 +269,7 @@ class ToggleTree(Tree[dict[str, Any]]):
             return f"{marker}{_MARKER_GAP}{g.label}{suffix}"
         if not leaves:
             return f"{_EMPTY}{_MARKER_GAP}{g.label}"
-        return f"{tri_state_marker(n, len(leaves))}{_MARKER_GAP}{g.label}"
+        return f"{tri_state_marker(n, len(leaves))}{_MARKER_GAP}{g.label}{summary}"
 
     def _item_label(self, item_id: str) -> str:
         if item_id in self._action_items:
