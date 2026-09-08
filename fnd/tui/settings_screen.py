@@ -2909,32 +2909,42 @@ class SourceFormScreen(Screen[None]):
             g = g.strip()
             if g:
                 excludes_globs.append(g)
-        app_id = str(self._fields.get("app") or "").strip()
-        vault = str(self._fields.get("app_params_vault") or "").strip()
-        app_params: dict[str, str] = {"vault": vault} if vault else {}
-        try:
-            new_source = SourceConfig(
-                path=Path(path),
-                includes=includes_globs,
-                excludes=excludes_globs,
-                follow_symlinks=bool(self._fields["follow_symlinks"]),
-                frontmatter_filter=None,
-                filters=_source_filters_or_none(
-                    self._frontmatter_into_filters(self._frontmatter_text())
-                ),
-                app=app_id or None,
-                app_params=app_params,
-            )
-        except Exception as e:
-            self._show_error(_summarise(e))
-            return
-
         app: FNDApp = self.app  # type: ignore[assignment]
         cfg = app._config  # type: ignore[attr-defined]
         if cfg is None or self._collection_name not in cfg.collections:
             self._show_error("Collection vanished. Please reopen the menu.")
             return
         col: CollectionConfig = cfg.collections[self._collection_name]
+        # Start from the source as it stands and overwrite only the fields
+        # this form owns. Rebuilding from the form's fields deleted every
+        # field it has no control for — app_for, and app_params beyond vault.
+        prior = col.sources[self._source_index] if self._source_index is not None else None
+        values = dict(prior.model_dump(mode="python")) if prior else {}
+        app_id = str(self._fields.get("app") or "").strip()
+        vault = str(self._fields.get("app_params_vault") or "").strip()
+        app_params: dict[str, str] = dict(values.get("app_params") or {})
+        if vault:
+            app_params["vault"] = vault
+        else:
+            app_params.pop("vault", None)
+        values.update(
+            path=Path(path),
+            includes=includes_globs,
+            excludes=excludes_globs,
+            follow_symlinks=bool(self._fields["follow_symlinks"]),
+            frontmatter_filter=None,
+            filters=_source_filters_or_none(
+                self._frontmatter_into_filters(self._frontmatter_text())
+            ),
+            app=app_id or None,
+            app_params=app_params,
+        )
+        try:
+            new_source = SourceConfig.model_validate(values)
+        except Exception as e:
+            self._show_error(_summarise(e))
+            return
+
         if self._source_index is None:
             col.sources.append(new_source)
         else:
