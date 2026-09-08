@@ -26,7 +26,7 @@ that share the same chrome.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -2191,38 +2191,64 @@ def _open_filter_browser(app: FNDApp) -> None:
             spec=_spec_from_filters(current),
             gitignore=current.respect_gitignore,
             fndignore=current.respect_fndignore,
-            sample_provider=lambda: _sample_first_source(app),
+            # The defaults' own ignore settings, as the per-source route already
+            # threads them: sampling with the wrong ones offers tags from a
+            # narrower set than the walk indexes.
+            sample_provider=lambda: _sample_first_source(
+                app,
+                ignore_names=tuple(
+                    name
+                    for name, on in (
+                        (".gitignore", current.respect_gitignore),
+                        (".fndignore", current.respect_fndignore),
+                    )
+                    if on
+                ),
+            ),
             on_save=_save,
         )
     )
 
 
-def _distinct_roots(cfg: Any) -> list[Path]:
-    """Folders to sample once each.
+def _distinct_roots(cfg: Any) -> tuple[list[Path], bool]:
+    """Folders to sample once each, and whether the caps left any out.
 
     Counts are per file, so sampling the same folder twice doubles them: one
     vault listed in two collections reported six files carrying a tag that
     three files carry, and a nested source counted its contents twice.
+
+    The caps bound the I/O; the flag is what stops a two-source sample being
+    presented as the whole story. Candidates are compared as strings because
+    a stat here would reach every configured source, including the offline
+    volumes the caps exist to avoid.
     """
     from pathlib import Path
 
+    candidates: list[str] = []
+    every: set[str] = set()
+    for index, collection in enumerate(cfg.collections.values()):
+        for position, source in enumerate(collection.sources):
+            key = str(Path(source.path).expanduser())
+            every.add(key)
+            if index < 3 and position < 2 and key not in candidates:
+                candidates.append(key)
+
     chosen: list[Path] = []
-    for collection in list(cfg.collections.values())[:3]:
-        for source in collection.sources[:2]:
-            try:
-                root = Path(source.path).expanduser().resolve()
-            except OSError:
-                continue
-            if not root.exists():
-                continue
-            if any(root == seen or root.is_relative_to(seen) for seen in chosen):
-                continue
-            chosen = [s for s in chosen if not s.is_relative_to(root)]
-            chosen.append(root)
-    return chosen
+    for key in candidates:
+        try:
+            root = Path(key).resolve()
+        except OSError:
+            continue
+        if not root.exists():
+            continue
+        if any(root == seen or root.is_relative_to(seen) for seen in chosen):
+            continue
+        chosen = [s for s in chosen if not s.is_relative_to(root)]
+        chosen.append(root)
+    return chosen, len(every) > len(candidates)
 
 
-def _sample_first_source(app: FNDApp) -> Any:
+def _sample_first_source(app: FNDApp, *, ignore_names: Sequence[str] | None = None) -> Any:
     """Tag values seen in the configured sources, for the picker to offer.
 
     Bounded: a picker wants suggestions, not an inventory, and a cloud-backed
@@ -2238,8 +2264,10 @@ def _sample_first_source(app: FNDApp) -> Any:
     if cfg is None:
         return None
     merged = SourceSample()
-    for root in _distinct_roots(cfg):
-        part = sample_source(root, budget_s=0.6)
+    roots, capped = _distinct_roots(cfg)
+    merged.truncated = capped
+    for root in roots:
+        part = sample_source(root, budget_s=0.6, ignore_names=ignore_names)
         merged.files_seen += part.files_seen
         merged.truncated = merged.truncated or part.truncated
         for src, values in part.tags.items():

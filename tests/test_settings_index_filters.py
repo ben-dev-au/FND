@@ -1826,3 +1826,80 @@ class TestTagCountsAreCountsOfFiles:
         app = SimpleNamespace(_config=self._config(first, second))
         sample = _sample_first_source(cast("Any", app))
         assert sample.tags["frontmatter"] == {"keep": 4}
+
+
+class TestTheDefaultsSampleSaysWhatItMissed:
+    """It samples two sources per collection over three collections and marked
+    nothing partial, because `truncated` was only ever set by a scan hitting
+    its own cap. Five sources offered two tags and claimed the list complete;
+    a user setting include_tags there silently dropped three sources' worth."""
+
+    @staticmethod
+    def _config(*roots: Path):
+        from fnd.config import CollectionConfig, Config, SourceConfig
+
+        return Config(
+            collections={"c": CollectionConfig(sources=[SourceConfig(path=r) for r in roots])}
+        )
+
+    @staticmethod
+    def _source(root: Path, name: str, tag: str) -> Path:
+        folder = root / name
+        folder.mkdir()
+        (folder / "n.md").write_text(f"---\ntags: [{tag}]\n---\nx\n", encoding="utf-8")
+        return folder
+
+    def test_sources_beyond_the_cap_mark_the_sample_partial(self, tmp_path: Path) -> None:
+        from fnd.tui.menu import _sample_first_source
+
+        root = tmp_path.resolve()
+        roots = [self._source(root, n, n) for n in ("a", "b", "c", "d", "e")]
+        app = SimpleNamespace(_config=self._config(*roots))
+        sample = _sample_first_source(cast("Any", app))
+        assert sample.truncated, "three sources were never looked at"
+        assert set(sample.tags["frontmatter"]) == {"a", "b"}
+
+    def test_a_fully_sampled_config_is_not_called_partial(self, tmp_path: Path) -> None:
+        """The control: the note must not fire when nothing was missed."""
+        from fnd.tui.menu import _sample_first_source
+
+        root = tmp_path.resolve()
+        roots = [self._source(root, n, n) for n in ("a", "b")]
+        app = SimpleNamespace(_config=self._config(*roots))
+        sample = _sample_first_source(cast("Any", app))
+        assert not sample.truncated
+
+    def test_one_folder_listed_many_times_is_not_partial(self, tmp_path: Path) -> None:
+        """A vault in nine collections is one distinct source, not nine."""
+        from fnd.config import CollectionConfig, Config, SourceConfig
+        from fnd.tui.menu import _sample_first_source
+
+        notes = self._source(tmp_path.resolve(), "vault", "keep")
+        config = Config(
+            collections={
+                str(i): CollectionConfig(sources=[SourceConfig(path=notes)]) for i in range(9)
+            }
+        )
+        app = SimpleNamespace(_config=config)
+        sample = _sample_first_source(cast("Any", app))
+        assert not sample.truncated
+
+    def test_the_defaults_own_ignore_setting_is_honoured(self, tmp_path: Path) -> None:
+        """The per-source route threads it; this one sampled with the default,
+        so it offered tags from a narrower set than the walk indexes."""
+        from fnd.tui.menu import _sample_first_source
+
+        root = tmp_path.resolve() / "src"
+        (root / "hidden_by_git").mkdir(parents=True)
+        (root / ".gitignore").write_text("hidden_by_git/\n", encoding="utf-8")
+        (root / "n.md").write_text("---\ntags: [visible]\n---\nx\n", encoding="utf-8")
+        (root / "hidden_by_git" / "n.md").write_text(
+            "---\ntags: [buried]\n---\nx\n", encoding="utf-8"
+        )
+        app = SimpleNamespace(_config=self._config(root))
+
+        obeying = _sample_first_source(cast("Any", app), ignore_names=(".gitignore",))
+        assert set(obeying.tags["frontmatter"]) == {"visible"}
+
+        ignoring = _sample_first_source(cast("Any", app), ignore_names=())
+        assert set(ignoring.tags["frontmatter"]) == {"visible", "buried"}
