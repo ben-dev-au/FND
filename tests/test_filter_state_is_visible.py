@@ -14,6 +14,7 @@ It skips include entirely; every other tag keeps the full cycle.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -264,3 +265,186 @@ async def test_a_collapsed_screen_shows_colour(tmp_index_dir: Path) -> None:
     assert branch_colours, "no branch marker carried a colour on the opening screen"
     assert any(success.lower() in c.lower() for c in branch_colours), branch_colours
     assert any(error.lower() in c.lower() for c in branch_colours), branch_colours
+
+
+def _walk(node: Any) -> list[Any]:
+    """Every node under this one, at any depth."""
+    return [n for child in node.children for n in (child, *_walk(child))]
+
+
+def _rows(app: FNDApp) -> list[tuple[str, list[str]]]:
+    """Each painted row, with the colours its state markers carry.
+
+    Row-scoped, not screen-scoped: a whole-screen scan passes on a coloured
+    marker anywhere, which is how a branch that was never coloured went
+    unnoticed while the tags rows below it carried the assertion.
+    """
+    return [
+        (
+            "".join(s.text for s in strip),
+            [
+                str(s.style.color)
+                for s in strip
+                if s.text.strip() in ("●", "⊘", "◐") and s.style and s.style.color
+            ],
+        )
+        for strip in app.screen._compositor.render_strips()
+    ]
+
+
+async def _sidebar_filters(app: FNDApp, pilot: object) -> Any:
+    from textual.widgets import Tree
+
+    tree = app.query_one("#filters_panel_tree", Tree)
+    for node in tree.root.children:
+        node.expand()
+        for child in node.children:
+            child.expand()
+    for _ in range(8):
+        await pilot.pause()  # type: ignore[attr-defined]
+    return tree
+
+
+@pytest.mark.asyncio
+async def test_the_sidebar_colours_every_branch_and_not_just_tags(
+    cfg_and_index: tuple[object, Path],
+) -> None:
+    """Tags were the only sidebar branch painted through the shared helper.
+    File type, Modified and Created built their rows as plain strings, so the
+    same state read coloured in one branch and plain in the next."""
+    config, index_dir = cfg_and_index
+    app = FNDApp(index_dir=index_dir, config=config)  # type: ignore[arg-type]
+    async with app.run_test(size=(120, 46)) as pilot:
+        await pilot.pause()
+        app._scope.filter_kinds.append("md")
+        app._scope.filter_date = "week"
+        app._scope.filter_created = "month"
+        app._scope.refresh_filters_panel()
+        for _ in range(8):
+            await pilot.pause()
+        await _sidebar_filters(app, pilot)
+        rows = _rows(app)
+        success = app.get_css_variables().get("success", "").lower()
+
+    def coloured(label: str) -> list[str]:
+        return [c for line, cols in rows if label in line for c in cols]
+
+    for label in ("Markdown", "Notes & text", "week", "month"):
+        found = coloured(label)
+        assert found, f"{label!r} carried no colour: {[line for line, _ in rows if label in line]}"
+        assert any(success in c.lower() for c in found), (label, found)
+
+
+@pytest.mark.asyncio
+async def test_a_toggled_file_type_stays_coloured(cfg_and_index: tuple[object, Path]) -> None:
+    """The path a user actually takes. Toggling a file type repaints in place
+    rather than rebuilding the tree, so the build path being coloured says
+    nothing about what is on screen one keypress later."""
+    from textual.widgets import Tree
+
+    config, index_dir = cfg_and_index
+    app = FNDApp(index_dir=index_dir, config=config)  # type: ignore[arg-type]
+    async with app.run_test(size=(120, 46)) as pilot:
+        await pilot.pause()
+        tree = await _sidebar_filters(app, pilot)
+        leaf = next(
+            n
+            for n in _walk(tree.root)
+            if (n.data or {}).get("category") == "kinds" and (n.data or {}).get("value") == "md"
+        )
+        app._scope.on_filters_selected(Tree.NodeSelected(leaf))
+        for _ in range(8):
+            await pilot.pause()
+        rows = _rows(app)
+        success = app.get_css_variables().get("success", "").lower()
+
+    assert "md" in app._scope.filter_kinds, "the premise: the toggle landed"
+    painted = [c for line, cols in rows if "Markdown" in line for c in cols]
+    assert painted, "the repainted row lost its colour"
+    assert any(success in c.lower() for c in painted), painted
+
+
+@pytest.mark.asyncio
+async def test_the_cursor_row_keeps_its_marker_colour(cfg_and_index: tuple[object, Path]) -> None:
+    """The row a user is certain to be looking at. Textual stylises the whole
+    label with the cursor's component style after the label's own spans, so
+    the marker went plain on exactly the row under the cursor."""
+    config, index_dir = cfg_and_index
+    app = FNDApp(index_dir=index_dir, config=config)  # type: ignore[arg-type]
+    async with app.run_test(size=(120, 46)) as pilot:
+        await pilot.pause()
+        app._scope.filter_kinds.append("md")
+        app._scope.refresh_filters_panel()
+        for _ in range(8):
+            await pilot.pause()
+        tree = await _sidebar_filters(app, pilot)
+        leaf = next(
+            n
+            for n in _walk(tree.root)
+            if (n.data or {}).get("category") == "kinds" and (n.data or {}).get("value") == "md"
+        )
+        tree.focus()
+        tree.move_cursor(leaf)
+        for _ in range(8):
+            await pilot.pause()
+        rows = _rows(app)
+        success = app.get_css_variables().get("success", "").lower()
+
+    painted = [c for line, cols in rows if "Markdown" in line for c in cols]
+    assert painted, "the cursor row lost its marker colour"
+    assert any(success in c.lower() for c in painted), painted
+
+
+@pytest.mark.asyncio
+async def test_the_settings_cursor_row_keeps_it_too(tmp_index_dir: Path) -> None:
+    """The same fix, through the same seam, on the other pane — the two are
+    the reason the mixin exists rather than a fix inside one tree."""
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 40)) as pilot:
+        await pilot.pause()
+        tree = await _tree(app, pilot, FilterSpec(exclude_tags={"frontmatter": ("no_index",)}))
+        node = next(n for n in _walk(tree.root) if "no_index" in str(n.label))
+        tree.focus()
+        tree.move_cursor(node)
+        for _ in range(8):
+            await pilot.pause()
+        rows = _rows(app)
+        error = app.get_css_variables().get("error", "").lower()
+
+    painted = [c for line, cols in rows if "no_index" in line for c in cols]
+    assert painted, "the cursor row lost its marker colour"
+    assert any(error in c.lower() for c in painted), painted
+
+
+def test_a_branch_still_scanning_never_claims_all_of_them() -> None:
+    """The red flash. Before the scan lands the only tags known are the
+    excluded ones the spec named, so the roll-up read ⊘ — "never index any
+    of these" — and became ◐ a moment later when the real tags arrived."""
+    from fnd.filters.tree_model import spec_branches
+
+    spec = FilterSpec(exclude_tags={"frontmatter": ("no_index",)})
+    scanning = next(b for b in spec_branches(spec, None) if b.id.startswith("tags"))
+    landed = next(b for b in spec_branches(spec, _SAMPLE) if b.id.startswith("tags"))
+
+    assert not scanning.complete, "a sampleless branch has not seen its leaves"
+    assert landed.complete, "the control: a scanned branch knows what it holds"
+
+
+@pytest.mark.asyncio
+async def test_the_scanning_branch_paints_partial_not_excluded(tmp_index_dir: Path) -> None:
+    """And the widget honours it: same spec, both states, on screen."""
+    from fnd.tui.widgets.toggle_tree import ToggleGroup, ToggleItem
+
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(80, 20)) as pilot:
+        await pilot.pause()
+        tree = ToggleTree("Filters")
+        item = ToggleItem("tag:frontmatter:no_index", "no_index")
+        scanning = ToggleGroup("tags", "Tags", (item,), mode="cycle", complete=False)
+        landed = ToggleGroup("tags", "Tags", (item,), mode="cycle")
+        tree._excluded = {item.id}
+        while_scanning = str(tree._group_label(scanning))
+        once_landed = str(tree._group_label(landed))
+
+    assert while_scanning.startswith("◐"), while_scanning
+    assert once_landed.startswith("⊘"), once_landed

@@ -30,6 +30,7 @@ from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
 from fnd.tui.results_labels import _styled_state_row, state_colour
+from fnd.tui.widgets.state_marker import StateMarkerLabel
 
 _FULL = "●"
 _PARTIAL = "◐"
@@ -97,6 +98,10 @@ class ToggleGroup:
     noun: str = ""
     """Plural name of what the leaves are ("types", "tags"). Given one, a
     partly-on branch says how much is on rather than only that some is."""
+    complete: bool = True
+    """False while the leaves are still being discovered. Until then the only
+    tags known are the excluded ones the spec named, so the roll-up read ⊘ —
+    a red "never index any of these" that became ◐ when the scan landed."""
     groups: tuple[ToggleGroup, ...] = ()
     """Sub-categories. A group carries items or sub-groups, not usually both."""
 
@@ -109,7 +114,7 @@ class ToggleGroup:
         return (self, *(d for g in self.groups for d in g.walk()))
 
 
-class ToggleTree(Tree[dict[str, Any]]):
+class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
     """A ``Tree`` of category → item toggles with tri-state parents."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -294,7 +299,7 @@ class ToggleTree(Tree[dict[str, Any]]):
         if mode == "cycle" and n_ex:
             # ⊘ only when the whole branch is excluded; a single excluded
             # tag among many is a partial state, not a blanket exclusion.
-            marker = _EXCLUDED if n_ex == len(leaves) else _PARTIAL
+            marker = _EXCLUDED if (g.complete and n_ex == len(leaves)) else _PARTIAL
             return _styled_state_row(
                 marker, f"{_MARKER_GAP}{g.label}{summary}", self._state_colour(marker)
             )

@@ -5534,6 +5534,7 @@ def _branch_group(branch: Any) -> ToggleGroup:
         empty_label=branch.empty_label,
         full_label=branch.full_label,
         noun=branch.noun,
+        complete=branch.complete,
         groups=tuple(_branch_group(b) for b in branch.groups),
     )
 

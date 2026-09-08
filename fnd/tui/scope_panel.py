@@ -562,7 +562,7 @@ class ScopeController:
             if not members:
                 continue
             cat_node = kind_node.add(
-                f"{self._kind_category_marker(cat.id)}  {cat.label}",
+                self._state_row(self._kind_category_marker(cat.id), f"  {cat.label}"),
                 data={"kind": "kind_category", "category": "kinds", "value": cat.id},
                 expand=f"kinds:{cat.id}" in self.expanded_filter_branches,
             )
@@ -571,11 +571,7 @@ class ScopeController:
                 cat_node.add_leaf(
                     # Pad so the kind marker indents past the category's arrow
                     # (matching the Tags leaves), instead of aligning with it.
-                    _styled_state_row(
-                        f"{_LEAF_MARKER_PAD * 2}{marker}",
-                        f"  {KIND_BY_ID[k].label}",
-                        self._state_colour(marker),
-                    ),
+                    self._state_row(f"{_LEAF_MARKER_PAD * 2}{marker}", f"  {KIND_BY_ID[k].label}"),
                     data={"kind": "filter_value", "category": "kinds", "value": k},
                 )
 
@@ -588,7 +584,7 @@ class ScopeController:
         for d in _FILTER_DATES:
             marker = "●" if d == self.filter_date else "○"
             date_node.add_leaf(
-                f"{marker}  {d}",
+                self._state_row(marker, f"  {d}"),
                 data={"kind": "filter_value", "category": "date", "value": d},
             )
 
@@ -601,7 +597,7 @@ class ScopeController:
         for c in _FILTER_CREATED:
             marker = "●" if c == self.filter_created else "○"
             created_node.add_leaf(
-                f"{marker}  {c}",
+                self._state_row(marker, f"  {c}"),
                 data={"kind": "filter_value", "category": "created", "value": c},
             )
 
@@ -652,11 +648,15 @@ class ScopeController:
     def _repaint_filetype_leaf(self, leaf: Any) -> None:
         kid = str((leaf.data or {}).get("value") or "")
         marker = "●" if kid in set(self.filter_kinds) else "○"
-        leaf.set_label(f"{_LEAF_MARKER_PAD * 2}{marker}  {KIND_BY_ID[kid].label}")
+        leaf.set_label(
+            self._state_row(f"{_LEAF_MARKER_PAD * 2}{marker}", f"  {KIND_BY_ID[kid].label}")
+        )
 
     def _repaint_filetype_category(self, cat_node: Any) -> None:
         cat_id = str((cat_node.data or {}).get("value") or "")
-        cat_node.set_label(f"{self._kind_category_marker(cat_id)}  {CATEGORY_BY_ID[cat_id].label}")
+        cat_node.set_label(
+            self._state_row(self._kind_category_marker(cat_id), f"  {CATEGORY_BY_ID[cat_id].label}")
+        )
         for child in cat_node.children:
             self._repaint_filetype_leaf(child)
 
@@ -723,6 +723,10 @@ class ScopeController:
             tree.scroll_to_line(line, animate=False)
 
     # ── Clear all filters ─────────────────────────────────────────
+
+    def _state_row(self, marker: str, rest: str) -> Any:
+        """A tri-state row whose marker carries its meaning as colour too."""
+        return _styled_state_row(marker, rest, self._state_colour(marker))
 
     def _state_colour(self, marker: str) -> str:
         """The colour this state marker carries, or none for a neutral one."""
@@ -938,9 +942,7 @@ class ScopeController:
             }
             if node.children:
                 branch = parent.add(
-                    _styled_state_row(
-                        marker, f"  {node.label}  ({node.files})", self._state_colour(marker)
-                    ),
+                    self._state_row(marker, f"  {node.label}  ({node.files})"),
                     data=data,
                     expand=key in self.expanded_filter_branches,
                 )
@@ -950,10 +952,8 @@ class ScopeController:
                 # leaves none on leaves, so a leaf's marker would sit two
                 # columns left of its branch siblings'. Pad to line them up.
                 parent.add_leaf(
-                    _styled_state_row(
-                        f"{_LEAF_MARKER_PAD}{marker}",
-                        f"  {node.label}  ({node.files})",
-                        self._state_colour(marker),
+                    self._state_row(
+                        f"{_LEAF_MARKER_PAD}{marker}", f"  {node.label}  ({node.files})"
                     ),
                     data=data,
                 )
@@ -1044,9 +1044,7 @@ class ScopeController:
         for source, value in ghosts:
             marker = self.tag_marker(source, TagNode(label=value, value=value))
             branch.add_leaf(
-                _styled_state_row(
-                    f"{_LEAF_MARKER_PAD}{marker}", f"  {value}", self._state_colour(marker)
-                ),
+                self._state_row(f"{_LEAF_MARKER_PAD}{marker}", f"  {value}"),
                 data={
                     "kind": "filter_value",
                     "category": "tags",

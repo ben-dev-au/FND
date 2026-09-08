@@ -24,6 +24,7 @@ __all__ = [
     "_styled_parent_label",
     "_styled_state_row",
     "_trim_redundant_heading",
+    "reapply_state_marker",
     "state_colour",
 ]
 
@@ -35,6 +36,8 @@ _PASS_GLYPHS = {0: "●", 1: "~", 2: "⊕", 3: "❝"}
 # highlighting regression shows up as marks on screen instead of results
 # quietly disappearing. See :mod:`fnd.tui.match_evidence`.
 _UNLOCATABLE_GLYPH = "◌"
+
+_MARKER_STYLES: dict[str, Any] = {}
 
 
 def _score_bar(  # pyright: ignore[reportUnusedFunction]
@@ -94,11 +97,11 @@ STATE_COLOUR_FALLBACK = {"●": "green", "⊘": "red"}
 def state_colour(marker: str, variables: Mapping[str, str]) -> str:
     """The colour a state marker carries, given a theme's variables.
 
-    Falls back where the theme names no such colour: dropping the signal in
-    silence is indistinguishable from the feature being absent, and a theme is
-    not required to define every semantic colour.
+    Stripped first: callers pad a marker to align a leaf under its branch,
+    and a padded marker that silently lost its colour is the exact bug this
+    is meant to prevent. Falls back where the theme names no such colour.
     """
-    variable = STATE_COLOUR_VARIABLE.get(marker)
+    variable = STATE_COLOUR_VARIABLE.get(marker.strip())
     if not variable:
         return ""
     return variables.get(variable, "") or STATE_COLOUR_FALLBACK.get(marker, "")
@@ -116,8 +119,40 @@ def _styled_state_row(marker: str, rest: str, colour: str) -> Any:
 
     text = Text(f"{marker}{rest}")
     if colour:
-        text.stylize(colour, 0, len(marker))
+        text.stylize(_marker_style(colour), 0, len(marker))
     return text
+
+
+def _marker_style(colour: str) -> Any:
+    """Cached so a rendered span can be recognised as a marker's by identity."""
+    from rich.style import Style
+
+    style = _MARKER_STYLES.get(colour)
+    if style is None:
+        style = Style(color=colour)
+        _MARKER_STYLES[colour] = style
+    return style
+
+
+def reapply_state_marker(rendered: Any, label: Any) -> Any:
+    """Put a marker's colour back over a row style applied on top of it.
+
+    Textual stylises a whole label with the cursor's component style, and a
+    span added last wins — so the marker lost its colour on exactly the row
+    the user was looking at. Only styles this module minted are restored.
+    """
+    from rich.text import Text
+
+    if not isinstance(label, Text) or not isinstance(rendered, Text):
+        return rendered
+    offset = len(rendered.plain) - len(label.plain)
+    if offset < 0:
+        return rendered
+    known = set(_MARKER_STYLES.values())
+    for span in label.spans:
+        if span.style in known:
+            rendered.stylize(span.style, span.start + offset, span.end + offset)
+    return rendered
 
 
 def _styled_parent_label(label: Any) -> Any:

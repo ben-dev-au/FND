@@ -79,6 +79,9 @@ class Branch:
     empty_label: str = ""
     full_label: str = ""
     noun: str = ""
+    complete: bool = True
+    """False while the leaves are still being discovered. A roll-up that says
+    "all of these" is a claim about leaves the branch has not seen yet."""
 
 
 def _offers_every_kind(items: list[tuple[str, str, str]]) -> bool:
@@ -153,13 +156,27 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
         items = [i for i in seen if i[0] in active] + [i for i in seen if i[0] not in active]
         if items:
             groups.append(
-                Branch(f"tags:{source}", TAG_SOURCE_LABELS[source], "cycle", tuple(items))
+                Branch(
+                    f"tags:{source}",
+                    TAG_SOURCE_LABELS[source],
+                    "cycle",
+                    tuple(items),
+                    complete=sample is not None,
+                )
             )
     if not groups:
         return None
     if len(groups) == 1:
         return replace(groups[0], id="tags", empty_label="any tag")
-    return Branch("tags", "Tags", "cycle", groups=tuple(groups), empty_label="any tag", noun="tags")
+    return Branch(
+        "tags",
+        "Tags",
+        "cycle",
+        groups=tuple(groups),
+        empty_label="any tag",
+        noun="tags",
+        complete=sample is not None,
+    )
 
 
 def spec_branches(
