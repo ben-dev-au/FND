@@ -29,7 +29,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import textwrap
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
@@ -4413,6 +4413,9 @@ class UnsavedChangesScreen(Screen[None]):
         Binding("up,k", "cursor(-1)", show=False),
         Binding("down,j", "cursor(1)", show=False),
         Binding("enter", "activate", show=False),
+        # The question is "are you sure you want to quit"; `q` reaching the
+        # app's quit through it answered yes by pressing it again.
+        Binding("q", "back", "Keep editing", show=False, priority=True),
     ]
 
     CSS = chrome_css("UnsavedChangesScreen", confirm=True)
@@ -4421,7 +4424,7 @@ class UnsavedChangesScreen(Screen[None]):
         self,
         *,
         what: str,
-        on_save: Callable[[], None],
+        on_save: Callable[[], None] | None,
         on_leave: Callable[[], None] | None = None,
         leave_label: str = "Discard changes",
     ) -> None:
@@ -4435,12 +4438,14 @@ class UnsavedChangesScreen(Screen[None]):
         with Vertical(id="settings_box") as box:
             box.border_title = "Unsaved changes"
             yield Static(f"{self._what} has changes that are not saved.", classes="warning")
-            yield OptionList(
-                Option(Text("Save changes", style="bold"), id="save"),
-                Option(self._leave_label, id="discard"),
-                Option("Keep editing", id="stay"),
-                id="confirm_list",
+            # Save is offered only where the work is on the screen below this
+            # one. A form buried under another editor cannot be saved from
+            # here — its own save pops whatever is on top, which is not it.
+            options = (
+                [Option(Text("Save changes", style="bold"), id="save")] if self._on_save else []
             )
+            options += [Option(self._leave_label, id="discard"), Option("Keep editing", id="stay")]
+            yield OptionList(*options, id="confirm_list")
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
@@ -4467,7 +4472,7 @@ class UnsavedChangesScreen(Screen[None]):
     def _chosen(self, ev: OptionList.OptionSelected) -> None:
         choice = ev.option.id
         self.app.pop_screen()
-        if choice == "save":
+        if choice == "save" and self._on_save is not None:
             # The editor's own save pops it, and reports its own failure.
             self._on_save()
         elif choice == "discard":
@@ -4486,6 +4491,25 @@ def _leave_or_confirm(
         screen.app.pop_screen()
         return
     screen.app.push_screen(UnsavedChangesScreen(what=what, on_save=on_save))
+
+
+def unsaved_on_stack(
+    screens: Sequence[object],
+) -> tuple[str, Callable[[], None] | None] | None:
+    """What the SCREEN STACK would lose, topmost holder first.
+
+    Asking only the top screen missed the common shape: the filter browser is
+    only ever pushed on top of the source form, so a dirty form under a clean
+    browser quit with no prompt at all. The saver comes back only for the
+    topmost screen — a form buried under another editor cannot be saved from
+    a modal, because its own save pops whatever is on top of it.
+    """
+    for depth, screen in enumerate(reversed(list(screens))):
+        answer = unsaved_on(screen)
+        if answer is not None:
+            what, save = answer
+            return what, (save if depth == 0 else None)
+    return None
 
 
 def unsaved_on(screen: object) -> tuple[str, Callable[[], None]] | None:

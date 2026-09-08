@@ -60,11 +60,16 @@ class ResultsView:
         scope = self._app._scope
         n_filters = scope.active_filter_count if scope.has_active_filters else 0
         if n_filters:
-            key = self._app._fnd_keymap.for_action("clear_filters")
+            # A place, not a keystroke. Focus is in the query bar when this
+            # paints, so a named key types itself into the query instead of
+            # firing — the message promised `X clears it` and produced
+            # `risottoX`. The panel carries a visible row that does clear them.
             one = n_filters == 1
             noun = "filter is" if one else "filters are"
-            clear = f" — {key} clears {'it' if one else 'them'}" if key else ""
-            lines.append(f"{n_filters} {noun} narrowing this{clear}.")
+            lines.append(
+                f"{n_filters} {noun} narrowing this — "
+                f"clear {'it' if one else 'them'} in the Filters panel."
+            )
         return "\n\n".join(lines)
 
     def refresh(self) -> None:

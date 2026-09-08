@@ -949,9 +949,9 @@ class FNDApp(App[None]):
         else — one key, two meanings, a screen apart — because nothing stopped
         a quit throwing an edit away. Esc is back; `q` is quit; both ask first.
         """
-        from fnd.tui.settings_screen import UnsavedChangesScreen, unsaved_on
+        from fnd.tui.settings_screen import UnsavedChangesScreen, unsaved_on_stack
 
-        pending = unsaved_on(self.screen if self.screen_stack else None)
+        pending = unsaved_on_stack(self.screen_stack)
         if pending is None:
             self.exit()
             return
@@ -1938,11 +1938,6 @@ class FNDApp(App[None]):
     def action_focus_collections_panel(self) -> None:
         """Single-key teleport from anywhere → collections sidebar panel."""
         self.query_one("#collections_panel_tree", Tree).focus()
-
-    @on(events.Click, "#clear_filters_bar")
-    def _on_clear_bar_click(self, event: events.Click) -> None:
-        event.stop()
-        self._scope.clear_filters()
 
     @on(Tree.NodeSelected, "#filters_panel_tree")
     def _on_filters_panel_selected(self, ev: Tree.NodeSelected[dict[str, object]]) -> None:

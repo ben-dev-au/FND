@@ -67,6 +67,16 @@ class ClearFiltersBar(Static):
         self._on_clear = on_clear
         self._focus_id = focus_id
 
+    def on_click(self, event: events.Click) -> None:
+        """The widget's own click, not the app's.
+
+        An app-level handler on this id caught BOTH panes' bars once the
+        settings pane mounted one: clicking the row that names the index
+        filters wiped the live search filters instead.
+        """
+        event.stop()
+        self._clear()
+
     def on_key(self, event: events.Key) -> None:
         if event.key == "enter":
             event.stop()

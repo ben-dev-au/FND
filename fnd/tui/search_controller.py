@@ -374,7 +374,12 @@ class SearchController:
         # other collections and dropped spaced names like ``SSD Exam``.
         cols = self._app._scope.collections
         scoped_sources = list(self._app._scope.active_sources)
-        expressed = bool(getattr(self._app._scope, "selection", None))
+        # Whether there is anything to scope BY. An empty selection map means
+        # "the user unticked everything" only where collections exist to tick;
+        # with no config it is simply an app that cannot be scoped, and both
+        # toggle paths pop their key, so the map alone cannot tell them apart.
+        cfg = self._app._config
+        scopeable = bool(cfg and cfg.collections)
         cfg_defaults = self._app._config.defaults if self._app._config else None
 
         try:
@@ -396,8 +401,8 @@ class SearchController:
             # the event loop while the worker is reading them.
             # A partly-ticked collection contributes no name and is scoped by
             # source, so the channel stays open. An empty list means the user
-            # unticked everything; an unexpressed scope (launch) means all.
-            collection=list(cols) if cols else (None if (scoped_sources or not expressed) else []),
+            # unticked everything; an app with nothing to scope by means all.
+            collection=list(cols) if cols else (None if (scoped_sources or not scopeable) else []),
             active_sources=scoped_sources or None,
             tag_filter=tag_filter,
             sections_per_file=cfg_defaults.sections_per_file_max if cfg_defaults else 200,

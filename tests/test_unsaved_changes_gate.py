@@ -11,9 +11,13 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from textual.app import ComposeResult
+from textual.screen import Screen
+from textual.widgets import Static
 
 from fnd.config import CollectionConfig, Config, SourceConfig
 from fnd.tui import FNDApp
@@ -165,3 +169,119 @@ def test_no_method_hides_code_after_its_return() -> None:
             if isinstance(stmt, ast.Return) and index < len(node.body) - 1:
                 dead.append(f"{node.name}:{stmt.lineno}")
     assert not dead, f"unreachable code after a return: {dead}"
+
+
+class TestTheGateCoversTheWholeStack:
+    """Two holes an adversary found in the gate, both measured on the app.
+
+    The filter browser is only ever pushed on top of the source form, so a
+    dirty form under a clean browser quit with no prompt at all — the gate
+    asked the top screen and nothing below it. And `q` reached the app's quit
+    THROUGH the gate, so the question it raised was answered by pressing the
+    same key again.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_dirty_screen_under_a_clean_one_still_stops_the_quit(
+        self, tmp_index_dir: Path
+    ) -> None:
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterBrowserScreen, UnsavedChangesScreen
+
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(_DirtyScreen())
+            for _ in range(6):
+                await pilot.pause()
+            app.push_screen(
+                FilterBrowserScreen(
+                    title="Index filters",
+                    spec=FilterSpec(),
+                    gitignore=True,
+                    fndignore=True,
+                    on_save=lambda *_a: None,
+                )
+            )
+            for _ in range(10):
+                await pilot.pause()
+            app.action_quit()
+            for _ in range(8):
+                await pilot.pause()
+            asked = isinstance(app.screen, UnsavedChangesScreen)
+            running = app.is_running
+
+        assert asked, "it quit with a dirty screen buried in the stack"
+        assert running
+
+    @pytest.mark.asyncio
+    async def test_the_gate_does_not_offer_to_save_what_it_cannot_reach(
+        self, tmp_index_dir: Path
+    ) -> None:
+        """A form buried under another editor cannot be saved from a modal —
+        its own save pops whatever is on top, which is not it."""
+        from textual.widgets import OptionList
+
+        from fnd.filters import FilterSpec
+        from fnd.tui.settings_screen import FilterBrowserScreen
+
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(_DirtyScreen())
+            for _ in range(6):
+                await pilot.pause()
+            app.push_screen(
+                FilterBrowserScreen(
+                    title="Index filters",
+                    spec=FilterSpec(),
+                    gitignore=True,
+                    fndignore=True,
+                    on_save=lambda *_a: None,
+                )
+            )
+            for _ in range(10):
+                await pilot.pause()
+            app.action_quit()
+            for _ in range(8):
+                await pilot.pause()
+            ids = [o.id for o in app.screen.query_one("#confirm_list", OptionList)._options]
+
+        assert "save" not in ids, ids
+        assert "discard" in ids, ids
+        assert "stay" in ids, ids
+
+    @pytest.mark.asyncio
+    async def test_q_on_the_gate_keeps_editing_rather_than_quitting(
+        self, tmp_index_dir: Path
+    ) -> None:
+        from fnd.tui.settings_screen import UnsavedChangesScreen
+
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(_DirtyScreen())
+            for _ in range(6):
+                await pilot.pause()
+            app.action_quit()
+            for _ in range(8):
+                await pilot.pause()
+            assert isinstance(app.screen, UnsavedChangesScreen), "the premise"
+            await pilot.press("q")
+            for _ in range(8):
+                await pilot.pause()
+            running = app.is_running
+            gone = app.screen.__class__ is not UnsavedChangesScreen
+
+        assert running, "the key that raised the question answered it"
+        assert gone, "and it should still dismiss the gate"
+
+
+class _DirtyScreen(Screen[None]):
+    """A screen that always has something to lose."""
+
+    def compose(self) -> ComposeResult:
+        yield Static("dirty")
+
+    def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
+        return "This form", lambda: None

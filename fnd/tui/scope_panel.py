@@ -153,8 +153,13 @@ class ScopeController:
             # list and keep only names that exist in the config. Without this
             # a value like ``-c "SSD,SSD Exam"`` becomes a single phantom key
             # that no panel row can toggle yet still pins every search.
+            # An empty map is about to mean "the user unticked everything", so
+            # a launch carrying only ``--filter`` must seed the same scope an
+            # unflagged launch gets rather than leaving it empty.
             self.selection: dict[str, _FullScope | set[str]] = (
-                dict.fromkeys(self._valid_collection_names(collection), FULL) if collection else {}
+                dict.fromkeys(self._valid_collection_names(collection), FULL)
+                if collection
+                else self._seed_from_defaults()
             )
             self.filter_kinds: list[str] = []
             self.filter_date: str = "any"

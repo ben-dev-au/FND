@@ -62,22 +62,62 @@ def test_a_source_scope_without_a_collection_still_works(
     assert len(hits) == 1
 
 
-@pytest.mark.asyncio
-async def test_a_scope_nobody_has_expressed_yet_still_searches(two_collections: Path) -> None:
-    """The regression this fix caused, and the distinction it missed.
+def _config(tmp_path: Path):
+    from fnd.config import Config
 
-    An empty selection MAP is not the user unticking everything — it is a
-    scope nobody has expressed, which is what a launch looks like before the
-    panel populates. Treating the two the same made a fresh app find nothing,
-    and only a preview-navigation test noticed.
+    return Config(
+        collections={
+            name: CollectionConfig(sources=[SourceConfig(path=tmp_path / name)])
+            for name in ("alpha", "beta")
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_app_with_nothing_to_scope_by_still_searches(two_collections: Path) -> None:
+    """The regression the first attempt at this caused.
+
+    An empty selection map is not always the user unticking everything: an app
+    with no config has no collections to tick, and reading the two the same
+    made a fresh app find nothing. Only a preview-navigation test noticed.
     """
     from fnd.tui import FNDApp
 
     app = FNDApp(index_dir=two_collections)
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        app._scope.selection = {}
         request = app._search._prepare("zebrafish")  # type: ignore[attr-defined]
         scope = request.collection if request is not None else "no request"
 
-    assert scope is None, f"an unexpressed scope must not narrow to nothing: {scope!r}"
+    assert scope is None, f"an app with nothing to scope by must not narrow: {scope!r}"
+
+
+@pytest.mark.asyncio
+async def test_unticking_every_collection_through_the_panel_finds_nothing(
+    two_collections: Path, tmp_path: Path
+) -> None:
+    """Driven through the toggle the user actually presses.
+
+    The first fix asked whether the selection map was empty. Both toggle paths
+    POP their key, so unticking everything leaves the same empty map a launch
+    has — and the earlier test set that map by hand, so it passed either way
+    while the panel read `0/2 active` and the search returned both.
+    """
+    from textual.widgets import Tree
+
+    from fnd.tui import FNDApp
+
+    app = FNDApp(index_dir=two_collections, config=_config(tmp_path))
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        assert app._scope.collections, "the premise: a fresh app has both ticked"
+        tree = app.query_one("#collections_panel_tree", Tree)
+        for node in list(tree.root.children):
+            app._scope.on_collections_selected(Tree.NodeSelected(node))
+            await pilot.pause()
+        markers = {n: app._scope.collection_marker(n) for n in ("alpha", "beta")}
+        request = app._search._prepare("zebrafish")  # type: ignore[attr-defined]
+        scope = request.collection if request is not None else "no request"
+
+    assert markers == {"alpha": "○", "beta": "○"}, markers
+    assert scope == [], f"every row reads off and the search covered them all: {scope!r}"

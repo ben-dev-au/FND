@@ -81,6 +81,29 @@ async def test_a_filter_that_emptied_the_search_is_named(cfg: Config, indexed: P
 
     assert "No results for 'risotto'" in on_screen, on_screen[:400]
     assert "1 filter is narrowing this" in on_screen, on_screen[:400]
+    assert "Filters panel" in on_screen, on_screen[:400]
+
+
+@pytest.mark.asyncio
+async def test_it_names_a_place_and_not_a_key(cfg: Config, indexed: Path) -> None:
+    """Focus is in the query bar when this paints, and a key pressed there
+    types itself into the query — which is correct. So the message said
+    `X clears it` and produced `risottoX`, with the filter untouched. It names
+    the panel, which carries a row that works whatever has focus.
+    """
+    app = FNDApp(index_dir=indexed, config=cfg)
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        app._scope.filter_kinds.append("python")
+        await run_search(pilot, app, "risotto")
+        for _ in range(10):
+            await pilot.pause()
+        message = app._results.empty_state()
+        key = app._fnd_keymap.for_action("clear_filters")
+
+    assert key, "the premise: the action has a key"
+    assert key not in message, f"it advertised {key!r}, which types into the query bar"
+    assert "Filters panel" in message, message
 
 
 @pytest.mark.asyncio
