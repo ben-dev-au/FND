@@ -54,7 +54,7 @@ RESERVED_FACTS: Final[frozenset[str]] = frozenset(
 )
 
 
-def _frontmatter_kinds() -> frozenset[str]:
+def frontmatter_kinds() -> frozenset[str]:
     """Kinds that can carry a YAML frontmatter block.
 
     Every note format, not Markdown alone — a .txt file carries one just as
@@ -175,7 +175,7 @@ class FileFacts(Mapping[str, object]):
         if self._fm_read:
             return self._fm
         self._fm_read = True
-        if kind_for_suffix(self._path.suffix) not in _frontmatter_kinds():
+        if kind_for_suffix(self._path.suffix) not in frontmatter_kinds():
             # Reading a PDF or a CSV as text to look for a YAML block opens
             # every candidate in the source for nothing.
             return self._fm

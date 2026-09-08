@@ -5,6 +5,13 @@ what it reached: 4500 notes beside 200 PDFs offered Markdown alone, so "md and
 pdf" could not be expressed on that screen at all. Walk order is reverse
 alphabetical, so the 4000 are systematically the last 4000 — a year-foldered
 corpus loses its earliest years from every picker.
+
+An audit called this file unconditionally true, and it is right about the
+PARAMETRISATION: `truncated` no longer reaches `_kind_items` at all, so each
+pair of cases here exercises one path. The assertions still guard the contract
+— they fail the moment the picker goes back to offering what it saw — but the
+flag they are named for now earns its keep somewhere else entirely, and the
+last test holds it to that so removing it cannot pass silently.
 """
 
 from __future__ import annotations
@@ -57,3 +64,15 @@ def test_the_counts_still_say_what_is_there_now() -> None:
     assert "40" in labels["kind:md"], labels["kind:md"]
     assert "3" in labels["kind:pdf"], labels["kind:pdf"]
     assert "·" not in labels["kind:epub"], "a kind with none seen carries no count"
+
+
+def test_the_flag_still_reaches_the_user_somewhere() -> None:
+    """`truncated` no longer narrows the picker, so the only thing left that
+    it does is say so — and nothing above would fail if that went too."""
+    import inspect
+
+    from fnd.tui import settings_screen
+
+    source = inspect.getsource(settings_screen)
+    assert "truncated" in source, "the flag stopped reaching the screen entirely"
+    assert "partial scan" in source, "the scan stopped saying it had been cut short"

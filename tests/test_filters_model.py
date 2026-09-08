@@ -83,8 +83,17 @@ class TestScope:
         assert rule.passes(no) is False
         assert rule.passes(txt) is True
 
-    def test_unscoped_rule_applies_everywhere(self, tmp_path: Path) -> None:
+    def test_a_rule_naming_frontmatter_scopes_itself(self, tmp_path: Path) -> None:
+        """REVERSED: it used to judge everything, so a mixed rule like
+        `Course == 'X' OR file.size < 10` dropped every PDF — the frontmatter
+        half strict-nulled and took the whole clause with it. A rule naming a
+        frontmatter key is answerable only by a file that can carry one."""
         rule = rule_from_text("Course == 'DPwC'")
+        assert rule.passes(_facts(tmp_path, "paper.pdf")) is True
+
+    def test_a_rule_naming_only_file_facts_still_applies_everywhere(self, tmp_path: Path) -> None:
+        """The control: nothing about `file.*` needs a block to answer it."""
+        rule = rule_from_text("file.name == 'other.pdf'")
         assert rule.passes(_facts(tmp_path, "paper.pdf")) is False
 
 

@@ -15,10 +15,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol
 
+from fnd.file_facts import frontmatter_kinds, is_fact_name
 from fnd.filter_dsl import FilterError, compile_filter, referenced_fields
 from fnd.filter_dsl import parse as parse_dsl
 from fnd.filters.model import Rule
-from fnd.kinds import KINDS_IN_CATEGORY
 from fnd.tags import TAG_PROVIDERS, normalise_tag, source_tag_selection
 
 __all__ = ["DIMENSIONS", "Dimension", "dimension", "rule_from_text"]
@@ -26,7 +26,10 @@ __all__ = ["DIMENSIONS", "Dimension", "dimension", "rule_from_text"]
 # Frontmatter is a Markdown convention: a .txt file has no YAML block, so a
 # frontmatter predicate must not be evaluated against one — strict null would
 # drop every plain-text file in the source.
-NOTE_KINDS: Final[frozenset[str]] = frozenset({"md"} & set(KINDS_IN_CATEGORY.get("notes", ())))
+#: Exactly the kinds that can carry a block, read from the one function that
+#: decides it. Narrowed to ``md`` by hand, a bare ``.txt`` was out of scope and
+#: sailed past the rule that dropped the identical ``.md`` beside it.
+NOTE_KINDS: Final[frozenset[str]] = frontmatter_kinds()
 
 
 def _as_list(value: object) -> list[object]:
@@ -244,10 +247,19 @@ def _compile(
     applies_to: frozenset[str] | None = None,
 ) -> Rule:
     node = parse_dsl(text)
+    facts = referenced_fields(node)
+    # A rule naming a frontmatter key cannot be answered by a file with no
+    # block, whatever ELSE it names. Scoping only the rules that name nothing
+    # else sent a mixed one — `Course == 'X' OR file.size < 10` — to the
+    # unscoped channel, where the frontmatter half strict-nulled on every PDF
+    # and took the whole clause down with it.
+    if not needs_frontmatter and any(not is_fact_name(f) for f in facts):
+        needs_frontmatter = True
+        applies_to = NOTE_KINDS
     return Rule(
         predicate=compile_filter(text),
         text=text,
-        facts=referenced_fields(node),
+        facts=facts,
         applies_to=applies_to,
         needs_frontmatter=needs_frontmatter,
     )

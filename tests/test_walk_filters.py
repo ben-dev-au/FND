@@ -450,21 +450,34 @@ class TestTagsAreNotConflated:
         assert _names(tmp_path, defaults=spec) == {"clean.md"}
 
 
-class TestFrontmatterScopeIsMarkdownOnly:
-    """A frontmatter rule applies to Markdown, and to nothing else.
+class TestFrontmatterScopeIsEveryKindThatCanCarryOne:
+    """A frontmatter rule judges every kind that can carry a block.
 
-    ``TestFrontmatterScope`` above proves a PDF passes through, which held
-    whether the scope was ``.md`` or the whole notes category — and the
-    category silently dropped every ``.txt`` file.
+    REVERSED deliberately. This class asserted Markdown only, on the reasoning
+    that ``.txt`` carries no YAML block — but ``FileFacts`` opens ``.txt``
+    looking for one, so the app already treats it as a note. Scoping the rule
+    to ``md`` alone dropped a bare ``.md`` and let the identical bare ``.txt``
+    through, which is the owner's reported bug surviving under a green test.
+
+    The scope is now literally ``frontmatter_kinds()`` — the one function that
+    decides which files are opened at all — so the two cannot disagree again.
+    A PDF is still never judged: it cannot carry a block, so it cannot answer.
     """
 
-    def test_a_plain_text_file_is_not_judged_on_frontmatter(self, tmp_path: Path) -> None:
-        """.txt carries no YAML block, so strict null would drop every one."""
+    def test_a_plain_text_file_is_judged_like_any_other_note(self, tmp_path: Path) -> None:
+        """It can carry a block. Having none is an answer, not a silence."""
         _write(tmp_path, "note.md", "---\ntype: note\n---\nbody\n")
         _write(tmp_path, "plain.txt", "just text\n")
         _write(tmp_path, "paper.pdf", "%PDF-1.4")
         spec = DefaultFilters(exclude_tags=[], frontmatter="type == 'note'")
-        assert _names(tmp_path, defaults=spec) == {"note.md", "plain.txt", "paper.pdf"}
+        assert _names(tmp_path, defaults=spec) == {"note.md", "paper.pdf"}
+
+    def test_a_plain_text_file_that_answers_is_kept(self, tmp_path: Path) -> None:
+        """The other half: judged does not mean dropped."""
+        _write(tmp_path, "tagged.txt", "---\ntype: note\n---\nbody\n")
+        _write(tmp_path, "other.txt", "---\ntype: other\n---\nbody\n")
+        spec = DefaultFilters(exclude_tags=[], frontmatter="type == 'note'")
+        assert _names(tmp_path, defaults=spec) == {"tagged.txt"}
 
     def test_the_markdown_extension_is_judged_too(self, tmp_path: Path) -> None:
         """``.markdown`` is Markdown and does carry frontmatter. ``main`` keyed
@@ -489,7 +502,7 @@ class TestFrontmatterScopeIsMarkdownOnly:
             defaults=DefaultFilters(exclude_tags=[]),
             frontmatter_filter="type == 'note'",
         )
-        assert got == {"note.md", "plain.txt"}
+        assert got == {"note.md"}
 
 
 class TestTypeGlobAbsorptionIsConservative:
@@ -571,10 +584,17 @@ class TestAFrontmatterOnlyExpression:
         assert as_expression == as_frontmatter
         assert "b.md" not in as_expression, "the rule filtered nothing"
 
-    def test_a_file_without_frontmatter_still_passes(self, tmp_path: Path) -> None:
-        """Strict null would otherwise drop every PDF on a frontmatter compare."""
+    def test_a_file_that_cannot_answer_still_passes(self, tmp_path: Path) -> None:
+        """Strict null would otherwise drop every PDF on a frontmatter compare.
+
+        The control moved from ``.txt`` to ``.pdf``: a ``.txt`` CAN carry a
+        block, so having none is an answer. A PDF cannot, so it is not judged.
+        """
         self._corpus(tmp_path)
-        assert "c.txt" in _names(tmp_path, defaults=DefaultFilters(expression="Course == 'A'"))
+        _write(tmp_path, "d.pdf", "%PDF-1.4")
+        kept = _names(tmp_path, defaults=DefaultFilters(expression="Course == 'A'"))
+        assert "d.pdf" in kept, kept
+        assert "c.txt" not in kept, "a note with no block is judged and fails"
 
     def test_a_file_expression_is_untouched(self, tmp_path: Path) -> None:
         self._corpus(tmp_path)
