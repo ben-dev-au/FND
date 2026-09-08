@@ -23,6 +23,7 @@ from fnd.tui.results_labels import (
     _styled_state_row,
     state_colour,
 )
+from fnd.tui.widgets.clear_bar import clear_label
 
 if TYPE_CHECKING:
     from textual.timer import Timer
@@ -811,9 +812,7 @@ class ScopeController:
         # bar never shifts the tree content down.
         bar.visible = active
         if active:
-            n = self.active_filter_count
-            plural = "" if n == 1 else "s"
-            bar.update(f"✕  Clear {n} filter{plural}")
+            bar.update(clear_label(self.active_filter_count))
 
     def clear_filters(self) -> None:
         """Reset every filter to its default and re-run the active query.

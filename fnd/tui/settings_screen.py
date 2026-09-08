@@ -65,7 +65,7 @@ from fnd.tui.menu import (
     walk_all_sections,
 )
 from fnd.tui.widgets import COMMIT_KEY, DetailStrip
-from fnd.tui.widgets.clear_bar import ClearFiltersBar
+from fnd.tui.widgets.clear_bar import RETURN_TO_DEFAULTS, ClearFiltersBar
 from fnd.tui.widgets.toggle_tree import ToggleGroup, ToggleItem, ToggleTree
 
 if TYPE_CHECKING:
@@ -6028,19 +6028,19 @@ class FilterBrowserScreen(Screen[None]):
         self._refresh_summary()
 
     def _update_clear_bar(self) -> None:
-        """Show the clear row only while clearing would change something, and
-        name what it does: on a source it restores what is inherited rather
-        than emptying the set."""
-        from fnd.filters import FilterSpec
+        """The sidebar's row, doing the index side's act.
 
-        # The same target ``action_clear_all`` moves to, so the row is offered
-        # exactly when pressing it would change something.
-        target = self._inherited or (FilterSpec(), self._gitignore, self._fndignore)
+        Search filters are ephemeral, so that row counts what it clears. These
+        are config: the row restores what this source inherits, and appears
+        only where the source has departed from it. The global set inherits
+        from nothing, so there is nothing to return to and no row — which is
+        also why it was showing on an untouched screen.
+        """
         bar = self.query_one("#clear_filters_bar", ClearFiltersBar)
-        bar.visible = (self._spec, self._gitignore, self._fndignore) != target
-        bar.update(
-            "✕  Clear all filters" if self._inherited is None else "✕  Reset filters to inherited"
+        bar.visible = self._inherited is not None and (
+            (self._spec, self._gitignore, self._fndignore) != self._inherited
         )
+        bar.update(RETURN_TO_DEFAULTS)
 
     def _offered_kind_ids(self) -> set[str]:
         """Kind ids the tree actually showed, so "all ticked" means all of

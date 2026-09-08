@@ -23,6 +23,21 @@ from textual.widgets import Static
 CLEAR_BAR_ID = "clear_filters_bar"
 
 
+def clear_label(n: int) -> str:
+    """What the bar says over the SEARCH filters: ``n`` of them, cleared.
+
+    Search filters are ephemeral and clearing them costs nothing, so the row
+    counts what it will remove.
+    """
+    return f"✕  Clear {n} filter{'' if n == 1 else 's'}"
+
+
+#: What the same bar says over the INDEX filters. A different act, so a
+#: different word: these are config, they decide what is in the index, and the
+#: row restores what the source inherits rather than removing anything.
+RETURN_TO_DEFAULTS = "✕  Return to default filters"
+
+
 def focus_clear_bar(tree: Widget) -> bool:
     """Focus the clear bar above ``tree``, if its pane is showing one.
 
