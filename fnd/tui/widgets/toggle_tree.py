@@ -105,6 +105,10 @@ class ToggleGroup:
     a red "never index any of these" that became ◐ when the scan landed."""
     groups: tuple[ToggleGroup, ...] = ()
     """Sub-categories. A group carries items or sub-groups, not usually both."""
+    name_leaves: bool = False
+    """Name what is on rather than counting it. For a branch of two or three
+    short labels, "1 of 2 files" says less than the file's name — and the
+    summary below the tree was carrying the names instead."""
     elsewhere: str = ""
     """A bound on this dimension the branch cannot show. A radio branch reading
     `○ (Any size)` while a minimum filtered was a false statement, not a
@@ -293,6 +297,9 @@ class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
         seen = {_key(it) for it in counted}
         n_on = len({_key(it) for it in counted if it.id in self._selected})
         n_off = len({_key(it) for it in counted if it.id in self._excluded})
+        if g.name_leaves:
+            on = [it.label for it in counted if it.id in self._selected]
+            return f"  ({', '.join(on)})" if on else ""
         parts = []
         if mode == "cycle":
             if n_on:

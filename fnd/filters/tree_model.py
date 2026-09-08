@@ -87,6 +87,8 @@ class Branch:
     noun: str = ""
     legend: str = ""
     """What the glyphs mean here, where the shared line would be wrong."""
+    name_leaves: bool = False
+    """Name what is on rather than counting it. See :class:`ToggleGroup`."""
     elsewhere: str = ""
     """A bound on this dimension that this branch cannot show. Without it the
     row read `○ Maximum file size (Any size)` while a minimum was filtering —
@@ -240,6 +242,7 @@ def spec_branches(
             (("ignore:git", ".gitignore"), ("ignore:fnd", ".fndignore")),
             empty_label="none",
             noun="files",
+            name_leaves=True,
             legend=IGNORE_LEGEND,
         )
     )

@@ -5563,6 +5563,7 @@ def _branch_group(branch: Any) -> ToggleGroup:
         empty_label=branch.empty_label,
         full_label=branch.full_label,
         noun=branch.noun,
+        name_leaves=branch.name_leaves,
         elsewhere=branch.elsewhere,
         complete=branch.complete,
         groups=tuple(_branch_group(b) for b in branch.groups),
@@ -6052,13 +6053,12 @@ class FilterBrowserScreen(Screen[None]):
         from fnd.filters.text_form import render
 
         text = render(self._spec)
-        ignores = ", ".join(
-            n for n, on in ((".gitignore", self._gitignore), (".fndignore", self._fndignore)) if on
-        )
         # The walk prunes every dot-prefixed name whatever the filters say, and
         # nothing else on any screen says so. Only an include glob naming a
         # dot-prefixed component admits one, and only what that glob matches.
-        head = [f"obeying {ignores}" if ignores else "ignore files off", "skipping hidden files"]
+        # The ignore files are NOT named here: the branch names them itself,
+        # and at 100x24 this head had three lines for eight rows of content.
+        head = ["skipping hidden files"]
         if self._globs:
             head.append("restricted to paths: " + ", ".join(self._globs))
         if self._excludes:

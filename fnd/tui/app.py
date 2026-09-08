@@ -153,6 +153,11 @@ def _is_commit(key: str) -> bool:
     return key.replace(" ", "").lower() in {"^s", "ctrl+s"}
 
 
+def _is_leave(key: str) -> bool:
+    """Whether a hint's key is how you get off this screen."""
+    return "esc" in key.lower()
+
+
 class _HintBar:
     """The hint bar, refitted to the width it is painted at.
 
@@ -184,16 +189,17 @@ class _HintBar:
         return self._full.plain
 
     def _kept(self, n: int) -> tuple[tuple[str, str], ...]:
-        """The first ``n`` hints, always including the commit key.
+        """The first ``n`` hints, always including the keys that save and leave.
 
-        Dropping from the right cut `^S Save` while leaving `c Clear` — a
-        destructive key outliving the one that keeps the work.
+        Dropping from the right cut `^s Save` while leaving `c Clear` — a
+        destructive key outliving the one that keeps the work — and then cut
+        `Esc Discard` too, so a narrow terminal advertised seven things to do
+        on a screen and no way off it.
         """
-        kept = list(self._contextual[:n])
-        commit = next((h for h in self._contextual[n:] if _is_commit(h[0])), None)
-        if commit is not None:
-            kept = [*kept[: max(0, n - 1)], commit]
-        return tuple(kept)
+        must = [h for h in self._contextual if _is_commit(h[0]) or _is_leave(h[0])]
+        room = max(0, n - len(must))
+        kept = [h for h in self._contextual[:n] if h not in must][:room]
+        return (*kept, *must)
 
     def fitted(self, width: int) -> Text:
         for n in range(len(self._anchors), -1, -1):

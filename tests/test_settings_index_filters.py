@@ -471,7 +471,12 @@ async def test_the_expression_can_be_copied(built_index: Path) -> None:
 async def test_the_summary_says_what_the_expression_leaves_out(built_index: Path) -> None:
     """Ignore files and path globs are not predicates over a file, so they
     cannot appear in the expression; presenting it as the whole filter
-    invited the question of whether it was complete."""
+    invited the question of whether it was complete.
+
+    The ignore files are named by their own row rather than by this line —
+    the summary repeated the row it sits under, which cost three of the
+    twenty-four rows a narrow terminal has.
+    """
     from fnd.filters import FilterSpec
     from fnd.tui.settings_screen import FilterBrowserScreen
 
@@ -491,10 +496,14 @@ async def test_the_summary_says_what_the_expression_leaves_out(built_index: Path
         for _ in range(20):
             await pilot.pause()
         summary = _summary_text(app.screen)
+        on_screen = "\n".join(
+            "".join(s.text for s in strip) for strip in app.screen._compositor.render_strips()
+        )
 
     assert "Outside the expression" in summary, summary
-    assert ".gitignore" in summary
     assert "**/*.md" in summary
+    assert ".gitignore" in on_screen, "nothing said the ignore files were in effect"
+    assert ".gitignore" not in summary, "and the summary no longer repeats the row"
 
 
 class TestClearClearsWhatItClaims:
