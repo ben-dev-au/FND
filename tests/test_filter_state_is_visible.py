@@ -68,8 +68,13 @@ async def _tree(app: FNDApp, pilot: object, spec: FilterSpec) -> ToggleTree:
     tree = app.screen.query_one("#filter_tree", ToggleTree)
     # Only the branches under test: File types now offers all forty kinds, so
     # expanding everything pushes the tag rows off the screen.
+    #
+    # Case-insensitively, because this means "the tag branch" and was matching
+    # a lowercase substring that only appeared while the branch was borrowing
+    # its single source's name (`Note tags (YAML)`).
     for node in tree.root.children:
-        if any(word in str(node.label) for word in ("tags", "Notes & text")):
+        label = str(node.label).lower()
+        if any(word in label for word in ("tags", "notes & text")):
             node.expand()
             for child in node.children:
                 child.expand()
