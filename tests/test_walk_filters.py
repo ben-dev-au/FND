@@ -695,3 +695,63 @@ class TestASymlinkedRootIsNotSilent:
             if item.value_getter is not None
         ]
         assert not any("symlink" in str(s) for s in summaries), summaries
+
+
+class TestAFileBelongsToOneSource:
+    """A file reachable from two sources — one nested inside another, or the
+    same folder listed twice — was extracted and written once per source, so
+    a seven-file collection reported twelve and did the work twice."""
+
+    @staticmethod
+    def _corpus(root: Path) -> Path:
+        notes = root / "notes"
+        notes.mkdir()
+        for i in range(5):
+            (notes / f"n{i}.md").write_text(f"file {i}\n")
+        (root / "top.md").write_text("top\n")
+        (root / "other.md").write_text("other\n")
+        return notes
+
+    @staticmethod
+    def _sources(roots):
+        from fnd.config import DefaultFilters, SourceConfig, resolve_filters
+
+        out = []
+        for root in roots:
+            source = SourceConfig(path=root)
+            source._resolved_filters = resolve_filters(None, DefaultFilters())
+            out.append(source)
+        return out
+
+    def _build(self, tmp_path: Path, roots, label: str) -> int:
+        from fnd.config import CollectionConfig
+        from fnd.index import build_index_from_config
+
+        index_dir = tmp_path / f"idx-{label}"
+        index_dir.mkdir()
+        return build_index_from_config(
+            config=CollectionConfig(sources=self._sources(roots)),
+            collection="c",
+            index_dir=index_dir,
+        )
+
+    def test_a_nested_source_does_not_double_the_work(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        notes = self._corpus(root)
+        assert self._build(root, (root, notes), "nested") == 7
+
+    def test_the_same_folder_twice_does_not_either(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        self._corpus(root)
+        assert self._build(root, (root, root), "twice") == 7
+
+    def test_separate_sources_still_both_count(self, tmp_path: Path) -> None:
+        """Deduplication must not drop a genuinely separate source."""
+        root = tmp_path.resolve()
+        first = root / "one"
+        first.mkdir()
+        (first / "a.md").write_text("file a\n")
+        second = root / "two"
+        second.mkdir()
+        (second / "b.md").write_text("file b\n")
+        assert self._build(root, (first, second), "separate") == 2

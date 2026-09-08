@@ -361,9 +361,18 @@ def build_index_from_config(
     # Walk per-source so each chunk carries an identifier of which
     # source it came from — lets the search layer scope to a subset of
     # a collection's sources without re-indexing.
+    # A file reachable from two sources — one nested inside another, or the
+    # same folder listed twice — was extracted and written once per source,
+    # so a seven-file collection reported twelve and did the work twice. The
+    # first source to reach it owns it.
+    claimed: set[str] = set()
     for source in config.sources:
         source_id = str(Path(source.path).expanduser().resolve())
         for path in walk_sources(sources=[source]):
+            key = str(path.resolve())
+            if key in claimed:
+                continue
+            claimed.add(key)
             meta_blob_bytes, file_tags = read_file_metadata(
                 path, tag_sources=tag_sources, frontmatter_keys=tag_frontmatter_keys
             )
