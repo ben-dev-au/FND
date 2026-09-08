@@ -6186,12 +6186,18 @@ class FilterBrowserScreen(Screen[None]):
         from fnd.filters.text_form import render
 
         text = render(self._spec)
-        # The walk prunes every dot-prefixed name whatever the filters say, and
-        # nothing else on any screen says so. Only an include glob naming a
-        # dot-prefixed component admits one, and only what that glob matches.
-        # The ignore files are NOT named here: the branch names them itself,
-        # and at 100x24 this head had three lines for eight rows of content.
-        head = ["skipping hidden files"]
+        # This line's claim is "what the expression below does NOT cover", and
+        # ignore files do not appear in it — so the line has to mention them
+        # even though the branch above names WHICH. It says that they apply,
+        # not which they are; dropping it entirely left the expression looking
+        # like the whole story.
+        #
+        # The walk also prunes every dot-prefixed name whatever the filters
+        # say, and nothing else on any screen says so. Only an include glob
+        # naming a dot-prefixed component admits one, and only what it matches.
+        obeying = self._gitignore or self._fndignore
+        head = ["obeying ignore files" if obeying else "ignore files off"]
+        head.append("skipping hidden files")
         if self._globs:
             head.append("restricted to paths: " + ", ".join(self._globs))
         if self._excludes:

@@ -63,7 +63,7 @@ LEGEND = "⊘  never index these   ●  index ONLY these   ◐  some of these   
 #: this file", which indexes FEWER files, and ○ means more — the opposite of
 #: what the shared line claims. A branch names its own meaning or inherits.
 IGNORE_LEGEND = "●  obey this file   ○  ignore it — obeying one indexes fewer files"
-RULES_LEGEND = "⏎  opens an editor for this rule"
+RULES_LEGEND = "⏎  opens a branch, then the editor for a rule in it"
 
 
 @dataclass(frozen=True, slots=True)

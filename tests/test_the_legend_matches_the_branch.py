@@ -67,6 +67,42 @@ async def test_the_painted_legend_follows_the_cursor(tmp_index_dir: Path) -> Non
             )
 
     assert "obey this file" in painted["ignore"], painted["ignore"].splitlines()[:3]
-    assert "opens an editor" in painted["rules"], painted["rules"].splitlines()[:3]
+    assert "opens a branch" in painted["rules"], painted["rules"].splitlines()[:3]
     assert "index ONLY these" in painted["kinds"], painted["kinds"].splitlines()[:3]
     assert "obey this file" not in painted["kinds"], "the wording leaked between branches"
+
+
+@pytest.mark.asyncio
+async def test_enter_on_a_rules_branch_does_something(tmp_index_dir: Path) -> None:
+    """It was the one row where Enter did nothing at all — no toggle, no
+    expand — under a legend saying it opens an editor. Every branch beside it
+    either toggles or expands, so this one expands, and the editor is then one
+    row down where the legend says it is."""
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(),
+                gitignore=True,
+                fndignore=True,
+                sample_provider=lambda: _SAMPLE,
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(25):
+            await pilot.pause()
+        tree = app.screen.query_one("#filter_tree", ToggleTree)
+        node = next(n for n in tree.root.children if "Rules you type" in str(n.label))
+        tree.move_cursor(node)
+        for _ in range(4):
+            await pilot.pause()
+        before = node.is_expanded
+        tree.action_toggle_selection()
+        for _ in range(6):
+            await pilot.pause()
+        after = node.is_expanded
+
+    assert not before, "the premise: it starts collapsed"
+    assert after, "Enter did nothing on the one row whose legend promised the most"

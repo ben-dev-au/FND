@@ -398,6 +398,11 @@ class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
                 return
             ids = {it.id for it in g.leaves}
             if self._mode(g) == "actions":
+                # Expand, like the branches beside it. Returning here made
+                # Enter the one key that did nothing at all on this row, under
+                # a legend saying it opens an editor — which it does, on the
+                # leaf one row down that this reveals.
+                node.toggle()
                 return
             if self._mode(g) in ("cycle", "radio"):
                 # Expand, do not wipe. Selecting every tag is never what the
