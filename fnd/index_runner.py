@@ -455,13 +455,29 @@ class CloudPolicy:
         self.fetch(_touch, path)
 
 
-async def _process_file_task(fn: Any, /, **kwargs: Any) -> tuple[int, bool, bool, str]:
+@dataclass(frozen=True, slots=True)
+class _FileOutcome:
+    """What one file's processing did, split by the question each caller asks.
+
+    ``extraction_reused`` answers "did we do the work" and feeds the ETA rate;
+    ``already_indexed`` answers "was this file already in THIS collection".
+    Conflating them reported 0 newly indexed for files that had just landed.
+    """
+
+    chunks: int
+    extraction_reused: bool
+    already_indexed: bool
+    has_textured: bool
+    error: str
+
+
+async def _process_file_task(fn: Any, /, **kwargs: Any) -> _FileOutcome:
     """Run one file's work off-loop.
 
     A thin named seam over ``asyncio.to_thread`` so the call site can stay
     readable while wrapped in the cancellation handler.
     """
-    return cast("tuple[int, bool, bool, str]", await asyncio.to_thread(fn, **kwargs))
+    return cast("_FileOutcome", await asyncio.to_thread(fn, **kwargs))
 
 
 def _process_one_file(
@@ -480,11 +496,10 @@ def _process_one_file(
     tag_sources: Sequence[str] = ("frontmatter", "os"),
     tag_frontmatter_keys: Sequence[str] = (),
     cloud_policy: CloudPolicy | None = None,
-) -> tuple[int, bool, bool, str]:
+) -> _FileOutcome:
     """Synchronous per-file work — extraction + write to Tantivy.
 
-    Returns ``(chunks_written, cache_hit, has_textured_chunk, error_msg)``.
-    ``has_textured_chunk`` is True iff any emitted chunk carries a non-empty
+    ``has_textured`` is True iff any emitted chunk carries a non-empty
     ``body_md`` (PDFs that hit the structured pipeline). Run inside
     ``asyncio.to_thread`` so the caller's event loop stays responsive.
 
@@ -506,30 +521,35 @@ def _process_one_file(
     is_pdf = path.suffix.lower() == ".pdf"
     parent_id = _path_parent_id(path)
 
-    # Incremental skip: an unchanged file already in this collection's
-    # committed index needs no work this run.
-    if skip_unchanged and prior_searcher is not None:
+    prior_mtime: int | None = None
+    prior_ctime = 0
+    prior_textured = False
+    if prior_searcher is not None:
         prior_mtime, prior_ctime, prior_textured = _prior_indexed_state(
             prior_searcher, schema, collection, parent_id
         )
-        if prior_mtime is not None:
-            times = read_file_times(path)
-            # read_file_times zeroes on stat failure; fall back to the stored
-            # values so a transient error reads as "unchanged", not "changed".
-            cur_mtime = times.mtime or prior_mtime
-            cur_ctime = times.inode_changed or prior_ctime
-            # Re-process only if changed, or if it's a flat PDF this run
-            # could texturise — the one improvement an incremental pass
-            # should still make.
-            improvable = is_pdf and texturise_on and not prior_textured
-            changed = _should_reprocess(
-                prior_mtime=prior_mtime,
-                prior_ctime=prior_ctime,
-                cur_mtime=cur_mtime,
-                cur_ctime=cur_ctime,
-            )
-            if not changed and not improvable:
-                return 0, True, prior_textured, ""
+    already_indexed = prior_mtime is not None
+
+    # Incremental skip: an unchanged file already in this collection's
+    # committed index needs no work this run.
+    if skip_unchanged and prior_mtime is not None:
+        times = read_file_times(path)
+        # read_file_times zeroes on stat failure; fall back to the stored
+        # values so a transient error reads as "unchanged", not "changed".
+        cur_mtime = times.mtime or prior_mtime
+        cur_ctime = times.inode_changed or prior_ctime
+        # Re-process only if changed, or if it's a flat PDF this run
+        # could texturise — the one improvement an incremental pass
+        # should still make.
+        improvable = is_pdf and texturise_on and not prior_textured
+        changed = _should_reprocess(
+            prior_mtime=prior_mtime,
+            prior_ctime=prior_ctime,
+            cur_mtime=cur_mtime,
+            cur_ctime=cur_ctime,
+        )
+        if not changed and not improvable:
+            return _FileOutcome(0, True, True, prior_textured, "")
 
     # The file survived the unchanged-skip, so it genuinely needs reading —
     # which for a cloud-only file means a download. Do it here rather than
@@ -537,11 +557,11 @@ def _process_one_file(
     # announced instead of looking like a wedged extractor.
     if is_cloud_only:
         if policy.skipping():
-            return 0, False, False, policy.skip_reason(path)
+            return _FileOutcome(0, False, already_indexed, False, policy.skip_reason(path))
         try:
             policy.materialise(path)
         except (CloudFetchError, OSError) as e:
-            return 0, False, False, policy.blocked_reason(path, e)
+            return _FileOutcome(0, False, already_indexed, False, policy.blocked_reason(path, e))
 
     # Read once per file, stamped onto every chunk. Shared with build_index so
     # an ad-hoc `fnd index <root>` captures the same metadata as a reindex.
@@ -608,21 +628,21 @@ def _process_one_file(
         # Same collection-scoped delete as above: never touch sibling
         # collections' chunks on an extraction error.
         writer.delete_documents_by_query(_delete_q)
-        return n_chunks, False, False, str(e)
+        return _FileOutcome(n_chunks, False, already_indexed, False, str(e))
 
     # Extraction that yields nothing raises nothing, so a caller counting
     # files would report this one as indexed while the index holds none of
     # it. The scoped delete above already ran, so it is genuinely absent.
     if n_chunks == 0:
-        return 0, False, False, no_text_reason(path)
+        return _FileOutcome(0, False, already_indexed, False, no_text_reason(path))
 
     if not is_pdf and non_pdf_sha:
         from fnd.seen_log import mark_seen
 
         mark_seen(non_pdf_sha)
 
-    hit = (cache.hits > cache_before_hits) if is_pdf else non_pdf_was_seen
-    return n_chunks, hit, has_textured, ""
+    reused = (cache.hits > cache_before_hits) if is_pdf else non_pdf_was_seen
+    return _FileOutcome(n_chunks, reused, already_indexed, has_textured, "")
 
 
 async def run_indexer(
@@ -849,7 +869,7 @@ async def run_indexer(
         # process this run are deleted+re-added, never skipped later, so the
         # start-of-run snapshot is the correct "already indexed?" oracle.
         local_prior_searcher = None
-        if skip_unchanged and not rebuild:
+        if not rebuild:
             with contextlib.suppress(Exception):
                 local_prior_searcher = local_index.searcher()
         return (
@@ -952,7 +972,7 @@ async def run_indexer(
             hits_before = cache.hits
             t_file = time.perf_counter()
             try:
-                chunks_written, was_hit, has_textured, err = await _process_file_task(
+                outcome = await _process_file_task(
                     _process_one_file,
                     path=path,
                     source_id=source_id,
@@ -978,12 +998,16 @@ async def run_indexer(
                 yield _emit("cancelled")
                 return
             file_elapsed_ms = (time.perf_counter() - t_file) * 1000.0
+            chunks_written = outcome.chunks
+            already = outcome.already_indexed
+            has_textured = outcome.has_textured
+            err = outcome.error
 
             if err:
                 state.failed += 1
             else:
                 if is_pdf:
-                    if was_hit:
+                    if already:
                         # Cache hits can be either textured or flat -
                         # the cache stores whatever the original
                         # extraction produced. Older entries (or runs
@@ -1004,7 +1028,7 @@ async def run_indexer(
                         state.still_flat += 1
                         state.indexed_newly += 1
                 else:
-                    if was_hit:
+                    if already:
                         state.indexed_already += 1
                     else:
                         state.indexed_newly += 1
@@ -1026,7 +1050,7 @@ async def run_indexer(
             # crush the per-byte rate and ETA would read 0 even with
             # a multi-minute uncached PDF still pending. Only the
             # actual extraction work feeds the rate.
-            if not was_hit:
+            if not outcome.extraction_reused:
                 extract_bytes_state[0] += file_size
                 extract_seconds_state[0] += file_elapsed_ms / 1000.0
             # Atomic state update per file = resume granularity per file.
@@ -1087,7 +1111,7 @@ async def run_indexer(
                 "file_complete",
                 current_file=str(path),
                 file_elapsed_ms=file_elapsed_ms,
-                cache_hit=was_hit,
+                cache_hit=outcome.extraction_reused,
                 is_pdf=is_pdf,
                 has_textured_chunk=has_textured,
             )
