@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -69,3 +70,43 @@ def test_enabling_a_source_needs_a_reindex(tmp_path: Path) -> None:
 
     row = next(i for i in _provider_filters(None) if i.id == "filters.tag_sources")
     assert "no reindex" not in row.description
+
+
+def test_the_config_says_a_folder_tag_is_not_inherited() -> None:
+    """Tagging a folder is the natural gesture for "keep this out", and the
+    tag is read per file — so a folder's own tag applies to nothing."""
+    from fnd.config import DefaultFilters
+
+    description = DefaultFilters.model_fields["exclude_tags"].description or ""
+    assert "folder" in description.lower(), description
+
+
+def test_the_tag_sources_row_says_it_too() -> None:
+    from fnd.tui.menu import _provider_filters
+
+    row = next(i for i in _provider_filters(None) if i.id == "filters.tag_sources")
+    assert "per file" in row.description
+    assert "folder" in row.description
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Finder tags are macOS-only")
+def test_a_folder_tag_really_does_not_reach_its_files(tmp_path: Path) -> None:
+    """The premise, measured rather than assumed."""
+    import plistlib
+    import subprocess
+
+    from fnd.tags import TAG_PROVIDERS, TagContext, read_tags
+
+    folder = tmp_path / "secret"
+    folder.mkdir()
+    (folder / "a.md").write_text("x\n")
+    payload = plistlib.dumps(["no_index"], fmt=plistlib.FMT_BINARY).hex()
+    subprocess.run(
+        ["xattr", "-wx", "com.apple.metadata:_kMDItemUserTags", payload, str(folder)],
+        check=False,
+    )
+    providers = [p for p in TAG_PROVIDERS.values() if p.available_on(sys.platform)]
+    on_folder = read_tags(TagContext(path=folder, frontmatter=None), providers)
+    on_file = read_tags(TagContext(path=folder / "a.md", frontmatter=None), providers)
+    assert "no_index" in on_folder["os"], "the tag was not written; test setup failed"
+    assert not on_file["os"], "documented behaviour: the file does not inherit it"

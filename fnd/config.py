@@ -273,7 +273,7 @@ class DefaultFilters(_ConfigModel):
 
     exclude_tags: list[str] | dict[str, list[str]] = Field(default_factory=lambda: ["no_index"])
     """Skip files carrying any of these tags. Reads OS file tags and a note's YAML
-    `tags:`."""
+    `tags:`. A folder's own tag is not inherited."""
 
     kinds: list[str] = Field(default_factory=list)
     """Restrict to these file types, e.g. ["md", "pdf"]. Empty means every

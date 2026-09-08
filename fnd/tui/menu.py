@@ -2889,10 +2889,11 @@ def _provider_filters(app: FNDApp) -> tuple[MenuItem, ...]:
             id="filters.tag_sources",
             label="Tag sources",
             description=(
-                "Which sources feed the Tags filter. Tick none to turn tag "
-                "filtering off. Turning one off hides its tags straight away; "
-                "turning one on needs a reindex, since tags are read when a "
-                "file is indexed."
+                "Which sources feed the Tags filter. Tags are read per file: "
+                "a tag on a folder does not apply to what is inside it. Tick "
+                "none to turn tag filtering off. Turning one off hides its tags "
+                "straight away; turning one on needs a reindex, since tags are "
+                "read when a file is indexed."
             ),
             kind=KIND_PICKER,
             multi=True,
