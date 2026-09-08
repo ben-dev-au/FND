@@ -1970,9 +1970,17 @@ def _summary_collections(app: FNDApp) -> str:
 
 
 def _summary_keybindings(app: FNDApp) -> str:
-    keymap = app._fnd_keymap  # type: ignore[attr-defined]
-    n_keys = len(keymap.bindings)
-    return f"{n_keys} keys across 6 contexts"
+    """Counted from the sheet this row opens, not from the keymap.
+
+    The keymap holds the registry's bindings alone, and the sheet also carries
+    the static widget tables and lists a multi-pane action under each pane —
+    so the row said "28 keys across 6 contexts" over a screen showing 55 across
+    9. The section count was a literal.
+    """
+    items = _provider_keybindings(app)
+    rows = sum(1 for i in items if not i.is_header)
+    sections = sum(1 for i in items if i.is_header)
+    return f"{rows} keys across {sections} sections"
 
 
 def _summary_config_path(_app: FNDApp) -> str:
