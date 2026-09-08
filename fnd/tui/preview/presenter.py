@@ -1276,6 +1276,26 @@ class PreviewPresenter:
         that left the line reading ~1% on a thousand-chunk PDF."""
         del progress
 
+    def show_pane_message(self, text: str) -> None:
+        """Say something in the pane, reusing its one empty-state Static.
+
+        Called after a query has torn every container down, so there is
+        nothing to hide. Without it a search that found nothing left the pane
+        reading "Type a query and press Enter" over the query the user had
+        just pressed Enter on.
+        """
+        import contextlib
+
+        from textual.widgets import Static
+
+        with contextlib.suppress(Exception):
+            pane = self._app.query_one("#preview_pane", VerticalScroll)
+            existing = [c for c in pane.children if isinstance(c, Static) and c.id == "placeholder"]
+            if existing:
+                existing[0].update(text)
+            else:
+                pane.mount(Static(text, id="placeholder"))
+
     def clear_pane_placeholder(self) -> None:
         """Drop the empty-state Static. Called by every activate path so the
         placeholder never paints above a real preview."""

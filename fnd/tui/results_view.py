@@ -36,8 +36,32 @@ class ResultsView:
         n_files = len(self._app._search.groups)
         n_sections = sum(len(g.hits) for g in self._app._search.groups)
         if not self._app._search.groups:
-            return "Results"
+            # "Results" alone is what an untouched app shows, so a search that
+            # matched nothing was indistinguishable from never having run.
+            return "Results" if not self._searched() else "Results — nothing matched"
         return f"Results — {n_files} files / {n_sections} sections"
+
+    def _searched(self) -> bool:
+        return bool((self._app._search.current_query or "").strip())
+
+    def empty_state(self) -> str:
+        """What to say when a query matched nothing.
+
+        Names the query, then the reason it is most often not the query: a
+        filter set in an earlier session narrows every search silently, and
+        the pane's own instruction to press Enter is what a user sees instead.
+        """
+        query = (self._app._search.current_query or "").strip()
+        lines = [f"No results for {query!r}."]
+        scope = self._app._scope
+        n_filters = scope.active_filter_count if scope.has_active_filters else 0
+        if n_filters:
+            key = self._app._fnd_keymap.for_action("clear_filters")
+            one = n_filters == 1
+            noun = "filter is" if one else "filters are"
+            clear = f" — {key} clears {'it' if one else 'them'}" if key else ""
+            lines.append(f"{n_filters} {noun} narrowing this{clear}.")
+        return "\n\n".join(lines)
 
     def refresh(self) -> None:
         """Rebuild the results tree from the current result groups.
@@ -98,6 +122,8 @@ class ResultsView:
                 f"results unlocatable={unlocatable} query={self._app._search.current_query!r}"
             )
         self._app._refresh_status()
+        if not self._app._search.groups and self._searched():
+            self._app._preview.show_pane_message(self.empty_state())
         if self._app._search.groups:
             # Don't yank focus out of a sidebar panel the user is driving.
             # Toggling a filter re-runs the search, and stealing focus here
