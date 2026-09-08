@@ -13,7 +13,13 @@ import pytest
 
 from fnd.filters import FilterSpec
 from fnd.filters.scan import SourceSample
-from fnd.filters.tree_model import IGNORE_LEGEND, LEGEND, RULES_LEGEND, spec_branches
+from fnd.filters.tree_model import (
+    IGNORE_LEGEND,
+    KINDS_LEGEND,
+    LEGEND,
+    RULES_LEGEND,
+    spec_branches,
+)
 from fnd.tui import FNDApp
 from fnd.tui.settings_screen import FilterBrowserScreen
 from fnd.tui.widgets.toggle_tree import ToggleTree
@@ -26,7 +32,10 @@ def test_only_the_branches_that_read_differently_override_it() -> None:
 
     assert by_id["ignore"].legend == IGNORE_LEGEND
     assert by_id["rules"].legend == RULES_LEGEND
-    for name in ("kinds", "size", "modified", "created"):
+    # `kinds` earned one: the shared line promises ⊘ and the model has no
+    # exclude state for a file type, which blocked two hunters outright.
+    assert by_id["kinds"].legend == KINDS_LEGEND
+    for name in ("size", "modified", "created"):
         assert not by_id[name].legend, f"{name} needs no wording of its own"
 
 

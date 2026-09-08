@@ -29,6 +29,7 @@ TAG_SOURCE_LABELS: dict[str, str] = {
 __all__ = [
     "BRANCHES",
     "IGNORE_LEGEND",
+    "KINDS_LEGEND",
     "LEGEND",
     "RULES_LEGEND",
     "apply_selection",
@@ -64,6 +65,11 @@ LEGEND = "⊘  never index these   ●  index ONLY these   ◐  some of these   
 #: what the shared line claims. A branch names its own meaning or inherits.
 IGNORE_LEGEND = "●  obey this file   ○  ignore it — obeying one indexes fewer files"
 RULES_LEGEND = "⏎  opens a branch, then the editor for a rule in it"
+#: `kinds` is an include-only list in the model, so `⊘` is unreachable here.
+#: Two hunters read the shared line, hunted for an exclude state that does not
+#: exist, and allow-listed everything else instead — which also drops every
+#: file type added later.
+KINDS_LEGEND = "●  index ONLY these   ◐  some of these   ○  no rule — ⊘ needs a typed rule (t)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,6 +272,7 @@ def spec_branches(
                 # sampled list, all-ticked means those types and says so.
                 full_label="every type" if _offers_every_kind(kinds) else "",
                 noun="types",
+                legend=KINDS_LEGEND,
             )
         )
 
