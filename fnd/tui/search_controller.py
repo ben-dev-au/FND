@@ -368,6 +368,7 @@ class SearchController:
         # collection names on spaces, so a multi-collection scope leaked
         # other collections and dropped spaced names like ``SSD Exam``.
         cols = self._app._scope.collections
+        scoped_sources = list(self._app._scope.active_sources)
         cfg_defaults = self._app._config.defaults if self._app._config else None
 
         try:
@@ -387,8 +388,14 @@ class SearchController:
             metadata_filter=plan.metadata_filter,
             # Copied, not referenced: the scope panel mutates these lists on
             # the event loop while the worker is reading them.
-            collection=list(cols) if cols else None,
-            active_sources=list(self._app._scope.active_sources) or None,
+            # Three cases, not two. Fully-ticked collections scope by name; a
+            # PARTLY ticked one has none, and is scoped by source instead, so
+            # the collection channel must stay open. Only when neither holds
+            # anything is the scope empty — and an empty list says so, where
+            # None said "unscoped" and a panel reading 0 active answered from
+            # every collection.
+            collection=list(cols) if cols else (None if scoped_sources else []),
+            active_sources=scoped_sources or None,
             tag_filter=tag_filter,
             sections_per_file=cfg_defaults.sections_per_file_max if cfg_defaults else 200,
             sections_score_threshold=(

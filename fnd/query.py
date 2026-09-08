@@ -426,8 +426,14 @@ class Searcher:
         # re-parsed ``c:`` string that ranks softly and splits spaced names.
         # ``active_sources`` stays a SEPARATE filter, ANDed in: it narrows
         # WITHIN the collection (partial-source selection), not a union.
-        if collection:
+        if collection is not None:
             cols = [collection] if isinstance(collection, str) else list(collection)
+            if not cols:
+                # An explicit empty scope means NOTHING, not everything. The
+                # panel painting "0/5 active" while every collection answered
+                # is the same dishonesty the partial case was fixed for.
+                # Callers meaning "unscoped" pass None.
+                return []
             col_terms = [tantivy.Query.term_query(schema, F_COLLECTION, c) for c in cols]
             filters.append(
                 col_terms[0]
