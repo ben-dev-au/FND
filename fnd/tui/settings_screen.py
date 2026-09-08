@@ -3628,7 +3628,9 @@ class RenameCollectionScreen(Screen[None]):
             name=new_name,
             collection=existing,
         )
-        delete_collection(config_path=default_config_path(), name=self._old_name)
+        delete_collection(
+            config_path=default_config_path(), name=self._old_name, renamed_to=new_name
+        )
         app._config = load()  # type: ignore[attr-defined]
         app._scope.refresh_collections_panel()  # type: ignore[attr-defined]
         # Pop twice — past Rename and the now-stale per-collection
@@ -3702,6 +3704,7 @@ class DeleteCollectionScreen(Screen[None]):
         # can't re-fire "Yes" (a second worker) or escape onto the now-stale
         # parent screen mid-delete. Never cleared — the screen is single-use.
         self._deleting = False
+        self._default_moved = False
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings_box") as box:
@@ -3780,7 +3783,7 @@ class DeleteCollectionScreen(Screen[None]):
         from fnd.config import default_config_path, delete_collection, load
 
         app: FNDApp = self.app  # type: ignore[assignment]
-        delete_collection(config_path=default_config_path(), name=self._name)
+        self._default_moved = delete_collection(config_path=default_config_path(), name=self._name)
         app._config = load()  # type: ignore[attr-defined]
         self._show_deleting()
         name = self._name
@@ -3826,6 +3829,11 @@ class DeleteCollectionScreen(Screen[None]):
 
         if error:
             app.notify(f"Index drop failed: {error}", severity="error")
+        if self._default_moved:
+            app.notify(
+                f"{self._name!r} was your default collection. Searches now cover every one.",
+                severity="warning",
+            )
         with contextlib.suppress(Exception):
             app._scope.refresh_collections_panel()  # type: ignore[attr-defined]
         # Pop the Delete screen + the now-stale per-collection screen beneath it

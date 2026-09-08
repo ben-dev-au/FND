@@ -1251,21 +1251,34 @@ def clone_source(
     return len(cfg.collections[target_collection].sources)
 
 
-def delete_collection(*, config_path: Path, name: str) -> None:
+def delete_collection(*, config_path: Path, name: str, renamed_to: str | None = None) -> bool:
     """Remove ``[collections.<name>]`` and its sources. Idempotent: a no-op if
-    the collection, or the file, is absent."""
+    the collection, or the file, is absent.
+
+    Returns True when ``defaults.collection`` named it and had to move, to
+    ``renamed_to`` on a rename and otherwise back to every collection. Left
+    dangling it seeds no scope at all, so the saved default silently became
+    "search everything" and only ``config validate`` said so.
+    """
     if not config_path.exists():
-        return
+        return False
     raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
     collections = raw.get("collections")
-    if not isinstance(collections, dict) or name not in collections:
+    defaults = raw.get("defaults")
+    stale_default = isinstance(defaults, dict) and defaults.get("collection") == name
+    present = isinstance(collections, dict) and name in collections
+    if not present and not stale_default:
         # Nothing to remove: writing anyway would materialise a whole config
         # where the caller asked for a no-op.
-        return
+        return False
 
     def mutate(data: dict[str, Any]) -> None:
         tables = data.get("collections")
         if isinstance(tables, dict):
             tables.pop(name, None)
+        table = data.get("defaults")
+        if isinstance(table, dict) and table.get("collection") == name:
+            table["collection"] = renamed_to or ALL_COLLECTIONS
 
     _rewrite(config_path, mutate)
+    return stale_default
