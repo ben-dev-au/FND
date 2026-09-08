@@ -1261,7 +1261,30 @@ def _collection_summary(app: FNDApp, name: str) -> str:
     if part is not None:
         done, total = part
         summary = f"⚠ incomplete — {done} of {total} files · {summary}"
+    elif _holds_nothing(app, name):
+        # A filter that empties a collection leaves every other column reading
+        # exactly as it did: `● 1 source · ranking:default` over zero files.
+        summary = f"⚠ nothing indexed · {summary}"
     return summary
+
+
+def _holds_nothing(app: FNDApp, name: str) -> bool:
+    """Whether the index holds no document for ``name``, as far as we can ask.
+
+    False when there is no index to ask — "not indexed yet" is the first-run
+    state and the launch warning already covers it.
+    """
+    import contextlib
+
+    from fnd.index import collection_is_empty
+
+    searcher = getattr(getattr(app, "_search", None), "searcher", None)
+    index = getattr(searcher, "_index", None)
+    if index is None:
+        return False
+    with contextlib.suppress(Exception):
+        return collection_is_empty(index, name)
+    return False
 
 
 def _make_open_collection_screen(name: str) -> Callable[[FNDApp], None]:

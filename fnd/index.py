@@ -466,6 +466,20 @@ def sources_are_enumerable(roots: Iterable[Path]) -> bool:
     return all(root.exists() for root in roots)
 
 
+def collection_is_empty(index: Index, collection: str) -> bool:
+    """Whether ``collection`` holds no documents at all.
+
+    One hit is enough to answer it, so this does not page or aggregate:
+    `indexed_parent_ids` builds a set of every file, which is far too much work
+    for a row summary that only needs to know "any?".
+    """
+    import tantivy as _tantivy
+
+    index.reload()
+    scope = _tantivy.Query.term_query(index.schema, F_COLLECTION, collection)
+    return not index.searcher().search(scope, limit=1).hits
+
+
 def indexed_parent_ids(index: Index, collection: str) -> set[str]:
     """Every distinct ``parent_id`` currently indexed under ``collection``.
 
