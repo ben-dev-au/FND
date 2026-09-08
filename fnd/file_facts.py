@@ -57,13 +57,14 @@ RESERVED_FACTS: Final[frozenset[str]] = frozenset(
 def frontmatter_kinds() -> frozenset[str]:
     """Kinds that can carry a YAML frontmatter block.
 
-    Every note format, not Markdown alone — a .txt file carries one just as
-    happily. Read from the kind registry so adding a note format needs no
-    edit here.
+    One line, because the answer belongs to the kind. Deriving it from a
+    category shipped the same bug three times: the reader and the filter's
+    scope drifted apart, and a bare file of the kind nobody had thought about
+    sailed past a rule that dropped its neighbour.
     """
-    from fnd.kinds import KINDS_IN_CATEGORY
+    from fnd.kinds import FRONTMATTER_KINDS
 
-    return frozenset(KINDS_IN_CATEGORY.get("notes", ()))
+    return FRONTMATTER_KINDS
 
 
 _TAG_FACTS: Final[dict[str, str]] = {

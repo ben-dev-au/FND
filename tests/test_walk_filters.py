@@ -326,11 +326,22 @@ class TestOverrideToNothing:
         assert _names(tmp_path, defaults=globals_, filters=override) == {"a.md", "b.txt"}
 
 
+def _all_globs(kind: str) -> list[str]:
+    """Every suffix glob for a kind, from the registry.
+
+    Absorption is deliberately conservative — it fires only on a COMPLETE set —
+    so a hard-coded pair stops being complete the moment a format is added.
+    """
+    from fnd.kinds import KIND_BY_ID
+
+    return [f"**/*{sfx}" for sfx in KIND_BY_ID[kind].suffixes]
+
+
 class TestTypeGlobAbsorption:
     """``includes = ["**/*.md"]`` and ``filters.kinds = ["md"]`` say one thing."""
 
     def test_a_complete_type_glob_set_becomes_a_kind(self, tmp_path: Path) -> None:
-        src = _sources(tmp_path, includes=["**/*.md", "**/*.markdown"])[0]
+        src = _sources(tmp_path, includes=_all_globs("md"))[0]
         assert src.includes == []
         assert src.filters is not None
         assert src.filters.kinds == ["md"]
@@ -338,8 +349,9 @@ class TestTypeGlobAbsorption:
     def test_a_custom_glob_alongside_one_blocks_the_move(self, tmp_path: Path) -> None:
         """``includes`` globs are ORed while ``kinds`` is ANDed, so moving only
         part of the list would turn a union into an intersection."""
-        src = _sources(tmp_path, includes=["**/*.md", "**/*.markdown", ".obsidian/**"])[0]
-        assert src.includes == ["**/*.md", "**/*.markdown", ".obsidian/**"]
+        globs = [*_all_globs("md"), ".obsidian/**"]
+        src = _sources(tmp_path, includes=globs)[0]
+        assert src.includes == globs
         assert src.filters is None or src.filters.kinds is None
 
     def test_an_explicit_kinds_override_is_never_overwritten(self, tmp_path: Path) -> None:
@@ -350,7 +362,7 @@ class TestTypeGlobAbsorption:
                         "sources": [
                             {
                                 "path": str(tmp_path),
-                                "includes": ["**/*.md", "**/*.markdown"],
+                                "includes": _all_globs("md"),
                                 "filters": {"kinds": ["pdf"]},
                             }
                         ]
@@ -361,11 +373,11 @@ class TestTypeGlobAbsorption:
         src = cfg.collections["c"].sources[0]
         assert src.filters is not None
         assert src.filters.kinds == ["pdf"]
-        assert src.includes == ["**/*.md", "**/*.markdown"], "the globs vanished"
+        assert src.includes == _all_globs("md"), "the globs vanished"
 
     def test_absorbing_twice_changes_nothing(self, tmp_path: Path) -> None:
         """``_normalise_sources`` re-runs on every model_validate."""
-        once = _sources(tmp_path, includes=["**/*.md", "**/*.markdown"])[0]
+        once = _sources(tmp_path, includes=_all_globs("md"))[0]
         twice = (
             Config.model_validate(
                 {"collections": {"c": {"sources": [once.model_dump(exclude_none=True)]}}}
@@ -384,7 +396,7 @@ class TestTypeGlobAbsorption:
         the same model and the assertion holds however wrong the fold is."""
         for rel in ("a.md", "b.pdf", "c.txt", "sub/d.md", "sub/e.txt", "sub/deep/f.markdown"):
             _write(tmp_path, rel)
-        globs = ["**/*.md", "**/*.markdown"]
+        globs = _all_globs("md")
         # Root-relative, not basenames: this test exists to tell a root-level
         # file from a nested one, which p.name discards.
         rel = {p.relative_to(tmp_path).as_posix() for p in walk(roots=[tmp_path], includes=globs)}
@@ -513,7 +525,7 @@ class TestTypeGlobAbsorptionIsConservative:
         _write(tmp_path, "docs/a.md")
         _write(tmp_path, "notes/b.md")
         _write(tmp_path, "notes/c.pdf")
-        sources = _sources(tmp_path, includes=["**/*.md", "**/*.markdown", "notes/**"])
+        sources = _sources(tmp_path, includes=[*_all_globs("md"), "notes/**"])
         assert sources[0].filters is None or sources[0].filters.kinds is None
         got = {p.name for p in walk_sources(sources=sources)}
         assert got == {"a.md", "b.md", "c.pdf"}, "an OR of globs became an intersection"
@@ -529,7 +541,7 @@ class TestTypeGlobAbsorptionIsConservative:
         _write(tmp_path, "a.md")
         _write(tmp_path, "b.markdown")
         _write(tmp_path, "c.txt")
-        sources = _sources(tmp_path, includes=["**/*.md", "**/*.markdown"])
+        sources = _sources(tmp_path, includes=_all_globs("md"))
         assert sources[0].filters is not None
         assert sources[0].filters.kinds == ["md"]
         assert {p.name for p in walk_sources(sources=sources)} == {"a.md", "b.markdown"}

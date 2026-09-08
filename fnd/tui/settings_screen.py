@@ -3027,7 +3027,7 @@ class SourceFormScreen(Screen[None]):
         """What leaving now would lose, and how to keep it."""
         if self._snapshot == self._fields:
             return None
-        return "This source", self.action_save_close
+        return "this source", self.action_save_close
 
     def action_back(self) -> None:
         # The filter browser saves into `_fields`, not to disk, so leaving the
@@ -3036,7 +3036,7 @@ class SourceFormScreen(Screen[None]):
         _leave_or_confirm(
             self,
             dirty=self._snapshot != self._fields,
-            what="This source",
+            what="this source",
             on_save=self.action_save_close,
         )
 
@@ -3434,13 +3434,13 @@ class AddCollectionWizard(Screen[None]):
     def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
         if self._fields == getattr(self, "_opened_with", self._fields):
             return None
-        return "This collection", self.action_save_close
+        return "this collection", self.action_save_close
 
     def action_back(self) -> None:
         _leave_or_confirm(
             self,
             dirty=self._fields != getattr(self, "_opened_with", self._fields),
-            what="This collection",
+            what="this collection",
             on_save=self.action_save_close,
         )
 
@@ -4437,7 +4437,10 @@ class UnsavedChangesScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="settings_box") as box:
             box.border_title = "Unsaved changes"
-            yield Static(f"{self._what} has changes that are not saved.", classes="warning")
+            # Subject-agnostic: the subjects are a mix of singular and plural
+            # ("this source", "these filters"), and a sentence carrying its own
+            # verb read "These filters has changes that are not saved."
+            yield Static(f"Unsaved changes to {self._what}.", classes="warning")
             # Save is offered only where the work is on the screen below this
             # one. A form buried under another editor cannot be saved from
             # here — its own save pops whatever is on top, which is not it.
@@ -5445,7 +5448,7 @@ class FilterTextScreen(Screen[None]):
         _leave_or_confirm(
             self,
             dirty=typed != render(self._spec).strip(),
-            what="This filter text",
+            what="this filter text",
             on_save=self.action_save_close,
         )
 
@@ -6183,13 +6186,13 @@ class FilterBrowserScreen(Screen[None]):
             self.query_one("#filter_tree", ToggleTree).focus()
             return
         _leave_or_confirm(
-            self, dirty=self._dirty(), what="These filters", on_save=self.action_save_close
+            self, dirty=self._dirty(), what="these filters", on_save=self.action_save_close
         )
 
     def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
         if not self._dirty():
             return None
-        return "These filters", self.action_save_close
+        return "these filters", self.action_save_close
 
     def action_save_close(self) -> None:
         try:

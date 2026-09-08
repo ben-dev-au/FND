@@ -19,8 +19,15 @@ def test_indexer_filetypes_exposed_and_complete() -> None:
     # Kind id -> human label, derived from the single registry source of truth.
     assert tuple(INDEXER_FILETYPES) == tuple(ALL_KIND_IDS)
     # The original document kinds are still present with descriptive labels…
-    assert INDEXER_FILETYPES["md"] == "Markdown (.md/.markdown)"
     assert INDEXER_FILETYPES["pdf"] == "PDF (.pdf)"
+    # Derived, not spelled: Markdown gained seven extensions the day someone
+    # noticed `.qmd` was not being indexed, and a literal here would have to
+    # be edited for each one.
+    from fnd.kinds import KIND_BY_ID
+
+    md = KIND_BY_ID["md"]
+    assert INDEXER_FILETYPES["md"] == f"{md.label} ({'/'.join(md.suffixes)})"
+    assert ".qmd" in INDEXER_FILETYPES["md"]
     # …and the broadened set now includes the new families.
     for kind_id in ("epub", "python", "csv", "html", "ipynb", "odt"):
         assert kind_id in INDEXER_FILETYPES
