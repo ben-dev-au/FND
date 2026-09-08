@@ -92,6 +92,9 @@ class ConfigTooNewError(Exception):
         self.found = found
         self.supported = supported
 
+    def __reduce__(self) -> tuple[Any, tuple[int, int]]:
+        return (ConfigTooNewError, (self.found, self.supported))
+
 
 def version_of(raw: MutableMapping[str, Any]) -> int:
     """The version a raw config declares. Absent means pre-versioning."""

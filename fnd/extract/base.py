@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # A fine-grained file-type id (one per format, e.g. "pdf", "python", "epub").
 # The authoritative set lives in ``fnd.kinds.KIND_SPECS``; this is a plain ``str``
@@ -35,6 +36,12 @@ class ExtractError(Exception):
         super().__init__(f"{path}: {reason}")
         self.path = path
         self.reason = reason
+
+    def __reduce__(self) -> tuple[Any, tuple[str, str]]:
+        # Crosses the extraction pool. Without this the parent rebuilds it
+        # from a one-element ``args`` and raises BrokenProcessPool instead
+        # of the reason, after a teardown, respawn and a doomed retry.
+        return (ExtractError, (self.path, self.reason))
 
 
 def no_text_reason(path: str | Path) -> str:

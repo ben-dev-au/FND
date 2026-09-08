@@ -28,6 +28,7 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Any
 
 from fnd.globs import PathGlob
 
@@ -70,6 +71,9 @@ class FilterError(Exception):
         super().__init__(f"col {column}: {message}")
         self.message = message
         self.column = column
+
+    def __reduce__(self) -> tuple[Any, tuple[str, int]]:
+        return (FilterError, (self.message, self.column))
 
 
 _KEYWORDS = {
