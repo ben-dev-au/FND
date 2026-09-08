@@ -21,6 +21,7 @@ __all__ = [
     "_shorten",
     "_styled_action_label",
     "_styled_parent_label",
+    "_styled_state_row",
     "_trim_redundant_heading",
 ]
 
@@ -75,6 +76,28 @@ def _score_style(score: float, max_score: float) -> str:
     if ratio >= 0.15:
         return "#bb9af7"  # cool magenta — fades from accent
     return "dim #565f89"
+
+
+#: Which theme colour a tri-state marker carries. Only the two states that
+#: change what is indexed get a hue; ``○`` stays neutral so it does not
+#: compete with them, and ``◐`` is a roll-up rather than a state of its own.
+STATE_COLOUR_VARIABLE = {"●": "success", "⊘": "error"}
+
+
+def _styled_state_row(marker: str, rest: str, colour: str) -> Any:
+    """A tri-state row whose marker carries its meaning as colour too.
+
+    ``⊘`` and ``○`` differ by a hairline and mean opposites, so shape alone
+    was doing all the work. The span covers the glyph only, and it is a span
+    rather than a base style because a tree paints rows with its own style and
+    a base one loses to it.
+    """
+    from rich.text import Text
+
+    text = Text(f"{marker}{rest}")
+    if colour:
+        text.stylize(colour, 0, len(marker))
+    return text
 
 
 def _styled_parent_label(label: Any) -> Any:

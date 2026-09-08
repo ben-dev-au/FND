@@ -29,11 +29,18 @@ from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
+from fnd.tui.results_labels import _styled_state_row
+
 _FULL = "●"
 _PARTIAL = "◐"
 _EMPTY = "○"
 _EXCLUDED = "⊘"
 _MARKER_GAP = "  "
+
+#: The tag whose guard must not be invertible. "Index only files tagged
+#: no_index" empties a collection and needs a reindex to undo, and the tag
+#: ships excluded, so one press on the state a user finds would do it.
+NEVER_ONLY_TAGS = ("no_index",)
 
 
 def _plural(noun: str, n: int) -> str:
@@ -300,16 +307,24 @@ class ToggleTree(Tree[dict[str, Any]]):
             summary = f"  ({g.full_label})"
         return f"{tri_state_marker(n, len(leaves))}{_MARKER_GAP}{g.label}{summary}"
 
-    def _item_label(self, item_id: str) -> str:
+    def _item_label(self, item_id: str) -> Any:
         if item_id in self._action_items:
             return f"⏎{_MARKER_GAP}{self._item_labels.get(item_id, item_id)}"
         if item_id in self._excluded:
-            marker = _EXCLUDED
+            marker, style = _EXCLUDED, self._state_colour("error")
         elif item_id in self._selected:
-            marker = _FULL
+            marker, style = _FULL, self._state_colour("success")
         else:
-            marker = _EMPTY
-        return f"{marker}{_MARKER_GAP}{self._item_labels.get(item_id, item_id)}"
+            marker, style = _EMPTY, ""
+        label = f"{_MARKER_GAP}{self._item_labels.get(item_id, item_id)}"
+        return _styled_state_row(marker, label, style)
+
+    def _state_colour(self, variable: str) -> str:
+        """A theme colour for a state marker, or none if the theme has no say."""
+        try:
+            return self.app.get_css_variables().get(variable, "") or ""
+        except Exception:
+            return ""
 
     # ── Toggle ───────────────────────────────────────────────────────────
     def action_toggle_selection(self) -> None:
@@ -381,6 +396,11 @@ class ToggleTree(Tree[dict[str, Any]]):
             return
         self.post_message(self.SelectionChanged(self, self.selected, self.excluded))
 
+    @staticmethod
+    def _skips_include(item_id: str) -> bool:
+        """Whether this row may never reach "index ONLY these"."""
+        return item_id.startswith("tag:") and item_id.rsplit(":", 1)[-1] in NEVER_ONLY_TAGS
+
     def _cycle(self, item_id: str) -> None:
         """off → exclude → include → off.
 
@@ -389,10 +409,15 @@ class ToggleTree(Tree[dict[str, Any]]):
         carrying this", so the first press on a tag can take a collection from
         eight files to one and needs a reindex to undo. Exclude is both the
         commoner intent and the recoverable one, so it goes first.
+
+        ``no_index`` skips include entirely: it ships excluded, so include is
+        one press from the state a user finds, and "index only the files I
+        marked never-index" is not an intent anyone has.
         """
         if item_id in self._excluded:
             self._excluded.discard(item_id)
-            self._selected.add(item_id)
+            if not self._skips_include(item_id):
+                self._selected.add(item_id)
         elif item_id in self._selected:
             self._selected.discard(item_id)
         else:

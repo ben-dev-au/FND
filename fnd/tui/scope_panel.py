@@ -17,7 +17,12 @@ from textual.widgets import Tree
 from fnd.config import is_all_collections
 from fnd.kinds import CATEGORIES, CATEGORY_BY_ID, KIND_BY_ID, KINDS_IN_CATEGORY
 from fnd.launch_command import LaunchScope, SearchSnapshot
-from fnd.tui.results_labels import _styled_action_label, _styled_parent_label
+from fnd.tui.results_labels import (
+    STATE_COLOUR_VARIABLE,
+    _styled_action_label,
+    _styled_parent_label,
+    _styled_state_row,
+)
 
 if TYPE_CHECKING:
     from textual.timer import Timer
@@ -566,7 +571,11 @@ class ScopeController:
                 cat_node.add_leaf(
                     # Pad so the kind marker indents past the category's arrow
                     # (matching the Tags leaves), instead of aligning with it.
-                    f"{_LEAF_MARKER_PAD * 2}{marker}  {KIND_BY_ID[k].label}",
+                    _styled_state_row(
+                        f"{_LEAF_MARKER_PAD * 2}{marker}",
+                        f"  {KIND_BY_ID[k].label}",
+                        self._state_colour(marker),
+                    ),
                     data={"kind": "filter_value", "category": "kinds", "value": k},
                 )
 
@@ -714,6 +723,21 @@ class ScopeController:
             tree.scroll_to_line(line, animate=False)
 
     # ── Clear all filters ─────────────────────────────────────────
+
+    def _state_colour(self, marker: str) -> str:
+        """The theme colour a tri-state marker carries, or none.
+
+        Same mapping the Index filters browser uses: the sidebar hand-rolls
+        its markers rather than using ToggleTree, so without this the same
+        state reads differently in the two panes called Filters.
+        """
+        variable = STATE_COLOUR_VARIABLE.get(marker)
+        if not variable:
+            return ""
+        try:
+            return self._app.get_css_variables().get(variable, "") or ""
+        except Exception:
+            return ""
 
     def _action_colour(self) -> str:
         """Control rows take the *inactive pane border* colour so they read as
@@ -921,7 +945,9 @@ class ScopeController:
             }
             if node.children:
                 branch = parent.add(
-                    f"{marker}  {node.label}  ({node.files})",
+                    _styled_state_row(
+                        marker, f"  {node.label}  ({node.files})", self._state_colour(marker)
+                    ),
                     data=data,
                     expand=key in self.expanded_filter_branches,
                 )
@@ -931,7 +957,12 @@ class ScopeController:
                 # leaves none on leaves, so a leaf's marker would sit two
                 # columns left of its branch siblings'. Pad to line them up.
                 parent.add_leaf(
-                    f"{_LEAF_MARKER_PAD}{marker}  {node.label}  ({node.files})", data=data
+                    _styled_state_row(
+                        f"{_LEAF_MARKER_PAD}{marker}",
+                        f"  {node.label}  ({node.files})",
+                        self._state_colour(marker),
+                    ),
+                    data=data,
                 )
 
     def _frontmatter_namespaces(self) -> frozenset[str]:
@@ -1020,7 +1051,9 @@ class ScopeController:
         for source, value in ghosts:
             marker = self.tag_marker(source, TagNode(label=value, value=value))
             branch.add_leaf(
-                f"{_LEAF_MARKER_PAD}{marker}  {value}",
+                _styled_state_row(
+                    f"{_LEAF_MARKER_PAD}{marker}", f"  {value}", self._state_colour(marker)
+                ),
                 data={
                     "kind": "filter_value",
                     "category": "tags",
