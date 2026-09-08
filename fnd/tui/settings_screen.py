@@ -46,6 +46,7 @@ from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option
 
 from fnd.display_text import sanitise_display_text
+from fnd.tui.actions import load_keymap
 from fnd.tui.menu import (
     KIND_ACTION,
     KIND_DISPLAY,
@@ -5714,6 +5715,11 @@ def _cleared_note(before: Any, after: Any, *, inheriting: bool) -> str:
     return f"Cleared {lost} — nothing is filtered out now"
 
 
+#: What the sidebar's clear bar answers to. Read once, like the app's own
+#: bindings, so the two panes cannot drift onto different keys.
+_CLEAR_FILTERS_KEY: str = load_keymap().for_action("clear_filters") or "X"
+
+
 class FilterBrowserScreen(Screen[None]):
     """Filters as the Filters pane shows them: collapsible branches, tri-state.
 
@@ -5728,7 +5734,10 @@ class FilterBrowserScreen(Screen[None]):
         Binding("slash", "focus_search", "Filter", show=False),
         Binding("ctrl+s", "save_close", show=False),
         Binding("t", "edit_text", show=False),
-        Binding("c", "clear_all", show=False),
+        # The sidebar's own clear gesture, not a second letter for the same
+        # act: one pane cleared on `X` from anywhere, the other on `c`, and a
+        # single unconfirmed letter beside `t` and `y` wiped the set.
+        Binding(_CLEAR_FILTERS_KEY, "clear_all", show=False),
         # Not ctrl+y: the app binds that to "copy query command" with
         # priority, so a screen binding there never fires.
         Binding("y", "copy_text", show=False),
@@ -5938,7 +5947,7 @@ class FilterBrowserScreen(Screen[None]):
                 ("→", "Open"),
                 ("/", "Filter"),
                 ("t", "As text"),
-                ("c", "Clear"),
+                (_CLEAR_FILTERS_KEY, "Clear"),
                 (COMMIT_KEY, self._commit_label),
                 ("y", "Copy"),
                 ("Esc/←", "Discard"),

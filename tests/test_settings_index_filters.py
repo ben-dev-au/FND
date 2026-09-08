@@ -402,7 +402,7 @@ async def test_clearing_the_default_tags_does_not_reinstate_them(
     "clear all" handed back an exclusion the user had just removed."""
     from fnd.config import load, starter_config
     from fnd.tui.menu import _open_filter_browser
-    from fnd.tui.settings_screen import FilterBrowserScreen
+    from fnd.tui.settings_screen import _CLEAR_FILTERS_KEY, FilterBrowserScreen
 
     cfg_path = tmp_path / "config.toml"
     cfg_path.write_text(starter_config(), encoding="utf-8")
@@ -418,7 +418,7 @@ async def test_clearing_the_default_tags_does_not_reinstate_them(
         assert isinstance(browser, FilterBrowserScreen)
         while browser._scanning:
             await pilot.pause()
-        await pilot.press("c")
+        await pilot.press(_CLEAR_FILTERS_KEY)
         await pilot.press("ctrl+s")
         for _ in range(20):
             await pilot.pause()
@@ -1312,9 +1312,10 @@ class TestTheTwoLevelSaveSaysWhichLevelItIs:
 
 
 class TestClearSaysWhatItTook:
-    """`c` sits beside `^S`, takes no confirmation and wiped the set in
-    silence — including a tag exclusion, which is a protection rather than a
-    preference."""
+    """Clearing takes no confirmation and wiped the set in silence —
+    including a tag exclusion, which is a protection rather than a
+    preference. The gesture is the sidebar's, not a second letter of its
+    own; the tests press whatever that action is bound to."""
 
     def test_every_spec_field_has_a_name_a_user_would_recognise(self) -> None:
         from fnd.tui.settings_screen import _FIELD_WORDS, _SPEC_FIELDS
@@ -1347,9 +1348,9 @@ class TestClearSaysWhatItTook:
         assert _cleared_note(FilterSpec(), FilterSpec(), inheriting=False) == "Nothing to clear"
 
     @pytest.mark.asyncio
-    async def test_pressing_c_raises_it(self, built_index: Path) -> None:
+    async def test_clearing_raises_it(self, built_index: Path) -> None:
         from fnd.filters import FilterSpec
-        from fnd.tui.settings_screen import FilterBrowserScreen
+        from fnd.tui.settings_screen import _CLEAR_FILTERS_KEY, FilterBrowserScreen
 
         app = FNDApp(index_dir=built_index)
         async with app.run_test(size=(110, 30)) as pilot:
@@ -1367,7 +1368,7 @@ class TestClearSaysWhatItTook:
                 await pilot.pause()
             said: list[str] = []
             app.screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
-            await pilot.press("c")
+            await pilot.press(_CLEAR_FILTERS_KEY)
             for _ in range(6):
                 await pilot.pause()
             assert said, "clearing said nothing"

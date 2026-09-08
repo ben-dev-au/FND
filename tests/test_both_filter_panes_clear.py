@@ -133,3 +133,24 @@ async def test_enter_on_the_row_clears_and_hands_focus_back(tmp_index_dir: Path)
     assert spec.is_empty(), spec
     assert not visible, "the row stayed after there was nothing left to clear"
     assert isinstance(focused, ToggleTree), focused
+
+
+def test_both_panes_answer_to_the_same_gesture() -> None:
+    """Not a second letter for the same act. One pane cleared on `X` from
+    anywhere and the other on `c`, and `c` sat beside `t` and `y`, one
+    unconfirmed keystroke from wiping the set."""
+    from textual.binding import Binding
+
+    from fnd.tui.actions import load_keymap
+    from fnd.tui.settings_screen import _CLEAR_FILTERS_KEY, FilterBrowserScreen
+
+    sidebar = load_keymap().for_action("clear_filters")
+    bound = {
+        b.key
+        for b in FilterBrowserScreen.BINDINGS
+        if isinstance(b, Binding) and b.action == "clear_all"
+    }
+
+    assert sidebar, "the sidebar's own clear action lost its key"
+    assert _CLEAR_FILTERS_KEY == sidebar, (_CLEAR_FILTERS_KEY, sidebar)
+    assert bound == {sidebar}, bound

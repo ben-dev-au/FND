@@ -33,6 +33,10 @@ class ResultsView:
     def title(self) -> str:
         """Border title for the results pane — counts live next to the data
         they describe, not in a global status bar."""
+        if not self._app._search.idle:
+            # The one operation whose work happens entirely off the loop, so
+            # every pane could stay byte-identical for its whole duration.
+            return "Results — searching…"
         n_files = len(self._app._search.groups)
         n_sections = sum(len(g.hits) for g in self._app._search.groups)
         if not self._app._search.groups:

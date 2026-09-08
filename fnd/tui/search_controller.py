@@ -213,6 +213,11 @@ class SearchController:
             exclusive=True,
             group="search",
         )
+        # Say the search is running before it can say anything else. A preview
+        # already on screen stays — it is the last thing the user chose, and
+        # blanking it to announce a query is the worse trade.
+        self._app._preview.show_pane_message(f"Searching for {query.strip()!r}…", replace_only=True)
+        self._app._refresh_status()
 
     def _searches_running(self) -> bool:
         """Whether any search worker is still pending or executing.

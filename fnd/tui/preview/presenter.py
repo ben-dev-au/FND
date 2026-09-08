@@ -1276,13 +1276,14 @@ class PreviewPresenter:
         that left the line reading ~1% on a thousand-chunk PDF."""
         del progress
 
-    def show_pane_message(self, text: str) -> None:
+    def show_pane_message(self, text: str, *, replace_only: bool = False) -> None:
         """Say something in the pane, reusing its one empty-state Static.
 
-        Called after a query has torn every container down, so there is
-        nothing to hide. Without it a search that found nothing left the pane
-        reading "Type a query and press Enter" over the query the user had
-        just pressed Enter on.
+        Without it a search that found nothing left the pane reading "Type a
+        query and press Enter" over the query the user had just pressed Enter
+        on. ``replace_only`` writes over a message already showing and does
+        nothing otherwise — a preview is on screen then, and a mount would
+        stack the line above it rather than replacing it.
         """
         import contextlib
 
@@ -1293,7 +1294,7 @@ class PreviewPresenter:
             existing = [c for c in pane.children if isinstance(c, Static) and c.id == "placeholder"]
             if existing:
                 existing[0].update(text)
-            else:
+            elif not replace_only:
                 pane.mount(Static(text, id="placeholder"))
 
     def clear_pane_placeholder(self) -> None:
