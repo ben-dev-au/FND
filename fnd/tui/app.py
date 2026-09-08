@@ -1107,6 +1107,11 @@ class FNDApp(App[None]):
         Delegates the actual rendering to :func:`render_hint_bar` so the
         Settings menu uses the same visual.
         """
+        # Every read below reaches the active screen, and a footer refresh can
+        # land after the stack has emptied — a resize or a focus change during
+        # teardown. `ScreenStackError` from here killed whatever was running.
+        if not self.screen_stack:
+            return
         ctx = self._focus_context()
 
         # Overlay state (explain / multi DSL) preempts the per-pane table.
@@ -1143,10 +1148,11 @@ class FNDApp(App[None]):
         # them while the query bar has focus advertises four dead keys — and
         # the app opens with that focus. The settings screens already drop
         # them for the same reason.
+        #
         from textual.widgets import Input, TextArea
 
-        anchors = () if isinstance(self.focused, Input | TextArea) else self._FOOTER_ANCHORS
         with contextlib.suppress(Exception):
+            anchors = () if isinstance(self.focused, Input | TextArea) else self._FOOTER_ANCHORS
             self.query_one("#footer_hints", Static).update(render_hint_bar(anchors, contextual))
 
     # Maps a ``_focus_context`` result to the pane id that wears the accent
