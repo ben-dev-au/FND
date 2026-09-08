@@ -4761,13 +4761,23 @@ class DeleteSourceScreen(Screen[None]):
         app: FNDApp = self.app  # type: ignore[assignment]
         cfg = app._config  # type: ignore[attr-defined]
         path_display = "(unknown)"
+        others = 0
         if (
             cfg is not None
             and self._collection_name in cfg.collections
             and 0 <= self._source_index < len(cfg.collections[self._collection_name].sources)
         ):
-            src = cfg.collections[self._collection_name].sources[self._source_index]
+            sources = cfg.collections[self._collection_name].sources
+            src = sources[self._source_index]
             path_display = str(src.path) or "(no path)"
+            others = len(sources) - 1
+        # "Files another source still reaches stay" is false comfort where
+        # there is no other source: everything this one reached leaves.
+        shared = (
+            "Files another source still reaches stay."
+            if others
+            else "It is the only source, so the collection is left empty."
+        )
 
         with Vertical(id="settings_box") as box:
             box.border_title = (
@@ -4780,7 +4790,7 @@ class DeleteSourceScreen(Screen[None]):
                 "The files on disk are untouched.\n"
                 f"{self._collection_name!r} is rebuilt straight afterwards, which "
                 "takes as long as indexing it does and drops the chunks only "
-                "this source reached. Files another source still reaches stay.",
+                f"this source reached. {shared}",
                 classes="warning",
             )
             yield OptionList(
