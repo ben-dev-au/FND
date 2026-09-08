@@ -5713,10 +5713,24 @@ class FilterTextScreen(Screen[None]):
             on_save=self.action_save_close,
         )
 
+    def save_blocked(self) -> str:
+        """Why Apply would be refused, or "".
+
+        The leaving prompt reads this, so it stops offering to save text the
+        screen has already rejected — the same arrangement the source form
+        uses, which this screen was left out of.
+        """
+        _spec, err = self._parsed()
+        return f"col {err.column}: {err.message}" if err is not None else ""
+
     def action_save_close(self) -> None:
         spec, err = self._parsed()
         if err is not None or spec is None:
+            # The status line may already be showing this error, in which case
+            # refreshing it changes nothing on screen and the key reads dead:
+            # measured at 14 identical pane captures over 3.5 seconds.
             self._refresh_status()
+            self.app.notify(f"Not applied — {self.save_blocked()}", severity="error", timeout=4)
             return
         self._on_save(spec)
         self.app.pop_screen()
