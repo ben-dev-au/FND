@@ -164,6 +164,10 @@ def index(
         config=CollectionConfig(sources=[source]),
         collection=collection,
         index_dir=default_index_dir(),
+        # One root is never the whole collection, so nothing this walk missed
+        # is stale. Pruning here emptied a configured collection down to the
+        # ad-hoc root, reported "indexed N chunks", and exited 0.
+        prune=False,
         tag_sources=tuple(defaults.tag_sources),
         tag_frontmatter_keys=tuple(defaults.tag_frontmatter_keys),
     )

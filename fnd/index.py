@@ -344,6 +344,7 @@ def build_index_from_config(
     collection: str,
     index_dir: Path,
     rebuild: bool = False,
+    prune: bool = True,
     tag_sources: Sequence[str] = ("frontmatter", "os"),
     tag_frontmatter_keys: Sequence[str] = (),
 ) -> int:
@@ -355,6 +356,11 @@ def build_index_from_config(
     function only sees the new shape. For md files, frontmatter is read
     once per file and serialized into ``meta_blob`` on every chunk so the
     query-time post-filter can decode + evaluate it.
+
+    ``prune`` drops the collection's documents this walk did not reach, which
+    is how a file deleted from disk leaves the index. A caller indexing PART
+    of a collection must pass False: everything else in it is not stale, it is
+    simply not in this walk.
     """
     from fnd.walk import walk_sources
 
@@ -417,7 +423,7 @@ def build_index_from_config(
                     )
     commit(writer)
     # Rebuild already wiped the collection, so nothing can be stale.
-    if not rebuild:
+    if prune and not rebuild:
         roots = [Path(s.path).expanduser() for s in config.sources]
         if sources_are_enumerable(roots):
             prune_removed_files(
