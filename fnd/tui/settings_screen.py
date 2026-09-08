@@ -26,6 +26,7 @@ naturally; no pre-popping or manual back stacks.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import textwrap
 from collections.abc import Callable, Iterable
@@ -62,7 +63,7 @@ from fnd.tui.menu import (
     section_label,
     walk_all_sections,
 )
-from fnd.tui.widgets import DetailStrip
+from fnd.tui.widgets import COMMIT_KEY, DetailStrip
 from fnd.tui.widgets.toggle_tree import ToggleGroup, ToggleItem, ToggleTree
 
 if TYPE_CHECKING:
@@ -79,7 +80,7 @@ def _wizard_hints(screen: Any, app: Any) -> Any:
     hints = (
         ("⏎", "Edit"),
         *((("Tab", "Test a sample"),) if len(_focus_targets(screen)) > 1 else ()),
-        ("Ctrl+S", "Save & Index"),
+        (COMMIT_KEY, "Save & Index"),
         ("Esc", "Cancel"),
     )
     return _editor_hint_bar(hints) if _typing_in(screen) else _hint_bar(app, hints)
@@ -1877,7 +1878,7 @@ class PickerScreen(Screen[None]):
     def _render_footer(self) -> None:
         app: FNDApp = self.app  # type: ignore[assignment]
         hints: tuple[tuple[str, str], ...] = (
-            (("⏎", "Toggle"), ("^S", "Save"), ("Esc", "Cancel"))
+            (("⏎", "Toggle"), (COMMIT_KEY, "Save"), ("Esc", "Cancel"))
             if self._item.multi
             else (("⏎", "Select"), ("Esc", "Cancel"))
         )
@@ -2377,8 +2378,21 @@ class SourceFormScreen(Screen[None]):
             yield TextArea("", id="frontmatter_sample")
             yield Static("(no sample)", id="match_status")
             yield Static("", id="form_error", classes="-hidden")
+            yield DetailStrip()
         yield EditBar()
         yield Static("", id="footer_hints")
+
+    @on(SettingsList.Highlighted)
+    def _on_field_highlighted(self, ev: SettingsList.Highlighted) -> None:
+        """Every row already carries a description; this screen was the one
+        with nowhere to show it, beside a wizard that edits the same fields
+        and has had the strip since it was written."""
+        strip = self.query_one(DetailStrip)
+        item = ev.item
+        if item is None:
+            strip.clear()
+            return
+        strip.set(item.description or "", item.hint or "", markup=item.description_markup)
 
     def _show_error(self, message: str) -> None:
         err = self.query_one("#form_error", Static)
@@ -2848,7 +2862,7 @@ class SourceFormScreen(Screen[None]):
         hints: tuple[tuple[str, str], ...] = (
             *((("Tab", "Test a sample"),) if len(_focus_targets(self)) > 1 else ()),
             ("⏎", "Edit"),
-            ("Ctrl+S", "Save"),
+            (COMMIT_KEY, "Save"),
             ("Esc", "Cancel"),
         )
         if self._source_index is not None:
@@ -2993,10 +3007,13 @@ class SourceFormScreen(Screen[None]):
     def action_back(self) -> None:
         # The filter browser saves into `_fields`, not to disk, so leaving the
         # form is what discards it — including an edit the user had just
-        # committed with ^S one screen down.
-        if self._snapshot != self._fields:
-            self.notify("Source changes discarded — ^S saves them", severity="warning")
-        self.app.pop_screen()
+        # committed one screen down.
+        _leave_or_confirm(
+            self,
+            dirty=self._snapshot != self._fields,
+            what="This source",
+            on_save=self.action_save_close,
+        )
 
     # ── Tab cycles field list ↔ sample TextArea ───────────────
 
@@ -3393,9 +3410,12 @@ class AddCollectionWizard(Screen[None]):
         self.query_one(SettingsList).focus()
 
     def action_back(self) -> None:
-        if self._fields != getattr(self, "_opened_with", self._fields):
-            self.notify("New collection discarded — ^S saves it", severity="warning")
-        self.app.pop_screen()
+        _leave_or_confirm(
+            self,
+            dirty=self._fields != getattr(self, "_opened_with", self._fields),
+            what="This collection",
+            on_save=self.action_save_close,
+        )
 
     def action_save_close(self) -> None:
         # An open edit bar holds a value the user has typed but not submitted;
@@ -4318,6 +4338,82 @@ class StructuredPdfConfirmScreen(Screen[None]):
 # ── Clone-source flow ───────────────────────────────────────────────
 
 
+class UnsavedChangesScreen(Screen[None]):
+    """Save, discard, or stay — for a screen holding work that is not on disk.
+
+    Every editing screen threw work away on Esc: seven silently, one with a
+    notice after the fact, none with a prompt. A user who cannot lose work
+    does not have to know which key saves.
+    """
+
+    BINDINGS = [  # noqa: RUF012
+        Binding("escape,left", "back", "Keep editing", show=False),
+        Binding("up,k", "cursor(-1)", show=False),
+        Binding("down,j", "cursor(1)", show=False),
+        Binding("enter", "activate", show=False),
+    ]
+
+    CSS = chrome_css("UnsavedChangesScreen", confirm=True)
+
+    def __init__(self, *, what: str, on_save: Callable[[], None]) -> None:
+        super().__init__()
+        self._what = what
+        self._on_save = on_save
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="settings_box") as box:
+            box.border_title = "Unsaved changes"
+            yield Static(f"{self._what} has changes that are not saved.", classes="warning")
+            yield OptionList(
+                Option(Text("Save changes", style="bold"), id="save"),
+                Option("Discard changes", id="discard"),
+                Option("Keep editing", id="stay"),
+                id="confirm_list",
+            )
+        yield Static("", id="footer_hints")
+
+    def on_mount(self) -> None:
+        self.query_one("#confirm_list", OptionList).focus()
+        app: FNDApp = self.app  # type: ignore[assignment]
+        self.query_one("#footer_hints", Static).update(
+            _hint_bar(app, (("↑↓", "Choose"), ("⏎", "Select"), ("Esc", "Keep editing")))
+        )
+
+    def action_cursor(self, direction: int) -> None:
+        lst = self.query_one("#confirm_list", OptionList)
+        if direction > 0:
+            lst.action_cursor_down()
+        else:
+            lst.action_cursor_up()
+
+    def action_activate(self) -> None:
+        self.query_one("#confirm_list", OptionList).action_select()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    @on(OptionList.OptionSelected, "#confirm_list")
+    def _chosen(self, ev: OptionList.OptionSelected) -> None:
+        choice = ev.option.id
+        self.app.pop_screen()
+        if choice == "save":
+            # The editor's own save pops it, and reports its own failure.
+            self._on_save()
+        elif choice == "discard":
+            with contextlib.suppress(Exception):
+                self.app.pop_screen()
+
+
+def _leave_or_confirm(
+    screen: Screen[None], *, dirty: bool, what: str, on_save: Callable[[], None]
+) -> None:
+    """Leave, or ask first. Unsaved work never leaves without being offered."""
+    if not dirty:
+        screen.app.pop_screen()
+        return
+    screen.app.push_screen(UnsavedChangesScreen(what=what, on_save=on_save))
+
+
 class DeleteSourceScreen(Screen[None]):
     """Confirm + remove a single source from a collection.
 
@@ -5195,7 +5291,7 @@ class FilterTextScreen(Screen[None]):
         self.query_one("#footer_hints", Static).update(
             # Applies, never saves: both editors hand back to the filter
             # browser, which decides whether anything reaches disk.
-            _editor_hint_bar((("^S", "Apply"), ("Esc", "Cancel")))
+            _editor_hint_bar(((COMMIT_KEY, "Apply"), ("Esc", "Cancel")))
         )
 
     @on(TextArea.Changed, "#filter_text")
@@ -5222,9 +5318,13 @@ class FilterTextScreen(Screen[None]):
     def action_back(self) -> None:
         from fnd.filters.text_form import render
 
-        if self.query_one("#filter_text", TextArea).text.strip() != render(self._spec).strip():
-            self.notify("Filter text discarded — ^S saves it", severity="warning")
-        self.app.pop_screen()
+        typed = self.query_one("#filter_text", TextArea).text.strip()
+        _leave_or_confirm(
+            self,
+            dirty=typed != render(self._spec).strip(),
+            what="This filter text",
+            on_save=self.action_save_close,
+        )
 
     def action_save_close(self) -> None:
         spec, err = self._parsed()
@@ -5434,7 +5534,7 @@ class RuleTextScreen(Screen[None]):
         self.query_one("#footer_hints", Static).update(
             # Applies, never saves: both editors hand back to the filter
             # browser, which decides whether anything reaches disk.
-            _editor_hint_bar((("^S", "Apply"), ("Esc", "Cancel")))
+            _editor_hint_bar(((COMMIT_KEY, "Apply"), ("Esc", "Cancel")))
         )
 
     @on(TextArea.Changed, "#rule_text")
@@ -5655,7 +5755,7 @@ class FilterBrowserScreen(Screen[None]):
     @on(Input.Changed, "#filter_search")
     def _on_search_changed(self, ev: Input.Changed) -> None:
         self._query = ev.value.strip().lower()
-        self._rebuild()
+        self._rebuild(focus_tree=False)
 
     @on(Input.Submitted, "#filter_search")
     def _on_search_submitted(self, _ev: Input.Submitted) -> None:
@@ -5691,7 +5791,7 @@ class FilterBrowserScreen(Screen[None]):
                 ("/", "Filter"),
                 ("t", "As text"),
                 ("c", "Clear"),
-                ("^S", self._commit_label),
+                (COMMIT_KEY, self._commit_label),
                 ("y", "Copy"),
                 ("Esc/←", "Discard"),
             )
@@ -5716,11 +5816,19 @@ class FilterBrowserScreen(Screen[None]):
         self.app.call_from_thread(self._sample_arrived, sample)
 
     def _sample_arrived(self, sample: Any) -> None:
+        """The scan lands on a worker's schedule, so it must not move focus:
+        the user may be mid-word in the row filter."""
         self._scanning = False
         self._sample = sample
-        self._rebuild()
+        self._rebuild(focus_tree=False)
 
-    def _rebuild(self) -> None:
+    def _rebuild(self, *, focus_tree: bool = True) -> None:
+        """``focus_tree`` False where the user is typing or a worker landed.
+
+        Focusing unconditionally meant every keystroke in the row filter moved
+        focus to the tree, so the second character onwards ran as a binding:
+        `/cle` reached `c`, which clears the whole set without asking.
+        """
         import contextlib
 
         from fnd.filters.tree_model import custom_ids, selection_for, spec_branches
@@ -5747,7 +5855,8 @@ class FilterBrowserScreen(Screen[None]):
         with contextlib.suppress(Exception):
             if line > 0:
                 tree.cursor_line = line
-        tree.focus()
+        if focus_tree:
+            tree.focus()
         self._refresh_summary()
 
     @on(ToggleTree.SelectionChanged, "#filter_tree")
@@ -5876,9 +5985,9 @@ class FilterBrowserScreen(Screen[None]):
             search.value = ""
             self.query_one("#filter_tree", ToggleTree).focus()
             return
-        if self._dirty():
-            self.notify("Filter changes discarded — ^S saves them", severity="warning")
-        self.app.pop_screen()
+        _leave_or_confirm(
+            self, dirty=self._dirty(), what="These filters", on_save=self.action_save_close
+        )
 
     def action_save_close(self) -> None:
         try:

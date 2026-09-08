@@ -150,3 +150,77 @@ async def test_the_footer_drops_the_row_keys_while_typing(tmp_index_dir: Path) -
 
     assert "As text" not in typing, typing
     assert "Copy" not in typing, typing
+
+
+@pytest.mark.asyncio
+async def test_typing_reaches_the_box_and_not_the_bindings(tmp_index_dir: Path) -> None:
+    """Setting Input.value drives the handler without touching focus, so the
+    whole defect was invisible to a test written that way: after the first
+    keystroke the tree took focus and `t`, `c` and `y` ran as bindings.
+    `/cle` reached `c` — clear everything, no confirmation."""
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(120, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open(app, pilot)
+        await pilot.press("slash")
+        await pilot.pause()
+        for ch in "alp":
+            await pilot.press(ch)
+            await pilot.pause()
+        box = screen.query_one("#filter_search", Input)
+        value, focused = box.value, app.focused
+        # Inside the context: the stack is torn down on exit.
+        still_here = app.screen is screen
+
+    assert value == "alp", f"only {value!r} reached the box"
+    assert focused is box, f"focus left the box for {focused}"
+    assert still_here, "a keystroke opened another screen"
+
+
+@pytest.mark.asyncio
+async def test_typing_c_does_not_clear_the_filter_set(tmp_index_dir: Path) -> None:
+    """The worst reachable case: `c` is Clear, unmodified and unconfirmed."""
+    spec = FilterSpec(kinds=("md",))
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(120, 34)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=spec,
+                gitignore=True,
+                fndignore=True,
+                sample_provider=_sample,
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(20):
+            await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, FilterBrowserScreen)
+        await pilot.press("slash")
+        await pilot.pause()
+        for ch in "cle":
+            await pilot.press(ch)
+            await pilot.pause()
+        kept = screen._spec.kinds
+
+    assert kept == ("md",), f"typing into the box cleared the set: {kept}"
+
+
+@pytest.mark.asyncio
+async def test_a_landing_scan_does_not_take_focus_off_the_box(tmp_index_dir: Path) -> None:
+    """The sample arrives on a worker's schedule, mid-word."""
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(120, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open(app, pilot)
+        await pilot.press("slash")
+        await pilot.pause()
+        box = screen.query_one("#filter_search", Input)
+        screen._sample_arrived(_sample())
+        for _ in range(4):
+            await pilot.pause()
+        focused = app.focused
+
+    assert focused is box, f"the scan landing moved focus to {focused}"

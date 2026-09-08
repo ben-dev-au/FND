@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any
 
 from fnd import os_labels
 from fnd.config import ALL_COLLECTIONS, is_all_collections
+from fnd.tui.widgets import COMMIT_KEY
 
 if TYPE_CHECKING:
     from fnd.tui.app import FNDApp
@@ -382,7 +383,7 @@ _KEYS_SOURCE_FORM: tuple[tuple[str, str, str, str], ...] = (
         "Edit, pick, or toggle the focused field. Scalar fields open the inline edit bar; multi-select fields push a picker.",
     ),
     (
-        "Ctrl+S",
+        COMMIT_KEY,
         "Save & close",
         "",
         "Persist this source to config.toml. Triggers an async reindex if the source set or includes/excludes changed.",

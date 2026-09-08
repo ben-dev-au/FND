@@ -10,6 +10,8 @@ from typing import Any, cast
 import pytest
 
 from fnd.tui import FNDApp
+from fnd.tui.settings_screen import UnsavedChangesScreen
+from fnd.tui.widgets import COMMIT_KEY
 from tests._pilot_wait import settings_ready
 
 
@@ -1044,7 +1046,9 @@ def test_the_rename_row_describes_what_rename_does() -> None:
 @pytest.mark.asyncio
 async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) -> None:
     """The filter browser saves into `_fields`, not to disk, so ^S there and
-    Esc here threw the edit away without a word."""
+    Esc here threw the edit away without a word. It said so afterwards once
+    that was fixed; it asks first now, which is what makes the edit
+    recoverable rather than merely reported."""
     from fnd.config import CollectionConfig, Config, SourceConfig
     from fnd.tui.settings_screen import SourceFormScreen
 
@@ -1057,23 +1061,21 @@ async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) 
             await pilot.pause()
         form = app.screen
         assert isinstance(form, SourceFormScreen)
-        notes: list[str] = []
-        form.notify = lambda msg, **kw: notes.append(str(msg))  # type: ignore[method-assign]
         form.action_back()
         await pilot.pause()
-        assert notes == [], "an untouched form discards nothing"
+        assert not isinstance(app.screen, UnsavedChangesScreen), (
+            "an untouched form must not stop the user"
+        )
 
         app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
         for _ in range(20):
             await pilot.pause()
         form = app.screen
         assert isinstance(form, SourceFormScreen)
-        form.notify = lambda msg, **kw: notes.append(str(msg))  # type: ignore[method-assign]
         form._fields["filters"] = {"kinds": ["md"]}
         form.action_back()
         await pilot.pause()
-        assert notes, "leaving with an edit must say so"
-        assert "discarded" in notes[0], notes
+        assert isinstance(app.screen, UnsavedChangesScreen), "the edit was dropped without asking"
 
 
 @pytest.mark.asyncio
@@ -1127,7 +1129,7 @@ def test_the_footer_never_drops_the_save_key() -> None:
             ("→", "Open"),
             ("t", "As text"),
             ("c", "Clear"),
-            ("^S", "Save"),
+            (COMMIT_KEY, "Save"),
             ("y", "Copy"),
             ("Esc/←", "Discard"),
         ),
@@ -1227,7 +1229,7 @@ async def test_a_text_editor_advertises_only_keys_that_work(built_index: Path) -
             assert dead not in painted, f"{dead} is advertised but types into the box: {painted}"
         # The commit key, whatever it is called: this editor applies rather
         # than saves, since it hands back to the browser.
-        assert "^S" in painted
+        assert COMMIT_KEY in painted
         assert "Cancel" in painted
 
         for key in ("slash", "colon", "question_mark", "q"):
@@ -1522,9 +1524,13 @@ class TestARejectedSaveStopsComplainingOnceFixed:
 
 
 class TestNothingIsThrownAwayInSilence:
-    """Every screen holding user work says so when leaving discards it. Two
-    were missed: the wizard threw away a filled form on both Esc and q, and
-    the text view threw away typed filter text."""
+    """Every screen holding user work asks before leaving discards it.
+
+    These asserted a notification saying the work HAD been discarded, which
+    was the best the app did before the prompt existed — telling the user
+    after it was gone. The intent is unchanged; the mechanism is now a modal
+    offering Save, Discard or Keep editing, so the work is recoverable.
+    """
 
     @pytest.mark.asyncio
     async def test_the_wizard_says_it_discarded_a_filled_form(self, built_index: Path) -> None:
@@ -1538,24 +1544,23 @@ class TestNothingIsThrownAwayInSilence:
                 await pilot.pause()
             wizard = app.screen
             assert isinstance(wizard, AddCollectionWizard)
-            said: list[str] = []
-            wizard.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             wizard.action_back()
             await pilot.pause()
-            assert said == [], "an untouched form discards nothing"
+            assert not isinstance(app.screen, UnsavedChangesScreen), (
+                "an untouched form must not stop the user"
+            )
 
             app.push_screen(AddCollectionWizard())
             for _ in range(20):
                 await pilot.pause()
             wizard = app.screen
             assert isinstance(wizard, AddCollectionWizard)
-            said = []
-            wizard.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             wizard._fields["name"] = "probe"
             wizard.action_back()
             await pilot.pause()
-            assert said, "a filled form was discarded in silence"
-            assert "discarded" in said[0], said
+            assert isinstance(app.screen, UnsavedChangesScreen), (
+                "a filled form was discarded without asking"
+            )
 
     @pytest.mark.asyncio
     async def test_the_text_view_says_it_discarded_typing(self, built_index: Path) -> None:
@@ -1574,11 +1579,11 @@ class TestNothingIsThrownAwayInSilence:
                 await pilot.pause()
             screen = app.screen
             assert isinstance(screen, FilterTextScreen)
-            said: list[str] = []
-            screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             screen.action_back()
             await pilot.pause()
-            assert said == [], "untouched text discards nothing"
+            assert not isinstance(app.screen, UnsavedChangesScreen), (
+                "untouched text must not stop the user"
+            )
 
             app.push_screen(
                 FilterTextScreen(title="As text", spec=FilterSpec(), on_save=lambda _s: None)
@@ -1587,12 +1592,12 @@ class TestNothingIsThrownAwayInSilence:
                 await pilot.pause()
             screen = app.screen
             assert isinstance(screen, FilterTextScreen)
-            said = []
-            screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             screen.query_one("#filter_text", TextArea).text = "file.kind in ['md']"
             screen.action_back()
             await pilot.pause()
-            assert said, "typed text was discarded in silence"
+            assert isinstance(app.screen, UnsavedChangesScreen), (
+                "typed text was discarded without asking"
+            )
 
 
 class TestSavingLandsAnOpenEdit:
@@ -1751,15 +1756,17 @@ def test_only_a_screen_that_writes_says_save() -> None:
 
     from fnd.tui import settings_screen as module
 
+    # Match the identifier, not the spelling: this scraped a literal and broke
+    # the moment the label became one constant, which is what it is for.
     staging = ("FilterTextScreen", "RuleTextScreen")
     for name in staging:
         source = inspect.getsource(getattr(module, name))
-        labels = dict(re.findall(r'\("(\^S|Ctrl\+S)",\s*"([^"]+)"\)', source))
+        labels = set(re.findall(r'COMMIT_KEY,\s*"([^"]+)"', source))
         assert labels, f"{name} names no commit key"
-        assert set(labels.values()) == {"Apply"}, f"{name} says {labels}, but it never writes"
+        assert labels == {"Apply"}, f"{name} says {labels}, but it never writes"
 
     writes = inspect.getsource(module.SourceFormScreen)
-    assert '("Ctrl+S", "Save")' in writes, "the screen that does write still says Save"
+    assert re.search(r'COMMIT_KEY,\s*"Save"', writes), "the screen that does write still says Save"
 
 
 class TestTheDefaultsScreenOffersEveryType:
@@ -1791,16 +1798,19 @@ class TestTheDefaultsScreenOffersEveryType:
         offered = {i.removeprefix("kind:") for g in kinds.groups for i, _l in g.items}
         assert offered == set(ALL_KIND_IDS)
 
-    def test_a_sampled_screen_still_narrows(self) -> None:
-        """The per-source screen keeps its short, relevant list."""
+    def test_a_sampled_screen_offers_every_type_too(self) -> None:
+        """Overruled deliberately: a picker showing only today's types has to
+        be revisited as the corpus grows. The counts still say what is there."""
         from fnd.filters import FilterSpec
         from fnd.filters.scan import SourceSample
         from fnd.filters.tree_model import spec_branches
+        from fnd.kinds import ALL_KIND_IDS
 
         sample = SourceSample(kinds={"md": 3}, tags={})
         kinds = next(b for b in spec_branches(FilterSpec(), sample) if b.id == "kinds")
-        offered = {i.removeprefix("kind:") for g in kinds.groups for i, _l in g.items}
-        assert offered == {"md"}
+        items = {i.removeprefix("kind:"): label for g in kinds.groups for i, label in g.items}
+        assert set(items) == set(ALL_KIND_IDS)
+        assert "3" in items["md"], items["md"]
 
 
 class TestTagCountsAreCountsOfFiles:
