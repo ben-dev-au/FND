@@ -215,7 +215,12 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
     if not groups:
         return None
     if len(groups) == 1:
-        return replace(groups[0], id="tags", empty_label="any tag")
+        # Collapse the single source's rows into this branch, but KEEP the
+        # name: taking the source's label instead renamed the branch from
+        # "Tags" to "Note tags (YAML)" the moment a rule about the other
+        # source was cleared, so a row changed its own name as a side effect
+        # of an edit somewhere else.
+        return replace(groups[0], id="tags", label="Tags", empty_label="any tag")
     return Branch(
         "tags",
         "Tags",

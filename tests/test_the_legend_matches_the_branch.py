@@ -106,3 +106,42 @@ async def test_enter_on_a_rules_branch_does_something(tmp_index_dir: Path) -> No
 
     assert not before, "the premise: it starts collapsed"
     assert after, "Enter did nothing on the one row whose legend promised the most"
+
+
+class TestABranchKeepsItsName:
+    """A row renamed itself as a side effect of an edit somewhere else.
+
+    With one tag source showing rows, the branch took that SOURCE's label —
+    so clearing a rule about the other source renamed `Tags` to
+    `Note tags (YAML)` and took the `System tags` sub-branch with it. The
+    user had changed a tag rule, not the shape of the pane.
+    """
+
+    _SAMPLE_ONE_SOURCE = SourceSample(kinds={"md": 3}, tags={"frontmatter": {"keep": 2}})
+
+    def test_it_is_called_tags_with_two_sources(self) -> None:
+        spec = FilterSpec(exclude_tags={"os": ("no_index",)})
+        branch = next(
+            b for b in spec_branches(spec, self._SAMPLE_ONE_SOURCE) if b.id.startswith("tags")
+        )
+        assert branch.label == "Tags"
+        assert [g.label for g in branch.groups] == ["Note tags (YAML)", "System tags"]
+
+    def test_and_still_called_tags_with_one(self) -> None:
+        branch = next(
+            b
+            for b in spec_branches(FilterSpec(), self._SAMPLE_ONE_SOURCE)
+            if b.id.startswith("tags")
+        )
+        assert branch.label == "Tags", "the branch renamed itself"
+
+    def test_the_rows_are_still_collapsed_into_it(self) -> None:
+        """The control: keeping the name must not reintroduce a pointless
+        nesting level for a single source."""
+        branch = next(
+            b
+            for b in spec_branches(FilterSpec(), self._SAMPLE_ONE_SOURCE)
+            if b.id.startswith("tags")
+        )
+        assert not branch.groups, "a single source grew a sub-branch of its own"
+        assert branch.items, "the single source's tags stopped being reachable"
