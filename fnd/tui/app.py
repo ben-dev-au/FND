@@ -1139,10 +1139,15 @@ class FNDApp(App[None]):
         ):
             contextual = (("n/b", "Matches"), *contextual)
 
+        # Every anchor reaches a focused text box as a character, so naming
+        # them while the query bar has focus advertises four dead keys — and
+        # the app opens with that focus. The settings screens already drop
+        # them for the same reason.
+        from textual.widgets import Input, TextArea
+
+        anchors = () if isinstance(self.focused, Input | TextArea) else self._FOOTER_ANCHORS
         with contextlib.suppress(Exception):
-            self.query_one("#footer_hints", Static).update(
-                render_hint_bar(self._FOOTER_ANCHORS, contextual)
-            )
+            self.query_one("#footer_hints", Static).update(render_hint_bar(anchors, contextual))
 
     # Maps a ``_focus_context`` result to the pane id that wears the accent
     # border. ``query``/``global`` map to nothing — no pane is accented.
