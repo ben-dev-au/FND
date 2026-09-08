@@ -4543,6 +4543,18 @@ class DeleteSourceScreen(Screen[None]):
             self.notify("Source vanished", severity="error")
             self.app.pop_screen()
             return
+        busy = _indexing_now(app)
+        if busy is not None:
+            # The dialog promises the collection is rebuilt straight
+            # afterwards. Mid-run that rebuild is refused and dropped, so the
+            # removed source's files stay searchable and the promise is false.
+            self.notify(
+                f"Indexing {busy!r} is still running, and removing a source "
+                "rebuilds the collection — cancel it or let it finish first.",
+                severity="warning",
+                timeout=8,
+            )
+            return
         del col.sources[self._source_index]
         try:
             write_collection(

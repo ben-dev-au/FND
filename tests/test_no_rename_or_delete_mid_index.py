@@ -146,3 +146,55 @@ def test_the_guard_reads_the_service_not_a_flag() -> None:
 
     assert _indexing_now(_App()) == "notes"  # type: ignore[arg-type]
     assert _indexing_now(_Done()) is None  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_removing_a_source_is_refused_while_indexing(
+    configured: Path, tmp_index_dir: Path
+) -> None:
+    """The dialog promises the collection is rebuilt straight afterwards. Mid
+    run that rebuild is refused and dropped, so the removed source's files
+    stay searchable and the promise is false."""
+    from textual.widgets import OptionList
+
+    from fnd.tui.settings_screen import DeleteSourceScreen
+
+    app = FNDApp(index_dir=tmp_index_dir)
+    said: list[str] = []
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app._config = load()
+        app._indexer = _Busy()  # type: ignore[assignment]
+        screen = DeleteSourceScreen(collection_name="notes", source_index=0)
+        app.push_screen(screen)
+        await pilot.pause()
+        screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+        screen.query_one("#confirm_list", OptionList).action_select()
+        await pilot.pause()
+
+    assert load(configured).collections["notes"].sources, "the source must still be there"
+    assert said, "a refusal must say why"
+    assert "still running" in said[0], said
+
+
+@pytest.mark.asyncio
+async def test_a_dropped_reindex_is_announced(tmp_index_dir: Path) -> None:
+    """A caller that opens no modal still has to learn its request was
+    dropped: delete-source promised a rebuild and got silence, so the run
+    never happened and the removed folder stayed searchable."""
+    from fnd.tui.indexer_service import IndexerService
+
+    app = FNDApp(index_dir=tmp_index_dir)
+    said: list[str] = []
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        service = IndexerService(app)
+        service.task = _Busy.task  # type: ignore[assignment]
+        service.collection = "notes"
+        app.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+        started = service.start(collection="notes", open_modal=False)
+        await pilot.pause()
+
+    assert started is False
+    assert said, "a dropped request must not be silent"
+    assert "not re-indexed" in said[0], said

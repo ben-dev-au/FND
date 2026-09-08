@@ -164,6 +164,19 @@ class IndexerService:
                             chain_index=chain_index,
                         )
                     )
+                else:
+                    # A caller that wanted no modal still has to learn its
+                    # request was dropped. Delete-source promises a rebuild
+                    # "straight afterwards" and got silence: the run never
+                    # happened, and the removed folder stayed searchable.
+                    with contextlib.suppress(Exception):
+                        self._app.notify(
+                            f"Indexing '{self.collection or collection}' is already "
+                            f"running, so '{collection}' was not re-indexed. Run it "
+                            "again once this finishes.",
+                            severity="warning",
+                            timeout=8,
+                        )
                 return False
             # In flight but already cancelling (cancel-then-start-again):
             # serialise — bump the generation so the dying run's teardown
