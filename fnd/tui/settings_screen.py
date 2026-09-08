@@ -64,6 +64,7 @@ from fnd.tui.menu import (
     walk_all_sections,
 )
 from fnd.tui.widgets import COMMIT_KEY, DetailStrip
+from fnd.tui.widgets.clear_bar import ClearFiltersBar
 from fnd.tui.widgets.toggle_tree import ToggleGroup, ToggleItem, ToggleTree
 
 if TYPE_CHECKING:
@@ -2045,7 +2046,9 @@ def open_source_filter_browser(
                 defaults.respect_gitignore,
                 defaults.respect_fndignore,
             ),
-            save_note="^S applies here; ^S on the source form saves and reindexes",
+            save_note=(
+                f"{COMMIT_KEY} applies here; {COMMIT_KEY} on the source form saves and reindexes"
+            ),
             commit_label="Apply",
             on_save=_save,
         )
@@ -5719,6 +5722,16 @@ class FilterBrowserScreen(Screen[None]):
         height: 1; padding: 0 0; border: none; background: $surface; color: $text;
     }
     FilterBrowserScreen #filter_search:focus { color: $accent; }
+    /* visibility (not display) so the row is always reserved — the bar
+       appearing on the first active filter must not shove the tree down.
+       Same rule, glyph and position as the sidebar's. */
+    FilterBrowserScreen #clear_filters_bar {
+        height: 1; padding: 0 1; visibility: hidden; color: $primary 50%;
+    }
+    FilterBrowserScreen #clear_filters_bar:hover { color: $accent; text-style: bold; }
+    FilterBrowserScreen #clear_filters_bar:focus {
+        color: $accent; text-style: bold; background: $accent 15%;
+    }
     FilterBrowserScreen #filter_summary {
         height: auto; max-height: 5; overflow-y: auto;
         padding: 0 1; color: $text-muted;
@@ -5785,6 +5798,9 @@ class FilterBrowserScreen(Screen[None]):
             box.border_title = self._title
             yield Static(LEGEND, id="filter_legend")
             yield Input(placeholder="Filter rows…  (/)", id="filter_search")
+            yield ClearFiltersBar(
+                "", id="clear_filters_bar", on_clear=self.action_clear_all, focus_id="filter_tree"
+            )
             yield ToggleTree("Filters", id="filter_tree")
             yield Static("", id="filter_summary")
         yield Static("", id="footer_hints")
@@ -5929,6 +5945,7 @@ class FilterBrowserScreen(Screen[None]):
                 tree.cursor_line = line
         if focus_tree:
             tree.focus()
+        self._update_clear_bar()
         self._refresh_summary()
 
     @on(ToggleTree.SelectionChanged, "#filter_tree")
@@ -5939,6 +5956,21 @@ class FilterBrowserScreen(Screen[None]):
             self._spec, ev.selected, ev.excluded, self._offered_kind_ids()
         )
         self._refresh_summary()
+
+    def _update_clear_bar(self) -> None:
+        """Show the clear row only while clearing would change something, and
+        name what it does: on a source it restores what is inherited rather
+        than emptying the set."""
+        from fnd.filters import FilterSpec
+
+        # The same target ``action_clear_all`` moves to, so the row is offered
+        # exactly when pressing it would change something.
+        target = self._inherited or (FilterSpec(), self._gitignore, self._fndignore)
+        bar = self.query_one("#clear_filters_bar", ClearFiltersBar)
+        bar.visible = (self._spec, self._gitignore, self._fndignore) != target
+        bar.update(
+            "✕  Clear all filters" if self._inherited is None else "✕  Reset filters to inherited"
+        )
 
     def _offered_kind_ids(self) -> set[str]:
         """Kind ids the tree actually showed, so "all ticked" means all of
@@ -5999,7 +6031,7 @@ class FilterBrowserScreen(Screen[None]):
 
     def action_help_if_saved(self) -> None:
         if self._dirty():
-            self.notify("Unsaved filter changes — ^S to save, Esc to discard, then ?")
+            self.notify(f"Unsaved filter changes — {COMMIT_KEY} to save, Esc to discard, then ?")
             return
         self.app.action_show_help()  # type: ignore[attr-defined]
 
@@ -6035,7 +6067,7 @@ class FilterBrowserScreen(Screen[None]):
         else:
             self._spec, self._gitignore, self._fndignore = self._inherited
         self._rebuild()
-        # `c` sits beside `^S` and takes no confirmation, so it has to say what
+        # `c` sits beside `^s` and takes no confirmation, so it has to say what
         # it took — above all a tag exclusion, which is a protection rather
         # than a preference.
         self.notify(_cleared_note(before, self._spec, inheriting=self._inherited is not None))

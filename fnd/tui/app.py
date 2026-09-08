@@ -338,14 +338,14 @@ class FNDApp(App[None]):
     #filters_panel_tree { width: 100%; height: 1fr; border: none; overflow-x: hidden; }
     /* Docked at the top so it floats above the scrolling tree, always in view
        while a filter is active; hidden otherwise. */
-    #clear_filters_bar {
+    #filters_pane #clear_filters_bar {
         /* visibility (not display) so the row is always reserved — the bar
            appearing on the first active filter must not shove the tree down. */
         dock: top; height: 1; padding: 0 1; visibility: hidden;
         color: $primary 50%;
     }
-    #clear_filters_bar:hover { color: $accent; text-style: bold; }
-    #clear_filters_bar:focus { color: $accent; text-style: bold; background: $accent 15%; }
+    #filters_pane #clear_filters_bar:hover { color: $accent; text-style: bold; }
+    #filters_pane #clear_filters_bar:focus { color: $accent; text-style: bold; background: $accent 15%; }
     /* Section collapse-to-header: Left at the panel root shrinks the
        whole panel down to its border-title strip. ``overflow: hidden``
        suppresses any rogue scrollbar that would otherwise sneak past

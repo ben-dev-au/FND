@@ -30,6 +30,7 @@ from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
 from fnd.tui.results_labels import _styled_state_row, state_colour
+from fnd.tui.widgets.clear_bar import focus_clear_bar
 from fnd.tui.widgets.state_marker import StateMarkerLabel
 
 _FULL = "●"
@@ -473,6 +474,15 @@ class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
         return group.mode
 
     # ── Expand / collapse (←/→) ──────────────────────────────────────────
+    def action_cursor_up(self) -> None:
+        """Up from the top row reaches the pane's clear bar, as in the sidebar.
+
+        The row is only an affordance if the keyboard can get to it.
+        """
+        if int(self.cursor_line) <= 0 and focus_clear_bar(self):
+            return
+        super().action_cursor_up()
+
     def action_expand_here(self) -> None:
         node = self.cursor_node
         if node is not None and node.allow_expand and not node.is_expanded:

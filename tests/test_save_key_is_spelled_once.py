@@ -8,6 +8,7 @@ and a capital reads as though Shift is wanted.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -16,14 +17,35 @@ from fnd.tui.widgets import COMMIT_KEY
 _TUI = Path(__file__).resolve().parent.parent / "fnd" / "tui"
 
 
+def _docstrings(tree: ast.AST) -> set[int]:
+    """Ids of the string nodes that are docstrings, which no user reads."""
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        first = node.body[0] if node.body else None
+        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+            out.add(id(first.value))
+    return out
+
+
 def test_no_module_spells_it_another_way() -> None:
+    """Anywhere inside a user-visible string, not only as the whole of one.
+
+    The line-wise version passed while two notices still said `^S` mid
+    sentence — a capital beside the lowercase `t`, `c`, `y` hints.
+    """
     offenders: list[str] = []
     for path in sorted(_TUI.rglob("*.py")):
-        for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if "Binding(" in line:
-                continue  # the key itself, not the label shown for it
-            if re.search(r'"(Ctrl\+S|\^S)"', line):
-                offenders.append(f"{path.name}:{n}")
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        skip = _docstrings(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            if id(node) in skip:
+                continue
+            if re.search(r"Ctrl\+S|\^S", node.value):
+                offenders.append(f"{path.name}:{node.lineno}")
     assert not offenders, f"the save key spelled another way: {offenders}"
 
 

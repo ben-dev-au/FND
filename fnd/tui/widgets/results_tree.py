@@ -14,6 +14,7 @@ from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
 from fnd.tui.preview.warmth import WarmState
+from fnd.tui.widgets.clear_bar import focus_clear_bar
 from fnd.tui.widgets.state_marker import StateMarkerLabel
 
 __all__ = ["ResultsTree"]
@@ -164,14 +165,8 @@ class ResultsTree(StateMarkerLabel, Tree[dict[str, Any]]):
         # In the filters pane, Up from the top row focuses the docked clear bar
         # above the tree (when shown), so the bar is keyboard-reachable like any
         # row. Everywhere else this is a normal cursor move.
-        if self.id == "filters_panel_tree" and int(self.cursor_line) <= 0:
-            try:
-                bar = self.app.query_one("#clear_filters_bar")
-            except Exception:
-                bar = None
-            if bar is not None and bar.visible:
-                bar.focus()
-                return
+        if self.id == "filters_panel_tree" and int(self.cursor_line) <= 0 and focus_clear_bar(self):
+            return
         super().action_cursor_up()
 
     def action_scan_cursor_down(self) -> None:
