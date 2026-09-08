@@ -215,6 +215,20 @@ def build_confirm_body(
     return text
 
 
+def open_confirm_list(screen: Screen[Any], *, land_on: str = "") -> OptionList:
+    """Focus a screen's ``#confirm_list``; ``land_on`` names the row to start on.
+
+    Irreversible dialogs start on the way out. Enter is one keypress from a
+    delete otherwise, and Enter is how every one of these screens is reached.
+    """
+    options = screen.query_one("#confirm_list", OptionList)
+    if land_on:
+        with contextlib.suppress(StopIteration):
+            options.highlighted = next(i for i, o in enumerate(options._options) if o.id == land_on)
+    options.focus()
+    return options
+
+
 def confirm_yes_option(label: str, severity: str = "safe") -> Option:
     """Construct the affirming OptionList row with severity-coloured verb.
 
@@ -3849,7 +3863,7 @@ class DeleteCollectionScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        open_confirm_list(self, land_on="no")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("⏎", "Confirm"), ("Esc", "Cancel")))
@@ -4032,7 +4046,7 @@ class CacheMaintenanceConfirm(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        open_confirm_list(self, land_on="no" if self._irreversible else "")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("↑↓", "Nav"), ("⏎", "Confirm"), ("Esc", "Cancel")))
@@ -4177,7 +4191,7 @@ class UpdateAllConfirm(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        open_confirm_list(self)
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("↑↓", "Nav"), ("⏎", "Confirm"), ("Esc", "Cancel")))
@@ -4369,7 +4383,7 @@ class StructuredPdfConfirmScreen(Screen[None]):
         )
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        open_confirm_list(self)
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("↑↓", "Nav"), ("⏎", "Confirm"), ("Esc", "Cancel")))
@@ -4502,12 +4516,8 @@ class UnsavedChangesScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        options = self.query_one("#confirm_list", OptionList)
-        options.focus()
-        # With no save on offer the first row is the destructive one, and Enter
-        # is one keypress away.
-        if self._on_save is None:
-            options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "stay")
+        # With no save on offer the first row is the destructive one.
+        open_confirm_list(self, land_on="" if self._on_save else "stay")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("↑↓", "Choose"), ("⏎", "Select"), ("Esc", "Keep editing")))
@@ -4671,13 +4681,7 @@ class RebuildConfirmScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        # The SAFE option, not the destructive one. Every other irreversible
-        # dialog in the app lands the cursor on "Yes, delete…", and only the
-        # unsaved-changes gate gets this right.
-        options = self.query_one("#confirm_list", OptionList)
-        with contextlib.suppress(Exception):
-            options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "no")
-        options.focus()
+        open_confirm_list(self, land_on="no")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("⏎", "Confirm"), ("Esc", self._decline_label)))
@@ -4761,7 +4765,7 @@ class DeleteSourceScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        open_confirm_list(self, land_on="no")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("⏎", "Confirm"), ("Esc", "Cancel")))

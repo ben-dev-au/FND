@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from textual.widgets import Static
+from textual.widgets import OptionList, Static
 
 from fnd.config import (
     CollectionConfig,
@@ -111,9 +111,10 @@ async def test_delete_modal_confirm_removes_source_and_lands_above(
         await pilot.pause()
         await pilot.press("ctrl+d")
         await pilot.pause()
-        # Confirm modal — first option is "Yes, remove this source".
         modal = app.screen
         assert isinstance(modal, DeleteSourceScreen)
+        options = app.screen.query_one("#confirm_list", OptionList)
+        options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "yes")
         await pilot.press("enter")
         await pilot.pause()
 
@@ -158,8 +159,8 @@ async def test_delete_modal_cancel_keeps_source(
         await pilot.pause()
         await pilot.press("ctrl+d")
         await pilot.pause()
-        # Cursor down to "Cancel" then enter.
-        await pilot.press("down")
+        options = app.screen.query_one("#confirm_list", OptionList)
+        options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "no")
         await pilot.press("enter")
         await pilot.pause()
         # Back to SourceFormScreen, TOML unchanged.

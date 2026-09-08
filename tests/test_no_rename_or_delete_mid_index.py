@@ -98,6 +98,7 @@ async def test_a_delete_is_refused_while_indexing(configured: Path, tmp_index_di
         from textual.widgets import OptionList
 
         lst = screen.query_one("#confirm_list", OptionList)
+        lst.highlighted = next(i for i, o in enumerate(lst._options) if o.id == "yes")
         lst.action_select()
         await pilot.pause()
 
@@ -169,7 +170,9 @@ async def test_removing_a_source_is_refused_while_indexing(
         app.push_screen(screen)
         await pilot.pause()
         screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
-        screen.query_one("#confirm_list", OptionList).action_select()
+        lst = screen.query_one("#confirm_list", OptionList)
+        lst.highlighted = next(i for i, o in enumerate(lst._options) if o.id == "yes")
+        lst.action_select()
         await pilot.pause()
 
     assert load(configured).collections["notes"].sources, "the source must still be there"

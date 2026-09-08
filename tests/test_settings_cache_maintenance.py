@@ -227,8 +227,7 @@ async def test_clear_confirm_chrome(built_index: Path, cfg: Config, isolated_cac
 
 @pytest.mark.asyncio
 async def test_clear_cancel_path(built_index: Path, cfg: Config, isolated_cache: Path) -> None:
-    """Pressing Down then Enter on the confirm dialog selects Cancel —
-    no side effect."""
+    """Choosing Cancel on the confirm dialog has no side effect."""
     cache = ExtractionCache(root=isolated_cache)
     cache.put("aa--v1", [_make_chunk(0)])
 
@@ -239,8 +238,9 @@ async def test_clear_cancel_path(built_index: Path, cfg: Config, isolated_cache:
         await pilot.pause()
         _run_cache_clear(app)
         await pilot.pause()
-        # Cursor defaults to Yes — move down to Cancel and select.
-        await pilot.press("down")
+        # The cursor starts on Cancel now; choose it by name, not by position.
+        options = app.screen.query_one("#confirm_list", OptionList)
+        options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "no")
         await pilot.press("enter")
         await pilot.pause()
         # Cache untouched.
@@ -250,7 +250,7 @@ async def test_clear_cancel_path(built_index: Path, cfg: Config, isolated_cache:
 
 @pytest.mark.asyncio
 async def test_clear_yes_path(built_index: Path, cfg: Config, isolated_cache: Path) -> None:
-    """Pressing Enter on the highlighted Yes option clears the cache."""
+    """Choosing Yes clears the cache."""
     cache = ExtractionCache(root=isolated_cache)
     cache.put("aa--v1", [_make_chunk(0)])
     cache.put("bb--v1", [_make_chunk(1)])
@@ -262,7 +262,9 @@ async def test_clear_yes_path(built_index: Path, cfg: Config, isolated_cache: Pa
         await pilot.pause()
         _run_cache_clear(app)
         await pilot.pause()
-        await pilot.press("enter")  # Yes is highlighted by default
+        options = app.screen.query_one("#confirm_list", OptionList)
+        options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "yes")
+        await pilot.press("enter")
         await pilot.pause()
         assert not isolated_cache.exists() or cache.entry_count() == 0
 
