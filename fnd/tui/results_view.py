@@ -37,7 +37,25 @@ class ResultsView:
 
     def title(self) -> str:
         """Border title for the results pane — counts live next to the data
-        they describe, not in a global status bar."""
+        they describe, not in a global status bar.
+
+        A collapsed pane says so: two `←` presses shrink it to one row, the
+        state persists across launches, and the title was byte-identical to an
+        open pane's — so the app came up looking as though the results had
+        simply gone.
+        """
+        return f"{self._collapsed_marker()}{self._title_text()}"
+
+    def _collapsed_marker(self) -> str:
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            pane = self._app.query_one("#results_pane")
+            if "collapsed" in pane.classes:
+                return "▶ "
+        return ""
+
+    def _title_text(self) -> str:
         if not self._app._search.idle:
             # The one operation whose work happens entirely off the loop, so
             # every pane could stay byte-identical for its whole duration.

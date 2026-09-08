@@ -906,6 +906,12 @@ class FNDApp(App[None]):
                 return f"Preview — {name}"
         return "Preview"
 
+    def _refresh_results_title(self) -> None:
+        """Just the title. `_refresh_status` also queues a sidebar reflow, and
+        the collapse gesture is required to reflow synchronously."""
+        with contextlib.suppress(Exception):
+            self.query_one("#results_pane", Tree).border_title = self._results.title()
+
     def _refresh_status(self) -> None:
         try:
             self.query_one("#results_pane", Tree).border_title = self._results.title()
@@ -1763,6 +1769,7 @@ class FNDApp(App[None]):
                     self._scope.collapsed_panels.add(frame.id)
                     self._scope.persist()
                     self._reflow_sidebar(immediate=True)  # collapse in one frame
+                    self._refresh_results_title()
                 return
             parent.collapse()
             tree.move_cursor(parent)
@@ -1793,6 +1800,7 @@ class FNDApp(App[None]):
                 self._scope.collapsed_panels.discard(frame.id)
                 self._scope.persist()
             self._reflow_sidebar(immediate=True)  # expand in one frame
+            self._refresh_results_title()
             return
         node = tree.cursor_node
         if node is None or not node.children:
