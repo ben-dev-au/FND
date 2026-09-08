@@ -3982,6 +3982,10 @@ class DeleteCollectionScreen(Screen[None]):
 
         if error:
             app.notify(f"Index drop failed: {error}", severity="error")
+        else:
+            # Two screens pop and the row is gone; nothing said the act had
+            # happened, which on an irreversible one is the moment to say it.
+            app.notify(f"{self._name!r} deleted. The files on disk are untouched.")
         if self._default_moved:
             app.notify(
                 f"{self._name!r} was your default collection. Searches now cover every one.",

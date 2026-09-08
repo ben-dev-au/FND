@@ -171,3 +171,35 @@ async def test_delete_freezes_screen_during_worker(
         assert len(calls) == 1, "second Enter spawned another delete worker"
         assert app.screen is screen, "Escape popped the screen mid-delete"
         assert len(app.screen_stack) == depth
+
+
+@pytest.mark.asyncio
+async def test_a_finished_delete_says_so(
+    app_factory: Callable[[Config], FNDApp],
+    cfg_three: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """It popped two screens and left the row gone, saying nothing at all."""
+    from pathlib import Path as _Path
+
+    cfg_path = _Path(str(tmp_path)) / "config.toml"
+    cfg_path.write_text("")
+    monkeypatch.setattr("fnd.config.default_config_path", lambda: cfg_path)
+    from fnd.tui.settings_screen import DeleteCollectionScreen
+
+    app = app_factory(cfg_three)
+    said: list[str] = []
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        app.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
+        app.push_screen(DeleteCollectionScreen(collection_name="beta"))
+        await pilot.pause()
+        _choose(app, "yes")
+        await pilot.press("enter")
+        ok = await wait_until(pilot, lambda: bool(said), timeout=20.0)
+        await app.workers.wait_for_complete()
+
+    assert ok, "the delete finished and said nothing"
+    assert any("beta" in m for m in said), said
+    assert any("untouched" in m for m in said), said
