@@ -148,6 +148,27 @@ def isolated_config(  # pyright: ignore[reportUnusedFunction]
 
 
 @pytest.fixture(autouse=True)
+def isolated_config_path(  # pyright: ignore[reportUnusedFunction]
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Point every `default_config_path` at a temp file, in EVERY module that
+    bound the name.
+
+    `fnd.cli` and several TUI modules do `from fnd.config import
+    default_config_path` at import, so patching `fnd.config`'s copy alone
+    leaves them pointed at the user's real config — a test that did exactly
+    that wrote three sources into it. A test wanting a specific path still
+    patches over this; a test that forgets now hits a temp file instead.
+    """
+    # Not under the test's own `tmp_path`: two tests enumerate that directory
+    # and assert exactly what is in it.
+    p = tmp_path_factory.mktemp("isolated_config") / "config.toml"
+    for module in ("fnd.config", "fnd.cli"):
+        monkeypatch.setattr(f"{module}.default_config_path", lambda: p, raising=False)
+    return p
+
+
+@pytest.fixture(autouse=True)
 def isolated_ui_state(  # pyright: ignore[reportUnusedFunction]
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:

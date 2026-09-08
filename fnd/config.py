@@ -16,7 +16,7 @@ import datetime as dt
 import re
 import sys
 import tomllib
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any, Final, Literal
 
@@ -526,6 +526,27 @@ class SourceConfig(_ConfigModel):
         except FilterError as e:
             raise ValueError(f"frontmatter_filter: {e.message} (col {e.column})") from e
         return v
+
+
+def overlapping_source(sources: Sequence[Any], new: Any, editing: int | None = None) -> str:
+    """A sibling whose folder contains the new one, or is contained by it.
+
+    Not a refusal: the index keys on the file, so a file two sources both reach
+    is stored once. It is silence that misleads — a source added inside another
+    indexes nothing new and reads like it did. ``editing`` is the index of the
+    row being replaced, which is still in ``sources`` and is not its own rival.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        target = Path(new.path).expanduser().resolve()
+        for i, other in enumerate(sources):
+            if i == editing or not other.path:
+                continue
+            path = Path(other.path).expanduser().resolve()
+            if target == path or target.is_relative_to(path) or path.is_relative_to(target):
+                return str(other.path)
+    return ""
 
 
 DEFAULT_RANKING_PROFILE = "default"

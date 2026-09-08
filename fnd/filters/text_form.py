@@ -236,7 +236,7 @@ def parse(text: str) -> FilterSpec:
     # no file has. `file.kinds == 'pdf'` validated with a tick and indexed
     # nothing. Frontmatter keys cannot contain a dot, so nothing legitimate is
     # caught here.
-    _reject_unknown_facts(parse_dsl(stripped))
+    _reject_unknown_facts(parse_dsl(stripped), stripped)
     updates: dict[str, object] = {}
     tags: dict[str, tuple[str, ...]] = {}
     leftover: list[str] = []
@@ -325,13 +325,18 @@ def split_frontmatter(text: str) -> tuple[str, str]:
     return fm or "", rest or ""
 
 
-def _reject_unknown_facts(node: object) -> None:
+def _reject_unknown_facts(node: object, text: str = "") -> None:
     """Raise on any ``file.*`` name the fact registry does not define.
 
     `RESERVED_FACTS` has said callers should do this in its own comment since
     it was written, and none did — so the live-validating editor showed ✓ for
     a misspelled field, the tree silently dropped the clause it could not
     place, and only the save refused it.
+
+    The column is found in the source the way `filter_dsl` already finds it for
+    its own unknown-field error: `referenced_fields` returns names, not
+    positions, and reporting column 1 for every one of these made this the only
+    error kind that could not point at itself.
     """
     from fnd.file_facts import RESERVED_FACTS, is_fact_name
     from fnd.filter_dsl import referenced_fields
@@ -342,7 +347,8 @@ def _reject_unknown_facts(node: object) -> None:
     if not unknown:
         return
     known = ", ".join(sorted(RESERVED_FACTS))
-    raise FilterError(f"unknown field {unknown[0]!r} — known fields are: {known}", 1)
+    column = max(text.find(unknown[0]) + 1, 1)
+    raise FilterError(f"unknown field {unknown[0]!r} — known fields are: {known}", column)
 
 
 def parse_or_error(text: str) -> tuple[FilterSpec | None, FilterError | None]:

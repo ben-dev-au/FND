@@ -12,6 +12,7 @@ Phases 1-3 surface:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import sys
@@ -721,8 +722,24 @@ def collection_add(
         # write should not create something the next migration has to move.
         filters=SourceFilters(frontmatter=filter) if filter else None,
     )
+    # Read before the write: the sibling set is what the new source is being
+    # compared against, and after the write it contains the new source itself.
+    from fnd.config import load as _load
+    from fnd.config import overlapping_source
+
+    existing = []
+    with contextlib.suppress(Exception):
+        prior = _load(cfg_path).collections.get(name)
+        existing = list(prior.sources) if prior else []
+    overlap = overlapping_source(existing, new_source)
     write_collection_source(config_path=cfg_path, collection_name=name, source=new_source)
     typer.echo(f"added source {source[0]} to collection {name} in {cfg_path}")
+    if overlap:
+        typer.echo(
+            f"fnd: this folder is already inside {overlap} in {name}; files "
+            f"reached by both are indexed once.",
+            err=True,
+        )
     root = Path(source[0]).expanduser()
     if not root.exists():
         # Indexing it yields nothing and says nothing, so a typo looks like a

@@ -10,8 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fnd.config import SourceConfig
-from fnd.tui.settings_screen import _overlapping_source
+from fnd.config import SourceConfig, overlapping_source
 
 
 def _src(path: Path) -> SourceConfig:
@@ -22,7 +21,7 @@ def test_a_child_of_an_existing_source_is_named(tmp_path: Path) -> None:
     parent = tmp_path / "vault"
     (parent / "notes").mkdir(parents=True)
 
-    found = _overlapping_source([_src(parent)], _src(parent / "notes"), None)
+    found = overlapping_source([_src(parent)], _src(parent / "notes"), None)
 
     assert found == str(parent)
 
@@ -32,7 +31,7 @@ def test_a_parent_of_an_existing_source_is_named(tmp_path: Path) -> None:
     parent = tmp_path / "vault"
     (parent / "notes").mkdir(parents=True)
 
-    found = _overlapping_source([_src(parent / "notes")], _src(parent), None)
+    found = overlapping_source([_src(parent / "notes")], _src(parent), None)
 
     assert found == str(parent / "notes")
 
@@ -41,7 +40,7 @@ def test_the_same_folder_twice_is_named(tmp_path: Path) -> None:
     root = tmp_path / "vault"
     root.mkdir()
 
-    assert _overlapping_source([_src(root)], _src(root), None)
+    assert overlapping_source([_src(root)], _src(root), None)
 
 
 def test_a_sibling_is_not(tmp_path: Path) -> None:
@@ -49,7 +48,7 @@ def test_a_sibling_is_not(tmp_path: Path) -> None:
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
 
-    assert not _overlapping_source([_src(tmp_path / "a")], _src(tmp_path / "b"), None)
+    assert not overlapping_source([_src(tmp_path / "a")], _src(tmp_path / "b"), None)
 
 
 def test_editing_a_source_does_not_flag_itself(tmp_path: Path) -> None:
@@ -57,9 +56,9 @@ def test_editing_a_source_does_not_flag_itself(tmp_path: Path) -> None:
     root = tmp_path / "vault"
     root.mkdir()
 
-    assert not _overlapping_source([_src(root)], _src(root), 0)
+    assert not overlapping_source([_src(root)], _src(root), 0)
 
 
 def test_a_missing_folder_is_not_a_crash(tmp_path: Path) -> None:
     """Paths are resolved, and a source can name a folder that is not there."""
-    assert not _overlapping_source([_src(tmp_path / "gone")], _src(tmp_path / "also-gone"), None)
+    assert not overlapping_source([_src(tmp_path / "gone")], _src(tmp_path / "also-gone"), None)
