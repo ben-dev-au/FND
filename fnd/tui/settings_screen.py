@@ -5330,6 +5330,23 @@ def _spec_to_mapping(spec: Any) -> dict[str, Any]:
     return out
 
 
+def _matching_group(group: ToggleGroup, query: str) -> ToggleGroup | None:
+    """The group with only the rows that match, or None when none do.
+
+    A group whose own name matches keeps everything under it, so searching for
+    a branch shows the branch rather than emptying it.
+    """
+    from dataclasses import replace
+
+    if query in group.label.lower():
+        return group
+    items = tuple(i for i in group.items if query in i.label.lower())
+    groups = tuple(g for g in (_matching_group(s, query) for s in group.groups) if g is not None)
+    if not items and not groups:
+        return None
+    return replace(group, items=items, groups=groups)
+
+
 def _branch_group(branch: Any) -> ToggleGroup:
     """A model :class:`Branch` as the widget's :class:`ToggleGroup`, nested."""
     return ToggleGroup(
@@ -5503,6 +5520,9 @@ class FilterBrowserScreen(Screen[None]):
         # `q` reaches the app's quit otherwise, and unsaved filter edits die
         # with it. On a screen that edits something, `q` leaves the screen.
         Binding("q", "back", "Back", show=False),
+        # As every other settings list binds it, and this is the longest one:
+        # a vault's tags run to thousands of rows reachable by arrow key alone.
+        Binding("slash", "focus_search", "Filter", show=False),
         Binding("ctrl+s", "save_close", show=False),
         Binding("t", "edit_text", show=False),
         Binding("c", "clear_all", show=False),
@@ -5523,6 +5543,10 @@ class FilterBrowserScreen(Screen[None]):
     FilterBrowserScreen #filter_legend {
         height: auto; padding: 0 1; color: $text-muted; text-style: dim;
     }
+    FilterBrowserScreen #filter_search {
+        height: 1; padding: 0 0; border: none; background: $surface; color: $text;
+    }
+    FilterBrowserScreen #filter_search:focus { color: $accent; }
     FilterBrowserScreen #filter_summary {
         height: auto; max-height: 5; overflow-y: auto;
         padding: 0 1; color: $text-muted;
@@ -5579,6 +5603,7 @@ class FilterBrowserScreen(Screen[None]):
         self._kept_custom: dict[str, str] = {}
         self._sample_provider = sample_provider
         self._scanning = sample_provider is not None
+        self._query = ""
         self._on_save = on_save
 
     def compose(self) -> ComposeResult:
@@ -5587,6 +5612,7 @@ class FilterBrowserScreen(Screen[None]):
         with Vertical(id="settings_box") as box:
             box.border_title = self._title
             yield Static(LEGEND, id="filter_legend")
+            yield Input(placeholder="Filter rows…  (/)", id="filter_search")
             yield ToggleTree("Filters", id="filter_tree")
             yield Static("", id="filter_summary")
         yield Static("", id="footer_hints")
@@ -5626,6 +5652,19 @@ class FilterBrowserScreen(Screen[None]):
             )
         )
 
+    @on(Input.Changed, "#filter_search")
+    def _on_search_changed(self, ev: Input.Changed) -> None:
+        self._query = ev.value.strip().lower()
+        self._rebuild()
+
+    @on(Input.Submitted, "#filter_search")
+    def _on_search_submitted(self, _ev: Input.Submitted) -> None:
+        """Enter hands the rows back, with the query still narrowing them."""
+        self.query_one("#filter_tree", ToggleTree).focus()
+
+    def action_focus_search(self) -> None:
+        self.query_one("#filter_search", Input).focus()
+
     @on(ToggleTree.NavigatedOut, "#filter_tree")
     def _on_navigated_out(self, _ev: ToggleTree.NavigatedOut) -> None:
         """← at the outermost level leaves the screen, as it does everywhere
@@ -5634,23 +5673,37 @@ class FilterBrowserScreen(Screen[None]):
 
     def on_mount(self) -> None:
         self._rebuild()
-        app: FNDApp = self.app  # type: ignore[assignment]
-        self.query_one("#footer_hints", Static).update(
-            _hint_bar(
-                app,
-                (
-                    ("⏎", "Toggle"),
-                    ("→", "Open"),
-                    ("t", "As text"),
-                    ("c", "Clear"),
-                    ("^S", self._commit_label),
-                    ("y", "Copy"),
-                    ("Esc/←", "Discard"),
-                ),
-            )
-        )
+        self._render_footer()
         if self._sample_provider is not None:
             self.run_worker(self._load_sample, thread=True)
+
+    def _render_footer(self) -> None:
+        """The row keys are single letters, so a focused search box swallows
+        them; naming them there advertises keys that do not work."""
+        app: FNDApp = self.app  # type: ignore[assignment]
+        typing = _typing_in(self)
+        cluster: tuple[tuple[str, str], ...] = (
+            (("⏎", "Rows"), ("Esc", "Clear"))
+            if typing
+            else (
+                ("⏎", "Toggle"),
+                ("→", "Open"),
+                ("/", "Filter"),
+                ("t", "As text"),
+                ("c", "Clear"),
+                ("^S", self._commit_label),
+                ("y", "Copy"),
+                ("Esc/←", "Discard"),
+            )
+        )
+        bar = _editor_hint_bar(cluster) if typing else _hint_bar(app, cluster)
+        self.query_one("#footer_hints", Static).update(bar)
+
+    def on_descendant_focus(self, _ev: events.DescendantFocus) -> None:
+        self._render_footer()
+
+    def on_descendant_blur(self, _ev: events.DescendantBlur) -> None:
+        self._render_footer()
 
     def _load_sample(self) -> None:
         """Sampling opens files, so it cannot run on the event loop: the scan's
@@ -5681,6 +5734,10 @@ class FilterBrowserScreen(Screen[None]):
         # every visible box means "all of them", not the sampled subset.
         self._branches = branches
         groups = [_branch_group(b) for b in branches]
+        if self._query:
+            groups = [g for g in (_matching_group(g, self._query) for g in groups) if g]
+            # Everything open, or a match two levels down is still invisible.
+            keep = {g.id for top in groups for g in top.walk()}
         selected, excluded = selection_for(
             self._spec, gitignore=self._gitignore, fndignore=self._fndignore
         )
@@ -5738,6 +5795,8 @@ class FilterBrowserScreen(Screen[None]):
             head.append(f"nothing can match — {clash}")
         if self._save_note:
             head.append(self._save_note)
+        if self._query:
+            head.append(f"showing rows matching {self._query!r}")
         if self._scanning:
             head.append("scanning source for types and tags…")
         elif getattr(self._sample, "truncated", False):
@@ -5810,6 +5869,13 @@ class FilterBrowserScreen(Screen[None]):
         )
 
     def action_back(self) -> None:
+        # Esc clears a narrowing before it leaves, as it does on the settings
+        # list: leaving straight from a filtered tree loses the rows silently.
+        search = self.query_one("#filter_search", Input)
+        if search.value:
+            search.value = ""
+            self.query_one("#filter_tree", ToggleTree).focus()
+            return
         if self._dirty():
             self.notify("Filter changes discarded — ^S saves them", severity="warning")
         self.app.pop_screen()
