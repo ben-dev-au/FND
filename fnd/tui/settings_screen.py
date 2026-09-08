@@ -3696,7 +3696,27 @@ class RenameCollectionScreen(Screen[None]):
         # screen — before pushing the IndexerScreen.
         self.app.pop_screen()
         self.app.pop_screen()
-        self._drop_old_then_reindex(app, new_name)
+        # Confirmed like the other acts that empty the index: this drops the
+        # old name's documents and rebuilds from scratch, which on a large
+        # collection is minutes, from a single Enter in a text field.
+        self.app.push_screen(
+            RebuildConfirmScreen(
+                collection_name=new_name,
+                crumb="Rename",
+                body=(
+                    f"Renamed to {new_name!r}. Reindex it now?\n\n"
+                    f"The old name's documents are dropped and {new_name!r} is "
+                    "built from scratch, which takes as long as indexing it "
+                    "does. Until it finishes, this collection holds less than "
+                    "it does now.\n\n"
+                    "The config is already saved either way, and the files on "
+                    "disk are untouched. Skipping leaves the index under the "
+                    "old name until you run Update index."
+                ),
+                confirm_label=f"Yes, reindex {new_name}",
+                on_confirm=lambda: self._drop_old_then_reindex(app, new_name),
+            )
+        )
 
     def _drop_old_then_reindex(self, app: FNDApp, new_name: str) -> None:
         """The old name's documents go before the new name's are built.
@@ -4535,12 +4555,17 @@ def unsaved_on(screen: object) -> tuple[str, Callable[[], None]] | None:
 
 
 class RebuildConfirmScreen(Screen[None]):
-    """Confirm a rebuild, which drops the collection's chunks first.
+    """Confirm an act that empties the index before refilling it.
 
-    Delete-source, delete-collection and Update-all all confirmed; the one act
-    that empties an index did not, and it sat one row under "Update index" on
-    the same panel, reachable by a single Enter. The two rows differ only in
-    cost and consequence, which is exactly what a label cannot carry alone.
+    Delete-source, delete-collection and Update-all all confirmed; the acts
+    that empty an index did not. Rebuild sat one row under "Update index" on
+    the same panel, and a rename dropped the old name's documents and rebuilt
+    from the field you typed in — both one Enter away, both differing from
+    their harmless neighbour only in cost and consequence, which is exactly
+    what a label cannot carry alone.
+
+    One screen, two callers: the wording differs because the acts do, but a
+    second class would be a second dialog to keep in step.
     """
 
     BINDINGS = [  # noqa: RUF012
@@ -4552,27 +4577,38 @@ class RebuildConfirmScreen(Screen[None]):
 
     CSS = chrome_css("RebuildConfirmScreen", confirm=True)
 
-    def __init__(self, *, collection_name: str, on_confirm: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        *,
+        collection_name: str,
+        on_confirm: Callable[[], None],
+        crumb: str = "Rebuild",
+        body: str = "",
+        confirm_label: str = "",
+    ) -> None:
         super().__init__()
         self._collection_name = collection_name
         self._on_confirm = on_confirm
+        self._crumb = crumb
+        self._body = body
+        self._confirm_label = confirm_label
 
     def compose(self) -> ComposeResult:
         name = self._collection_name
+        body = self._body or (
+            f"Rebuild {name!r} from scratch?\n\n"
+            "Its chunks are dropped first, so until the run finishes this "
+            "collection holds less than it does now — and a rebuild that "
+            "is cancelled or interrupted leaves it part-built.\n\n"
+            "The files on disk are untouched. Update index adds and drops "
+            "what changed without emptying anything, and is what you want "
+            "unless you are re-texturising after an engine upgrade."
+        )
         with Vertical(id="settings_box") as box:
-            box.border_title = f"Collections › {name} › Rebuild"
-            yield Static(
-                f"Rebuild {name!r} from scratch?\n\n"
-                "Its chunks are dropped first, so until the run finishes this "
-                "collection holds less than it does now — and a rebuild that "
-                "is cancelled or interrupted leaves it part-built.\n\n"
-                "The files on disk are untouched. Update index adds and drops "
-                "what changed without emptying anything, and is what you want "
-                "unless you are re-texturising after an engine upgrade.",
-                classes="warning",
-            )
+            box.border_title = f"Collections › {name} › {self._crumb}"
+            yield Static(body, classes="warning")
             yield OptionList(
-                Option(Text(f"Yes, rebuild {name}", style="bold"), id="yes"),
+                Option(Text(self._confirm_label or f"Yes, rebuild {name}", style="bold"), id="yes"),
                 Option("Cancel", id="no"),
                 id="confirm_list",
             )
