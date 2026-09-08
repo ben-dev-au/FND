@@ -196,5 +196,18 @@ class FilterSpec:
                     object.__setattr__(self, "frontmatter", self.expression)
                     object.__setattr__(self, "expression", "")
 
+        # The mirror. A frontmatter rule naming ``file.*`` is not one, and the
+        # text round trip used to notice: `t` then save with no edit moved the
+        # rule and changed what was indexed. Canonicalising here lands the
+        # change where the user typed it.
+        if self.frontmatter:
+            with contextlib.suppress(Exception):
+                from fnd.filters.text_form import _and_join, split_frontmatter
+
+                scoped, rest = split_frontmatter(self.frontmatter)
+                if rest:
+                    object.__setattr__(self, "frontmatter", scoped)
+                    object.__setattr__(self, "expression", _and_join(self.expression, rest))
+
     def is_empty(self) -> bool:
         return self == FilterSpec()

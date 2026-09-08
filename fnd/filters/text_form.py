@@ -296,6 +296,29 @@ def _and_join(existing: str | None, addition: str) -> str:
     return _bracket(addition) if not existing else f"{_bracket(existing)} AND {_bracket(addition)}"
 
 
+def split_frontmatter(text: str) -> tuple[str, str]:
+    """``text`` as (the frontmatter clauses, everything else).
+
+    The decomposition :func:`parse` performs, so a spec canonicalised with it
+    survives its own round trip. A frontmatter rule is skipped for a file that
+    has none; the same text as an expression strict-nulls that file out, so
+    which field holds a clause decides what is indexed.
+    """
+    fm: str | None = None
+    rest: str | None = None
+    try:
+        node = parse_dsl(text.strip())
+    except Exception:
+        return text, ""
+    for clause in _split_and(node):
+        scoped = _match_frontmatter(clause)
+        if scoped is not None:
+            fm = _and_join(fm, scoped)
+        else:
+            rest = _and_join(rest, _unparse(clause) or text)
+    return fm or "", rest or ""
+
+
 def parse_or_error(text: str) -> tuple[FilterSpec | None, FilterError | None]:
     """Non-raising variant, for a live-validating editor."""
     try:
