@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 import tantivy
 from textual.screen import Screen
-from textual.widgets import Input
+from textual.widgets import Input, OptionList
 
 from fnd.config import CollectionConfig, SourceConfig, load, write_collection
 from fnd.index import build_index_from_config
@@ -75,7 +75,18 @@ async def test_rename_leaves_no_documents_under_the_old_name(
         await pilot.pause()
         app.screen.query_one("#new_collection_name", Input).value = "Archive"
         await pilot.press("enter")
+        for _ in range(10):
+            await pilot.pause()
+        # Dropping the old name's documents is confirmed now, so the test
+        # confirms — which also proves the dialog does not disturb the
+        # drop-then-rebuild ordering the rest of this test is about.
+        assert app.screen.__class__.__name__ == "RebuildConfirmScreen", app.screen
+        options = app.screen.query_one("#confirm_list", OptionList)
+        options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "yes")
         await pilot.pause()
+        options.action_select()
+        for _ in range(10):
+            await pilot.pause()
         await app.workers.wait_for_complete()
         await pilot.pause()
 
