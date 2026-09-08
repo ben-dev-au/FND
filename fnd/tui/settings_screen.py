@@ -5974,7 +5974,11 @@ class FilterBrowserScreen(Screen[None]):
                 ("→", "Open"),
                 ("/", "Filter"),
                 ("t", "As text"),
-                (_CLEAR_FILTERS_KEY, "Clear"),
+                *(
+                    ((_CLEAR_FILTERS_KEY, "Return to defaults"),)
+                    if self._can_return_to_defaults()
+                    else ()
+                ),
                 (COMMIT_KEY, self._commit_label),
                 ("y", "Copy"),
                 ("Esc/←", "Discard"),
@@ -6054,20 +6058,36 @@ class FilterBrowserScreen(Screen[None]):
         )
         self._refresh_summary()
 
+    def _can_return_to_defaults(self) -> bool:
+        """Whether this screen has defaults to go back to, and has left them.
+
+        ONE predicate, read by the row, the key and the footer. Hiding the row
+        and leaving the key bound turned a destructive gesture invisible: on
+        the global set it emptied the shipped never-index exclusion, and the
+        browser cannot offer that tag back once no file carries it.
+        """
+        return self._inherited is not None and (
+            (self._spec, self._gitignore, self._fndignore) != self._inherited
+        )
+
     def _update_clear_bar(self) -> None:
         """The sidebar's row, doing the index side's act.
 
         Search filters are ephemeral, so that row counts what it clears. These
         are config: the row restores what this source inherits, and appears
         only where the source has departed from it. The global set inherits
-        from nothing, so there is nothing to return to and no row — which is
-        also why it was showing on an untouched screen.
+        from nothing, so there is nothing to return to.
         """
         bar = self.query_one("#clear_filters_bar", ClearFiltersBar)
-        bar.visible = self._inherited is not None and (
-            (self._spec, self._gitignore, self._fndignore) != self._inherited
-        )
+        bar.visible = self._can_return_to_defaults()
         bar.update(RETURN_TO_DEFAULTS)
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Textual asks this before firing a binding AND before showing it, so
+        the key and the row cannot disagree about whether the act exists."""
+        if action == "clear_all":
+            return self._can_return_to_defaults() or None
+        return True
 
     def _offered_kind_ids(self) -> set[str]:
         """Kind ids the tree actually showed, so "all ticked" means all of
@@ -6148,25 +6168,25 @@ class FilterBrowserScreen(Screen[None]):
             self.notify(f"Could not copy: {e}", severity="error")
 
     def action_clear_all(self) -> None:
-        """Drop what this screen overrides, back to what it inherits.
+        """Return this screen's set to what it inherits.
 
         Emptying the resolved set instead widens the index: on a source it
         threw away the inherited `no_index` exclusion, so undoing a file-type
-        filter also switched off the never-index opt-out, silently. The global
-        defaults inherit from nothing, so there it still empties.
+        filter also switched off the never-index opt-out, silently.
         """
-        from fnd.filters import FilterSpec
+        if not self._can_return_to_defaults():
+            # The global set inherits from nothing. Emptying it here dropped
+            # the shipped never-index exclusion, which is a protection rather
+            # than a preference, and no row on this screen can put it back.
+            return
 
         before = self._spec
-        if self._inherited is None:
-            self._spec = FilterSpec()
-        else:
-            self._spec, self._gitignore, self._fndignore = self._inherited
+        assert self._inherited is not None
+        self._spec, self._gitignore, self._fndignore = self._inherited
         self._rebuild()
-        # `c` sits beside `^s` and takes no confirmation, so it has to say what
-        # it took — above all a tag exclusion, which is a protection rather
-        # than a preference.
-        self.notify(_cleared_note(before, self._spec, inheriting=self._inherited is not None))
+        # It takes no confirmation, so it has to say what it took — above all
+        # a tag exclusion, which is a protection rather than a preference.
+        self.notify(_cleared_note(before, self._spec, inheriting=True))
 
     def action_edit_text(self) -> None:
         def _save(spec: Any) -> None:

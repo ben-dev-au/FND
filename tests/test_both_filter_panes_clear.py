@@ -180,3 +180,66 @@ def test_neither_pane_builds_the_label_itself() -> None:
     assert "RETURN_TO_DEFAULTS" in inspect.getsource(settings_screen)
     for module in (scope_panel, settings_screen):
         assert "filter{" not in inspect.getsource(module), module.__name__
+
+
+class TestTheKeyAndTheRowAgree:
+    """A hidden row with a live key is a destructive gesture nobody can see.
+
+    The global set inherits from nothing, so the row was correctly hidden —
+    and the key stayed bound, emptying the shipped never-index exclusion. The
+    browser cannot put that tag back: a tag is only offered as a row while some
+    file still carries it, so the only way back was the raw text editor.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_global_set_cannot_be_emptied_by_the_key(self, tmp_index_dir: Path) -> None:
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            screen = await _browser(app, pilot, _DEFAULTS[0])
+            key = app._fnd_keymap.for_action("clear_filters") or "X"
+            await pilot.press(key)
+            for _ in range(8):
+                await pilot.pause()
+            spec = screen._spec
+
+        assert spec.tag_excludes.get("frontmatter") == ("no_index",), (
+            f"the never-index exclusion was dropped with no way back: {spec}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_the_key_is_hidden_wherever_the_row_is(self, tmp_index_dir: Path) -> None:
+        """One predicate, so a footer cannot advertise what a screen refuses."""
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            screen = await _browser(app, pilot, _DEFAULTS[0])
+            global_row = app.screen.query_one("#clear_filters_bar", ClearFiltersBar).visible
+            global_key = screen.check_action("clear_all", ())
+            global_footer = _painted(app)
+
+            screen = await _browser(app, pilot, FilterSpec(kinds=("md",)), inherited=_DEFAULTS)
+            source_row = app.screen.query_one("#clear_filters_bar", ClearFiltersBar).visible
+            source_key = screen.check_action("clear_all", ())
+
+        assert not global_row
+        assert not global_key, "the row was hidden and the key stayed live"
+        assert "Return to defaults" not in global_footer, global_footer.splitlines()[-1]
+        assert source_row
+        assert source_key, "the row was offered and the key refused"
+
+    @pytest.mark.asyncio
+    async def test_a_source_can_still_return(self, tmp_index_dir: Path) -> None:
+        """The control: disabling it where there is nothing to return to must
+        not disable it where there is."""
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            screen = await _browser(app, pilot, FilterSpec(kinds=("md",)), inherited=_DEFAULTS)
+            key = app._fnd_keymap.for_action("clear_filters") or "X"
+            await pilot.press(key)
+            for _ in range(8):
+                await pilot.pause()
+            spec = screen._spec
+
+        assert spec == _DEFAULTS[0], spec
