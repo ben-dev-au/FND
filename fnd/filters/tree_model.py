@@ -183,7 +183,9 @@ def _rule_label(name: str, value: str) -> str:
     return f"{name}   {text}" if text else f"{name}   (none)"
 
 
-def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
+def _tag_branch(
+    spec: FilterSpec, sample: SourceSample | None, free: frozenset[str] = frozenset()
+) -> Branch | None:
     """Tags, one sub-branch per source.
 
     A Finder tag and a note's ``tags:`` entry that share a word are different
@@ -220,13 +222,17 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
             )
     if not groups:
         return None
+    # `no_index` disappearing from a typed edit was announced nowhere: the
+    # branch went on reading "any tag".
+    typed = any(f.startswith("file.tags") for f in free)
+    note = _elsewhere_note(False, "", typed)
     if len(groups) == 1:
         # Collapse the single source's rows into this branch, but KEEP the
         # name: taking the source's label instead renamed the branch from
         # "Tags" to "Note tags (YAML)" the moment a rule about the other
         # source was cleared, so a row changed its own name as a side effect
         # of an edit somewhere else.
-        return replace(groups[0], id="tags", label="Tags", empty_label="any tag")
+        return replace(groups[0], id="tags", label="Tags", empty_label="any tag", elsewhere=note)
     return Branch(
         "tags",
         "Tags",
@@ -235,6 +241,7 @@ def _tag_branch(spec: FilterSpec, sample: SourceSample | None) -> Branch | None:
         empty_label="any tag",
         noun="tags",
         complete=sample is not None,
+        elsewhere=note,
     )
 
 
@@ -252,6 +259,9 @@ def spec_branches(
     branches: list[Branch] = []
 
     kinds = _kind_items(sample)
+    # Which dimensions a typed rule names, so a branch that cannot show one
+    # says so instead of claiming there is no rule.
+    free = _facts_in_free_text(spec)
     by_cat: dict[str, list[tuple[str, str]]] = {}
     for cat_id, kind, label in kinds:
         by_cat.setdefault(cat_id, []).append((kind, label))
@@ -267,6 +277,10 @@ def spec_branches(
                 "File types",
                 "multi",
                 groups=categories,
+                # A typed rule on this dimension is the only way to exclude a
+                # type, so the branch that cannot show it read "every type"
+                # four lines above an expression excluding one.
+                elsewhere=_elsewhere_note(False, "", "file.kind" in free),
                 empty_label="every type",
                 # Only claim "every type" when every type was offered; on a
                 # sampled list, all-ticked means those types and says so.
@@ -276,7 +290,7 @@ def spec_branches(
             )
         )
 
-    tag_branch = _tag_branch(spec, sample)
+    tag_branch = _tag_branch(spec, sample, free)
     if tag_branch is not None:
         branches.append(tag_branch)
 
@@ -299,7 +313,6 @@ def spec_branches(
         value = int(custom.removeprefix(f"{CUSTOM}:"))
         sized.append((value, f"size:{custom}", f"Up to {_human_size(value)}"))
     size_items = [(i, lbl) for _k, i, lbl in sorted(sized)]
-    free = _facts_in_free_text(spec)
     branches.append(
         Branch(
             "size",
