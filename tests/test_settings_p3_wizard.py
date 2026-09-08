@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from fnd.config import Config
 
 from fnd.tui import FNDApp
 from fnd.tui.indexer_service import IndexerService
@@ -537,7 +541,7 @@ class TestTheWizardShowsWhatWillBeIndexed:
     as "every type" while the new collection indexed 3 files of 12."""
 
     @staticmethod
-    async def _rows(config, pilot_size=(110, 26)):
+    async def _rows(config: Config, pilot_size: tuple[int, int] = (110, 26)) -> dict[str, Any]:
         from fnd.tui import FNDApp
         from fnd.tui.settings_screen import AddCollectionWizard
 
@@ -547,9 +551,11 @@ class TestTheWizardShowsWhatWillBeIndexed:
             app.push_screen(AddCollectionWizard())
             for _ in range(20):
                 await pilot.pause()
+            wizard = app.screen
+            assert isinstance(wizard, AddCollectionWizard)
             return {
                 item.id: item.value_getter(app)
-                for item in app.screen._build_field_items()
+                for item in wizard._build_field_items()
                 if item.value_getter
             }
 

@@ -262,7 +262,7 @@ def test_the_override_count_counts_settings_not_config_keys() -> None:
     )
 
     filters = _source_filters_or_none({"max_size": None, "min_size": None, "kinds": ["pdf"]})
-    seeded = _seeded_filters(SourceConfig(path="~/x", filters=filters))
+    seeded = _seeded_filters(SourceConfig(path=Path("~/x"), filters=filters))
     assert len(seeded) == 2, "the two cleared bounds share one key"
     assert _overridden_fields(seeded) == ["kinds", "max_size", "min_size"]
     assert _overridden_fields({}) == []
@@ -617,7 +617,9 @@ async def test_the_sample_tester_appears_only_with_a_rule_to_test(built_index: P
     def _config(rule: str | None) -> Config:
         filters = SourceFilters(frontmatter=rule) if rule else None
         return Config(
-            collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x", filters=filters)])}
+            collections={
+                "c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"), filters=filters)])
+            }
         )
 
     async def _separator(rule: str | None) -> tuple[bool, str]:
@@ -643,7 +645,7 @@ async def test_unticking_custom_globs_keeps_them_on_offer(built_index: Path) -> 
     from fnd.config import CollectionConfig, Config, SourceConfig
     from fnd.tui.settings_screen import SourceFormScreen, _custom_seed
 
-    config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+    config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"))])})
     app = FNDApp(index_dir=built_index, config=config)
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -651,6 +653,7 @@ async def test_unticking_custom_globs_keeps_them_on_offer(built_index: Path) -> 
         for _ in range(20):
             await pilot.pause()
         form = app.screen
+        assert isinstance(form, SourceFormScreen)
         form._fields["excludes_custom"] = "build/**, dist/**"
         form._set_excludes([])
         assert form._fields["excludes_custom"] == "", "untick must stop applying them"
@@ -718,6 +721,7 @@ async def test_a_partial_scan_says_so(built_index: Path) -> None:
         for _ in range(15):
             await pilot.pause()
         screen = app.screen
+        assert isinstance(screen, FilterBrowserScreen)
         assert "partial scan" not in _summary_text(screen)
 
         screen._sample_arrived(SourceSample(kinds={"md": 1}, tags={}, truncated=True))
@@ -741,6 +745,7 @@ async def test_the_wizard_refuses_an_invalid_rule_instead_of_crashing(built_inde
         for _ in range(15):
             await pilot.pause()
         wizard = app.screen
+        assert isinstance(wizard, AddCollectionWizard)
         wizard._fields.update({"name": "probe", "path": "~", "filter": "status =="})
         wizard.action_save_close()
         for _ in range(8):
@@ -1026,7 +1031,8 @@ def test_the_rename_row_describes_what_rename_does() -> None:
     from fnd.tui.menu import _provider_collection
     from fnd.tui.settings_screen import RenameCollectionScreen
 
-    row = next(i for i in _provider_collection(None, "c") if i.id == "col.c.rename")
+    stub = cast("Any", None)
+    row = next(i for i in _provider_collection(stub, "c") if i.id == "col.c.rename")
     # The whole class: the rebuild moved out of _save when the old name's
     # index drop had to run before it, and reading one method missed it.
     source = inspect.getsource(RenameCollectionScreen)
@@ -1042,7 +1048,7 @@ async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) 
     from fnd.config import CollectionConfig, Config, SourceConfig
     from fnd.tui.settings_screen import SourceFormScreen
 
-    config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+    config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"))])})
     app = FNDApp(index_dir=built_index, config=config)
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -1050,6 +1056,7 @@ async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) 
         for _ in range(20):
             await pilot.pause()
         form = app.screen
+        assert isinstance(form, SourceFormScreen)
         notes: list[str] = []
         form.notify = lambda msg, **kw: notes.append(str(msg))  # type: ignore[method-assign]
         form.action_back()
@@ -1060,6 +1067,7 @@ async def test_leaving_the_source_form_says_what_it_discards(built_index: Path) 
         for _ in range(20):
             await pilot.pause()
         form = app.screen
+        assert isinstance(form, SourceFormScreen)
         form.notify = lambda msg, **kw: notes.append(str(msg))  # type: ignore[method-assign]
         form._fields["filters"] = {"kinds": ["md"]}
         form.action_back()
@@ -1081,7 +1089,7 @@ async def test_the_edit_field_is_never_off_screen(built_index: Path, width: int)
 
     config = Config(
         collections={
-            "c": CollectionConfig(sources=[SourceConfig(path="~/x", includes=["**/*.md"])])
+            "c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"), includes=["**/*.md"])])
         }
     )
     app = FNDApp(index_dir=built_index, config=config)
@@ -1140,7 +1148,9 @@ async def test_the_summary_names_the_excludes_too(built_index: Path) -> None:
     config = Config(
         collections={
             "c": CollectionConfig(
-                sources=[SourceConfig(path="~/x", includes=["notes/**"], excludes=["**/*.csv"])]
+                sources=[
+                    SourceConfig(path=Path("~/x"), includes=["notes/**"], excludes=["**/*.csv"])
+                ]
             )
         }
     )
@@ -1150,7 +1160,9 @@ async def test_the_summary_names_the_excludes_too(built_index: Path) -> None:
         app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
         for _ in range(20):
             await pilot.pause()
-        app.screen._open_filters()
+        form = app.screen
+        assert isinstance(form, SourceFormScreen)
+        form._open_filters()
         for _ in range(30):
             await pilot.pause()
         assert isinstance(app.screen, FilterBrowserScreen)
@@ -1239,14 +1251,18 @@ class TestTheTwoLevelSaveSaysWhichLevelItIs:
         from fnd.config import CollectionConfig, Config, SourceConfig
         from fnd.tui.settings_screen import FilterBrowserScreen, SourceFormScreen
 
-        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        config = Config(
+            collections={"c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"))])}
+        )
         app = FNDApp(index_dir=built_index, config=config)
         async with app.run_test(size=(110, 30)) as pilot:
             await pilot.pause()
             app.push_screen(SourceFormScreen(collection_name="c", source_index=0))
             for _ in range(20):
                 await pilot.pause()
-            app.screen._open_filters()
+            form = app.screen
+            assert isinstance(form, SourceFormScreen)
+            form._open_filters()
             for _ in range(30):
                 await pilot.pause()
             assert isinstance(app.screen, FilterBrowserScreen)
@@ -1462,6 +1478,7 @@ class TestARejectedSaveStopsComplainingOnceFixed:
             for _ in range(20):
                 await pilot.pause()
             wizard = app.screen
+            assert isinstance(wizard, AddCollectionWizard)
             error = wizard.query_one("#wizard_error", Static)
             wizard.action_save_close()
             for _ in range(8):
@@ -1483,7 +1500,9 @@ class TestARejectedSaveStopsComplainingOnceFixed:
         from fnd.config import CollectionConfig, Config, SourceConfig
         from fnd.tui.settings_screen import SourceFormScreen
 
-        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        config = Config(
+            collections={"c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"))])}
+        )
         app = FNDApp(index_dir=built_index, config=config)
         async with app.run_test(size=(100, 26)) as pilot:
             await pilot.pause()
@@ -1491,6 +1510,7 @@ class TestARejectedSaveStopsComplainingOnceFixed:
             for _ in range(20):
                 await pilot.pause()
             form = app.screen
+            assert isinstance(form, SourceFormScreen)
             error = form.query_one("#form_error", Static)
             form._show_error("Path does not exist: /nope")
             await pilot.pause()
@@ -1517,6 +1537,7 @@ class TestNothingIsThrownAwayInSilence:
             for _ in range(20):
                 await pilot.pause()
             wizard = app.screen
+            assert isinstance(wizard, AddCollectionWizard)
             said: list[str] = []
             wizard.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             wizard.action_back()
@@ -1527,6 +1548,7 @@ class TestNothingIsThrownAwayInSilence:
             for _ in range(20):
                 await pilot.pause()
             wizard = app.screen
+            assert isinstance(wizard, AddCollectionWizard)
             said = []
             wizard.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             wizard._fields["name"] = "probe"
@@ -1551,6 +1573,7 @@ class TestNothingIsThrownAwayInSilence:
             for _ in range(15):
                 await pilot.pause()
             screen = app.screen
+            assert isinstance(screen, FilterTextScreen)
             said: list[str] = []
             screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             screen.action_back()
@@ -1563,6 +1586,7 @@ class TestNothingIsThrownAwayInSilence:
             for _ in range(15):
                 await pilot.pause()
             screen = app.screen
+            assert isinstance(screen, FilterTextScreen)
             said = []
             screen.notify = lambda msg, **kw: said.append(str(msg))  # type: ignore[method-assign]
             screen.query_one("#filter_text", TextArea).text = "file.kind in ['md']"
@@ -1580,7 +1604,9 @@ class TestSavingLandsAnOpenEdit:
         from fnd.config import CollectionConfig, Config, SourceConfig
         from fnd.tui.settings_screen import SettingsList, SourceFormScreen
 
-        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        config = Config(
+            collections={"c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"))])}
+        )
         app = FNDApp(index_dir=built_index, config=config)
         async with app.run_test(size=(100, 26)) as pilot:
             await pilot.pause()
@@ -1588,6 +1614,7 @@ class TestSavingLandsAnOpenEdit:
             for _ in range(20):
                 await pilot.pause()
             form = app.screen
+            assert isinstance(form, SourceFormScreen)
             rows = form.query_one(SettingsList)
             rows.cursor_index = next(
                 i for i, it in enumerate(rows._items) if it.id == "form.includes_custom"
@@ -1610,7 +1637,9 @@ class TestSavingLandsAnOpenEdit:
         from fnd.config import CollectionConfig, Config, SourceConfig
         from fnd.tui.settings_screen import EditBar, SourceFormScreen, _commit_then
 
-        config = Config(collections={"c": CollectionConfig(sources=[SourceConfig(path="~/x")])})
+        config = Config(
+            collections={"c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"))])}
+        )
         app = FNDApp(index_dir=built_index, config=config)
         async with app.run_test(size=(100, 26)) as pilot:
             await pilot.pause()
@@ -1644,6 +1673,7 @@ class TestTabIsOfferedOnlyWhenItGoesSomewhere:
             for _ in range(20):
                 await pilot.pause()
             wizard = app.screen
+            assert isinstance(wizard, AddCollectionWizard)
             assert len(_focus_targets(wizard)) == 1
             assert "Tab" not in _wizard_hints(wizard, app).plain
             await pilot.press("tab")
@@ -1669,7 +1699,7 @@ class TestTabIsOfferedOnlyWhenItGoesSomewhere:
             filters = SourceFilters(frontmatter=rule) if rule else None
             config = Config(
                 collections={
-                    "c": CollectionConfig(sources=[SourceConfig(path="~/x", filters=filters)])
+                    "c": CollectionConfig(sources=[SourceConfig(path=Path("~/x"), filters=filters)])
                 }
             )
             return FNDApp(index_dir=built_index, config=config)

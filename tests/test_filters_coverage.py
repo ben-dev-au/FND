@@ -540,7 +540,7 @@ class TestATypedAndStaysAnAnd:
         from fnd.filters.text_form import parse
 
         back = parse("NOT ('a' in file.tags.all) AND NOT ('b' in file.tags.all)")
-        assert set(back.exclude_tags["os"]) == {"a", "b"}
+        assert set(back.tag_excludes["os"]) == {"a", "b"}
 
 
 class TestBoundsThatCannotBothHold:
@@ -654,7 +654,7 @@ class TestTagsThatCannotBothHold:
     empty however large the corpus — and nothing said so."""
 
     @staticmethod
-    def _survivors(root: Path, spec) -> set[str]:
+    def _survivors(root: Path, spec: Any) -> set[str]:
         from fnd.file_facts import FileFacts
         from fnd.filters.text import build_gate
         from fnd.tags import providers_for

@@ -189,7 +189,9 @@ class TestAdHocIndexHonoursTheDefaults:
         (root / "b.txt").write_text("hello\n")
         (root / "c.py").write_text("hello\n")
 
-    def test_it_applies_the_default_kinds(self, tmp_path: Path, monkeypatch) -> None:
+    def test_it_applies_the_default_kinds(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from fnd.config import CollectionConfig, DefaultFilters, SourceConfig, resolve_filters
         from fnd.index import build_index_from_config
         from fnd.query import Searcher
@@ -252,7 +254,9 @@ class TestReportingCommandsLeaveTheConfigAlone:
 
         assert not _reports_only(argv)
 
-    def test_help_leaves_a_stale_config_byte_identical(self, tmp_path: Path, monkeypatch) -> None:
+    def test_help_leaves_a_stale_config_byte_identical(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Driven through `main()`, which is where the migration lived."""
         import fnd.cli as cli
 

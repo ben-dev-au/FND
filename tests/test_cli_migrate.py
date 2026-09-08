@@ -108,7 +108,9 @@ class TestTheFirstRunMessageMovesYouOn:
         from fnd.config import CollectionConfig, Config, SourceConfig
 
         return Config(
-            collections={n: CollectionConfig(sources=[SourceConfig(path="~/n")]) for n in names}
+            collections={
+                n: CollectionConfig(sources=[SourceConfig(path=Path("~/n"))]) for n in names
+            }
         )
 
     def test_a_fresh_machine_is_told_how_to_add_one(self) -> None:

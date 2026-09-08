@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -44,10 +45,10 @@ def test_the_settings_row_offers_the_known_sources_rather_than_free_text() -> No
     from fnd.tags import TAG_PROVIDERS
     from fnd.tui.menu import KIND_PICKER, _choices_tag_sources, _provider_filters
 
-    row = next(i for i in _provider_filters(None) if i.id == "filters.tag_sources")
+    row = next(i for i in _provider_filters(cast("Any", None)) if i.id == "filters.tag_sources")
     assert row.kind == KIND_PICKER
     assert row.multi
-    assert {c.value for c in _choices_tag_sources(None)} == set(TAG_PROVIDERS)
+    assert {c.value for c in _choices_tag_sources(cast("Any", None))} == set(TAG_PROVIDERS)
 
 
 def test_enabling_a_source_needs_a_reindex(tmp_path: Path) -> None:
@@ -68,7 +69,7 @@ def test_enabling_a_source_needs_a_reindex(tmp_path: Path) -> None:
     catalogue = tag_catalogue(tantivy.Index.open(str(without)), collections=["default"])
     assert catalogue["frontmatter"] == [], "a source off at index time stores no tags"
 
-    row = next(i for i in _provider_filters(None) if i.id == "filters.tag_sources")
+    row = next(i for i in _provider_filters(cast("Any", None)) if i.id == "filters.tag_sources")
     assert "no reindex" not in row.description
 
 
@@ -84,7 +85,7 @@ def test_the_config_says_a_folder_tag_is_not_inherited() -> None:
 def test_the_tag_sources_row_says_it_too() -> None:
     from fnd.tui.menu import _provider_filters
 
-    row = next(i for i in _provider_filters(None) if i.id == "filters.tag_sources")
+    row = next(i for i in _provider_filters(cast("Any", None)) if i.id == "filters.tag_sources")
     assert "per file" in row.description
     assert "folder" in row.description
 

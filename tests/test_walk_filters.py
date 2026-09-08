@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -713,7 +714,7 @@ class TestAFileBelongsToOneSource:
         return notes
 
     @staticmethod
-    def _sources(roots):
+    def _sources(roots: Sequence[Path]) -> list[SourceConfig]:
         from fnd.config import DefaultFilters, SourceConfig, resolve_filters
 
         out = []
@@ -723,7 +724,7 @@ class TestAFileBelongsToOneSource:
             out.append(source)
         return out
 
-    def _build(self, tmp_path: Path, roots, label: str) -> int:
+    def _build(self, tmp_path: Path, roots: Sequence[Path], label: str) -> int:
         from fnd.config import CollectionConfig
         from fnd.index import build_index_from_config
 
