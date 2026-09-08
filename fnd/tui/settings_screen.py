@@ -5725,7 +5725,10 @@ class FilterBrowserScreen(Screen[None]):
         ignores = ", ".join(
             n for n, on in ((".gitignore", self._gitignore), (".fndignore", self._fndignore)) if on
         )
-        head = [f"obeying {ignores}" if ignores else "ignore files off"]
+        # The walk prunes every dot-prefixed name whatever the filters say, and
+        # nothing else on any screen says so. Only an include glob naming a
+        # dot-prefixed component admits one, and only what that glob matches.
+        head = [f"obeying {ignores}" if ignores else "ignore files off", "skipping hidden files"]
         if self._globs:
             head.append("restricted to paths: " + ", ".join(self._globs))
         if self._excludes:

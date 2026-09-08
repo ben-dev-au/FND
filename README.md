@@ -326,6 +326,7 @@ Index filters** edits the defaults; a source's **Index filters** row edits it.
 
 | Filter | What it does |
 | --- | --- |
+| *(always on)* | Hidden files and folders (`.foo`) are skipped, whatever the filters say. Only an `includes` glob naming a dot-prefixed component admits one — `.obsidian/**` — and then only the paths that glob itself matches. |
 | `respect_gitignore` | Honours every `.gitignore` down the tree, with git's rules: negation, directory patterns, nearest file wins. **On by default.** |
 | `respect_fndignore` | The same syntax in a `.fndignore`, read only by fnd: how to hide something from search without hiding it from git. **On by default.** |
 | `include_tags` | Index only files carrying one of these tags; the tag rows' `●`. Empty means the tag is not consulted. |

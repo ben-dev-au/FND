@@ -166,8 +166,11 @@ INDEXER_FILETYPES: dict[str, str] = {
 # preset defines a set of globs and a default toggle state. Presets marked
 # default=True are pre-ticked in the UI.
 EXCLUDES_PRESETS: dict[str, dict[str, Any]] = {
+    # Hidden names are pruned by the walk whatever this says, so the label
+    # promised something unticking it cannot give back. What it uniquely adds
+    # is desktop.ini, plus hidden paths an include glob deliberately admitted.
     "hidden": {
-        "label": "Hidden / system",
+        "label": "System files (hidden are always skipped)",
         "globs": ["**/.*", "**/.DS_Store", "**/Thumbs.db", "**/desktop.ini", "**/.git/**"],
         "default": True,
     },

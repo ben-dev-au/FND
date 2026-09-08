@@ -29,7 +29,9 @@ def test_excludes_presets_exposed() -> None:
 
     assert "hidden" in EXCLUDES_PRESETS
     hidden = EXCLUDES_PRESETS["hidden"]
-    assert hidden["label"] == "Hidden / system"
+    # Not the literal: the walk prunes hidden names whatever this preset says,
+    # so the label may not offer to bring them back.
+    assert "always" in str(hidden["label"]).lower(), hidden["label"]
     assert any(".git" in g for g in hidden["globs"])
     assert hidden["default"] is True  # pre-ticked
     assert "node_modules" in EXCLUDES_PRESETS
