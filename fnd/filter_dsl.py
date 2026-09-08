@@ -291,8 +291,23 @@ def parse(text: str) -> object:
     parser = _Parser(tokens)
     tree = parser.parse_or()
     if parser.peek().kind is not TokenKind.EOF:
-        raise FilterError(f"unexpected token {parser.peek().value!r}", parser.peek().column)
+        leftover = parser.peek()
+        raise FilterError(
+            f"unexpected token {leftover.value!r}{_unit_hint(leftover.value)}", leftover.column
+        )
     return tree
+
+
+#: Suffixes a user reaches for on a size bound. The DSL has no units: sizes are
+#: bytes, and `200kb` failed with nothing pointing at that.
+_SIZE_SUFFIXES = ("kb", "mb", "gb", "tb", "k", "m", "g", "b", "kib", "mib", "gib", "bytes")
+
+
+def _unit_hint(value: object) -> str:
+    """A pointer at the unit, when the leftover token looks like one."""
+    if isinstance(value, str) and value.strip().lower() in _SIZE_SUFFIXES:
+        return " — sizes are in bytes, so 200 kB is 200000"
+    return ""
 
 
 class _Parser:
