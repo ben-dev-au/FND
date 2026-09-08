@@ -28,6 +28,15 @@ make lint   # ruff + pyright (strict)
 make fmt    # auto-format and apply safe fixes
 ```
 
+`make test` and the pre-push hook run through `scripts/run_tests.py`, which
+sizes xdist workers to spare CPU and free RAM, and holds a per-user lock so two
+suites cannot starve each other: at 97% CPU busy, a test asserting on its own
+CPU share failed one run in three. A run collecting 500 or more tests takes that
+lock even when `pytest` is invoked directly, so a second one queues rather than
+piling on. Smaller targeted runs are never gated, and CI is exempt, having one
+job per VM and nothing to contend with. `FND_TEST_WORKERS` forces the worker
+count and `FND_TEST_NO_LOCK` skips the gate.
+
 CI runs the suite on `macos-14`, `ubuntu-latest` and `windows-latest`, plus
 ruff-format and pyright (strict). A green matrix means the code runs on all
 three, not that anyone has checked the behaviour outside macOS.

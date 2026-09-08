@@ -11,13 +11,14 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from textual.containers import VerticalScroll
 from textual.geometry import Region
 from textual.widget import Widget
 
 from fnd.matching import MatchSpec
+from fnd.tui.preview_scrollbar import MatchAwareScroll
 
 if TYPE_CHECKING:
     from textual.widgets import DataTable
@@ -53,11 +54,16 @@ _RESTORE_TAIL_REFRESHES = 12
 _RESTORE_HARD_CAP = 90
 
 
+# Where a landing aims within its chunk. "last_match" is a backward n/b
+# hand-over, entering the section at its end.
+LandingIntent = Literal["first_match", "last_match"]
+
+
 @dataclass(frozen=True, slots=True)
 class ScrollAnchor:
     parent_id: str
     focus_chunk_seq: int
-    intent: str = "first_match"  # or "chunk_top"
+    intent: LandingIntent = "first_match"
     context_fraction: float = 0.25
     # Smoothly animate the scroll instead of jumping. Set for between-match
     # navigation within the same file (restores the pre-lazy-load glide);
@@ -70,8 +76,9 @@ class ViewportLocation:
     """A restorable reading position in the preview — the read-counterpart of
     a scroll target. ``locate()`` produces one; ``scroll_to_location()``
     consumes it (Memento). Structural previews use ``chunk_seq`` + ``offset``
-    (rows into the chunk); flat previews use ``line`` (a logical, wrap-stable
-    line index). ``kind`` says which fields are meaningful."""
+    (signed rows from that chunk's top, negative when the viewport sits above
+    it); flat previews use ``line`` (a logical, wrap-stable line index).
+    ``kind`` says which fields are meaningful."""
 
     kind: str  # "structural" | "flat"
     chunk_seq: int = 0
@@ -89,6 +96,7 @@ class ScrollStrategy(Protocol):
         current_generation: Callable[[], int] | None = None,
     ) -> None: ...
     def locate(self) -> ViewportLocation | None: ...
+    def hold_location(self, location: ViewportLocation) -> None: ...
     def scroll_to_location(
         self, location: ViewportLocation, on_done: Callable[[], None] | None = None
     ) -> None: ...
@@ -262,6 +270,18 @@ class PreviewScrollController:
         except Exception:
             return None
 
+    def hold_location(self, location: ViewportLocation | None) -> None:
+        """Aim the pane's prepend absorb at ``location``, so the layouts before
+        :meth:`scroll_to_location` first runs move towards it, not away.
+        Best-effort, as :meth:`locate`."""
+        if location is None:
+            return
+        strategy = self._select_strategy()
+        if strategy is None:
+            return
+        with contextlib.suppress(Exception):
+            strategy.hold_location(location)
+
     def scroll_to_location(self, location: ViewportLocation | None) -> None:
         """Scroll to a position previously read by :meth:`locate`. Best-effort:
         a failure is swallowed (position just isn't restored) so it can't
@@ -363,6 +383,7 @@ class StructuralScrollStrategy:
             anchor.animate,
             generation,
             current_generation,
+            intent=anchor.intent,
         )
 
     def _superseded(self, generation: int, current_generation: Callable[[], int] | None) -> bool:
@@ -382,6 +403,7 @@ class StructuralScrollStrategy:
         current_generation: Callable[[], int] | None = None,
         above_height: int | None = None,
         stable_ticks: int = 0,
+        intent: LandingIntent = "first_match",
     ) -> None:
         from fnd.tui.widgets.markdown import FNDMarkdown
 
@@ -429,6 +451,7 @@ class StructuralScrollStrategy:
                     animate,
                     generation,
                     current_generation,
+                    intent=intent,
                 )
                 return
             if inner is not None:
@@ -491,6 +514,7 @@ class StructuralScrollStrategy:
                     current_generation,
                     measured,
                     ticks,
+                    intent=intent,
                 )
 
             if self._host.above_window_pending(focus_chunk_seq):
@@ -529,6 +553,7 @@ class StructuralScrollStrategy:
                 animate,
                 generation,
                 current_generation,
+                intent=intent,
             )
             return
         if target.region.height == 0:
@@ -544,6 +569,31 @@ class StructuralScrollStrategy:
         # scroll to the table top — the race that stranded deep-table matches at
         # the top on a cold mount. ``_anchor_region`` returns ``target.region``
         # unchanged for non-table targets.
+        # A backward hand-over enters at the section's END. Applied here, over a
+        # resolved target, so the retry and fallback ladders above keep judging
+        # the build by the same signal on both intents.
+        last_row: int | None = None
+        if intent == "last_match" and retries > 0 and self._last_match_pending(chunk_md):
+            # Its row is missing from the stop set until the cell lays out, and
+            # committing now lands on whatever precedes the table.
+            self._host.call_after_refresh(
+                self._do_scroll_to_chunk,
+                focus_chunk_seq,
+                retries - 1,
+                on_done,
+                margin_from,
+                animate,
+                generation,
+                current_generation,
+                intent=intent,
+            )
+            return
+        if intent == "last_match" and (
+            entry := self._last_match_entry(focus_chunk_seq, target, chunk_md)
+        ):
+            target, last_row = entry
+            first_match_seen = True
+            path = f"last_match({type(target).__name__})"
         match_table = self._match_table_for(target)
         anchor = self._anchor_region(target, match_table)
         if anchor is None and retries > 0:
@@ -556,6 +606,7 @@ class StructuralScrollStrategy:
                 animate,
                 generation,
                 current_generation,
+                intent=intent,
             )
             return
         if anchor is None:
@@ -571,7 +622,8 @@ class StructuralScrollStrategy:
         if match_table is None:
             from fnd.tui.preview.match_row import region_at_row
 
-            anchor = region_at_row(anchor, self._match_line_offset(target))
+            row = last_row if last_row is not None else self._match_line_offset(target)
+            anchor = region_at_row(anchor, row)
         # Generation guard (immediately before the commit): the resolution above
         # spanned refreshes, during which a newer navigation may have superseded
         # this chain. Re-check freshness right before the side effect — the
@@ -646,6 +698,7 @@ class StructuralScrollStrategy:
                     animate,
                     generation,
                     current_generation,
+                    intent=intent,
                 )
                 # The app-level suite never reaches this branch, so a field
                 # trace is the only evidence the guard ever fires in anger.
@@ -731,6 +784,64 @@ class StructuralScrollStrategy:
         # cell is relative to the table's content; map → screen (the table has
         # no internal scroll, but honour its offset defensively).
         return cell.translate(table.region.offset - table.scroll_offset)
+
+    def _last_match_pending(self, chunk_md: Widget | None) -> bool:
+        """Whether a matching table cell of this chunk has yet to resolve its
+        region — the same race ``_anchor_region`` returns ``None`` for on the
+        first-match path."""
+        from textual.widgets import DataTable
+
+        if chunk_md is None:
+            return False
+        for dt in chunk_md.query(DataTable):
+            for coord in getattr(dt, "_fnd_match_coords", None) or []:
+                try:
+                    cell = dt._get_cell_region(coord)  # pyright: ignore[reportAttributeAccessIssue]
+                except Exception:
+                    return True
+                if cell.height == 0:
+                    return True
+        return False
+
+    def _last_match_entry(
+        self, focus_chunk_seq: int, target: Widget, chunk_md: Widget | None
+    ) -> tuple[Widget, int] | None:
+        """``(widget, row within it)`` a backward hand-over enters at — the LAST
+        match of the chunk, by the row it PAINTS on, never by ``match_blocks``
+        order (see :func:`~fnd.tui.preview.match_row.chunk_stop_rows`)."""
+        from fnd.tui.preview.match_row import chunk_stop_rows
+
+        if chunk_md is not None:
+            rows, _cells = chunk_stop_rows(chunk_md, self._host.effective_match_spec())
+            return (chunk_md, rows[-1]) if rows else None
+        frozen_rows = getattr(getattr(target, "frozen", None), "stop_rows", None)
+        if frozen_rows:
+            row = frozen_rows[-1]
+            return (target, row) if 0 < row < target.region.height else None
+        if target.has_class("chunk-line"):
+            # A plain (pdf/txt) chunk records only its FIRST matching line as the
+            # match target, so its last one is found by walking the siblings.
+            line = self._last_matching_line(focus_chunk_seq)
+            return (line, 0) if line is not None else None
+        return None
+
+    def _last_matching_line(self, focus_chunk_seq: int) -> Widget | None:
+        """The LAST matching body line of a plain (pdf/txt) chunk. Its lines are
+        flat siblings, so the chunk runs from its own first line to the next
+        widget carrying ``chunk-first``."""
+        first = self._host.chunk_widgets.get(focus_chunk_seq)
+        if first is None:
+            return None
+        siblings: list[Widget] = list(getattr(getattr(first, "parent", None), "children", ()))
+        if first not in siblings:
+            return None
+        found: Widget | None = None
+        for w in siblings[siblings.index(first) + 1 :]:
+            if w.has_class("chunk-first"):
+                break
+            if w.has_class("chunk-line-match"):
+                found = w
+        return found
 
     def _match_line_offset(self, target: Widget) -> int:
         """Rows from ``target``'s top down to its first match's row, taken from
@@ -827,16 +938,40 @@ class StructuralScrollStrategy:
         return first_table or chunk
 
     def locate(self) -> ViewportLocation | None:
-        """The chunk at the viewport top + how far into it the top sits.
-        Survives a width reflow at chunk granularity: re-wrapping changes a
-        chunk's height, but the chunk's content position is found again."""
+        """The chunk whose top is nearest the viewport top, and the signed rows
+        between them. Only the boundary survives a re-wrap, so the nearest one
+        bounds the error: 13 rows out to 0, 60 rows into a 62-row chunk."""
         pane = self._host.preview_pane()
         top = pane.scrollable_content_region.y
+        nearest: tuple[int, int] | None = None
         for seq, w in self._host.chunk_widgets.items():
             r = w.region
-            if r.height > 0 and r.y <= top < r.y + r.height:
-                return ViewportLocation("structural", chunk_seq=seq, offset=top - r.y)
-        return None
+            if r.height <= 0:
+                continue  # culled: NULL_REGION reads as y=0, not as a position
+            offset = top - r.y
+            if nearest is None or abs(offset) < abs(nearest[0]):
+                nearest = (offset, seq)
+        if nearest is None:
+            return None
+        return ViewportLocation("structural", chunk_seq=nearest[1], offset=nearest[0])
+
+    def hold_location(self, location: ViewportLocation) -> None:
+        """Claim the located chunk as the pane's prepend anchor. The absorb
+        preserves ``scroll_y - anchor.virtual_region.y``, which is the located
+        offset, so it and :meth:`_restore_structural` compute one position."""
+        if location.kind != "structural":
+            return
+        pane = self._host.preview_pane()
+        widget = self._host.chunk_widgets.get(location.chunk_seq)
+        if widget is None or not isinstance(pane, MatchAwareScroll):
+            return
+        # A widget the layout has not placed reports ``Region()``, and a claim
+        # seated at that y=0 absorbs the whole content offset on the next
+        # arrange. A stand-in the prune has just mounted is exactly that.
+        seat = widget.virtual_region
+        if seat.height <= 0:
+            return
+        pane.absorb_anchor = (widget, int(seat.y))
 
     def scroll_to_location(
         self, location: ViewportLocation, on_done: Callable[[], None] | None = None
@@ -1041,6 +1176,8 @@ class FlatScrollStrategy:
             if on_settled is not None:
                 on_settled()
             return
+        # No intent here: a line buffer contributes no stops, so no n/b
+        # hand-over can arm one for it (see MatchNavigator._active_parent).
         view.scroll_to_chunk(
             anchor.focus_chunk_seq,
             prefer_first_match=True,
@@ -1050,6 +1187,10 @@ class FlatScrollStrategy:
         # immediately.
         if on_settled is not None:
             on_settled()
+
+    def hold_location(self, location: ViewportLocation) -> None:
+        """No-op: a flat buffer paints from a line index, with no prepend to
+        absorb."""
 
     def locate(self) -> ViewportLocation | None:
         """The address at the viewport top — exact across a width reflow, which

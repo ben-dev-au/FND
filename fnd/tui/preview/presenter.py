@@ -35,7 +35,7 @@ from fnd.tui.preview.visibility import set_node_class, set_preview_visibility
 from fnd.tui.preview.warm_host import WarmHost
 from fnd.tui.preview.warmth import WarmState, warm_state
 from fnd.tui.preview_dispatcher import choose_preview_mode, uses_markdown_renderer
-from fnd.tui.preview_scroll import ScrollAnchor
+from fnd.tui.preview_scroll import LandingIntent, ScrollAnchor
 from fnd.tui.preview_scrollbar import MatchAwareScroll
 from fnd.tui.widgets.markdown import FNDMarkdown, _legacy_blocks_to_md
 from fnd.tui.widgets.preview_container import PreviewCache, PreviewContainer
@@ -216,6 +216,9 @@ class PreviewPresenter:
 
         self.load_timer: _Any | None = None
         self.load_target: tuple[str, int] | None = None
+        # Landing intent for one navigation, ``(parent_id, chunk_seq, intent)``.
+        # Set by a backward n/b hand-over; dropped when a different target loads.
+        self.pending_landing_intent: tuple[str, int, LandingIntent] | None = None
         # True while the cursor is moving via Option/Alt + arrow ("scan" mode):
         # schedule_load skips its leading fire so fast browsing doesn't mount
         # every row — the preview only loads once the sweep settles (trailing).
@@ -423,8 +426,25 @@ class PreviewPresenter:
         self.active = None
         self.render_full_doc(parent_id, focus_chunk_seq=focus_chunk_seq)
 
+    def _landing_intent(self, parent_id: str, focus_chunk_seq: int) -> LandingIntent:
+        """The intent this navigation was armed for. NOT consumed by the read: a
+        navigation arms more than once, and a consuming read left the second arm
+        with the default, discarding the intent."""
+        pending = self.pending_landing_intent
+        if pending is not None and pending[:2] == (parent_id, focus_chunk_seq):
+            return pending[2]
+        return "first_match"
+
+    def _drop_stale_landing_intent(self, parent_id: str, focus_chunk_seq: int) -> None:
+        """Forget a request the reader has navigated away from — the end of the
+        navigation it was set for, and the only thing that clears it."""
+        pending = self.pending_landing_intent
+        if pending is not None and pending[:2] != (parent_id, focus_chunk_seq):
+            self.pending_landing_intent = None
+
     def schedule_load(self, parent_id: str, focus_chunk_seq: int) -> None:
         """Debounce a cursor-move → preview-load; coalesces rapid arrow sweeps."""
+        self._drop_stale_landing_intent(parent_id, focus_chunk_seq)
         if self._scan_move:
             # Option/Alt+arrow scan: browse the results without mounting anything.
             # Record where the cursor is but DON'T load and DON'T arm a timer — so
@@ -574,7 +594,12 @@ class PreviewPresenter:
         )
         glide = self._app._config is None or self._app._config.defaults.preview_scroll_animation
         self._app._preview_scroll.arm(
-            ScrollAnchor(parent_id, focus_chunk_seq, animate=target_mounted and glide)
+            ScrollAnchor(
+                parent_id,
+                focus_chunk_seq,
+                intent=self._landing_intent(parent_id, focus_chunk_seq),
+                animate=target_mounted and glide,
+            )
         )
         # One progress session spans the whole navigation, opened here because
         # arming is the single event every navigation passes through — so the
@@ -766,9 +791,9 @@ class PreviewPresenter:
         visible window. Used when switching files: the outgoing container stays
         on screen while the incoming one builds, so its full-mounted DOM would
         otherwise inflate the incoming mount's arrange (Option C's inter-file
-        cost). Flash-free — the visible window stays put: the first kept chunk is
-        claimed as the pane's absorb anchor, so whatever the removal actually
-        takes off the top is corrected by the layout that applies it.
+        cost). Flash-free: the topmost visible chunk is claimed as the pane's
+        absorb anchor, so whatever the removal actually takes off the top is
+        corrected by the layout that applies it.
 
         Returns the height taken off the top, which a caller sampling the
         viewport must subtract: the correction lands with a later layout."""
@@ -827,10 +852,12 @@ class PreviewPresenter:
         # Removal is DEFERRED by Textual, so compensating here scrolls against a
         # virtual size that still counts the chunks — measured 439-680 rows out.
         # The anchor is the reader's own content: absorbing its movement needs no
-        # prediction, and prices the frozen stand-ins for free.
-        kept = [(i, w, y0) for (i, w, y0, _y1) in ranges if keep_lo <= i <= keep_hi]
-        if kept:
-            pane.absorb_anchor = (kept[0][1], int(kept[0][2]))
+        # prediction, and prices the frozen stand-ins for free. The topmost
+        # VISIBLE chunk: a claim above the fold prices nothing below itself.
+        first_visible = min(visible)
+        seat = [(i, w, y0) for (i, w, y0, _y1) in ranges if i == first_visible]
+        if seat:
+            pane.absorb_anchor = (seat[0][1], int(seat[0][2]))
         import os as _os_freeze
         import time as _time
 
@@ -1194,7 +1221,13 @@ class PreviewPresenter:
         # resolved focus chunk and reconcile (idempotent — re-applies the
         # install's scroll; for intra-file nav it IS the scroll). The 25%
         # context margin matches the structural path.
-        self._app._preview_scroll.arm(ScrollAnchor(parent_id, focus_chunk_seq))
+        self._app._preview_scroll.arm(
+            ScrollAnchor(
+                parent_id,
+                focus_chunk_seq,
+                intent=self._landing_intent(parent_id, focus_chunk_seq),
+            )
+        )
         self._app._preview_scroll.reconcile()
         self._app._diag_log(
             f"dispatch_flat parent={parent_id[:8]} cache_hit={'yes' if cache_hit else 'no'} "
@@ -1478,7 +1511,7 @@ class PreviewPresenter:
         if container is None or not is_live(container):
             return
         try:
-            pane = self._app.query_one("#preview_pane", VerticalScroll)
+            pane = self._app.query_one("#preview_pane", MatchAwareScroll)
         except Exception:
             return
         width = self.capture_width(pane)
@@ -1538,6 +1571,10 @@ class PreviewPresenter:
 
         repaired = 0
         drift = 0
+        claim = pane.absorb_anchor
+        held = claim[0] if claim is not None else None
+        if not (isinstance(held, Widget) and is_live(held)):
+            held = None
         # `reconciling` is NOT held across the loop. It gates lazy mount's
         # release of the scroll anchor and the match-nav burst reset, so holding
         # it for a pass — measured at 2.8s, and 6s on heavy content — means a
@@ -1571,9 +1608,12 @@ class PreviewPresenter:
                     continue
                 self.capture_store.put(parent_id, query_sig, capture.width, capture)
             before = view.frozen.outer_height
-            # A chunk entirely above the viewport moves what the reader is
-            # looking at when its height changes; accumulate and correct once.
-            if view.virtual_region.y + before <= viewport_top:
+            # A chunk above the viewport moves what the reader is looking at;
+            # accumulate and correct once, less what the claim absorbs — it
+            # prices what moves ITS anchor, so that much would land twice.
+            bottom = view.virtual_region.y + before
+            absorbed_above = None if held is None else held.virtual_region.y
+            if bottom <= viewport_top and (absorbed_above is None or bottom > absorbed_above):
                 drift += capture.outer_height - before
             view.adopt(capture)
             repaired += 1

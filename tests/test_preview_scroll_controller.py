@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import cast
 
 from textual.geometry import Offset, Region, Size
@@ -20,6 +21,7 @@ class FakeStrategy:
         self.calls: list[ScrollAnchor] = []
         self.settled: int = 0
         self.restored: list[ViewportLocation] = []
+        self.held: list[ViewportLocation] = []
 
     def reconcile(self, anchor: ScrollAnchor, on_settled: object = None, **_kw: object) -> None:
         self.calls.append(anchor)
@@ -29,6 +31,9 @@ class FakeStrategy:
 
     def locate(self) -> ViewportLocation | None:
         return ViewportLocation("flat", line=7)
+
+    def hold_location(self, location: ViewportLocation) -> None:
+        self.held.append(location)
 
     def scroll_to_location(self, location: ViewportLocation, on_done: object = None) -> None:
         self.restored.append(location)
@@ -74,6 +79,9 @@ def test_is_settling_stays_true_until_deferred_on_settled_fires() -> None:
                 held.append(on_settled)
 
         def locate(self) -> ViewportLocation | None:
+            return None
+
+        def hold_location(self, location: ViewportLocation) -> None:
             return None
 
         def scroll_to_location(self, location: ViewportLocation, on_done: object = None) -> None:
@@ -167,19 +175,26 @@ class _FakeWidget:
         region: Region,
         *,
         first_match_block: object = _UNSET,
+        match_blocks: object = _UNSET,
         virtual_region: Region | None = None,
     ) -> None:
         self.region = region
+        self.parent: object = None
         self.virtual_region = virtual_region if virtual_region is not None else region
         self.classes: set[str] = set()
         if first_match_block is not _UNSET:
             self.first_match_block = first_match_block
+        if match_blocks is not _UNSET:
+            self.match_blocks = match_blocks
 
     def add_class(self, name: str) -> None:
         self.classes.add(name)
 
     def remove_class(self, name: str) -> None:
         self.classes.discard(name)
+
+    def has_class(self, name: str) -> bool:
+        return name in self.classes
 
 
 class _FakePane:
@@ -276,6 +291,34 @@ def test_structural_strategy_drops_match_a_quarter_down_the_viewport() -> None:
 
     # margin = int(40 * 0.25) = 10: region.y shifts up by the margin, height grows.
     assert pane.captured == Region(0, 90, 80, 12)
+
+
+def test_a_last_match_landing_takes_a_plain_chunks_final_matching_line() -> None:
+    """A pdf/txt chunk mounts one Static per line and records only its FIRST
+    matching line as the match target, so the backward entry has to find the
+    last itself — the lines are flat siblings, bounded by the next chunk-first."""
+    lines = [_FakeWidget(Region(0, 100 + i * 2, 80, 2)) for i in range(5)]
+    for w in lines:
+        w.add_class("chunk-line")
+    lines[0].add_class("chunk-first")
+    lines[1].add_class("chunk-line-match")
+    lines[3].add_class("chunk-line-match")
+    lines[4].add_class("chunk-first")  # the NEXT chunk starts here
+    lines[4].add_class("chunk-line-match")
+    container = SimpleNamespace(children=lines)
+    for w in lines:
+        w.parent = container
+    pane = _FakePane(height=40)
+    host = _FakeHost(pane, chunk_widgets={5: lines[0]}, match_targets={5: lines[1]})
+    strat = StructuralScrollStrategy(cast(StructuralHost, host))
+
+    strat._do_scroll_to_chunk(5, margin_from=0.25, intent="last_match")
+
+    # With the same quarter-viewport margin a match landing gets: arriving from
+    # BELOW, the matches just above the last one are what the reader came back
+    # for, and a plain line pinned to the top row hides every one of them.
+    assert pane.captured is not None
+    assert pane.captured.y == lines[3].region.y - 10
 
 
 def test_a_pane_that_has_not_sized_its_content_retries_rather_than_scrolling_nowhere() -> None:
@@ -447,6 +490,30 @@ def test_structural_locate_returns_top_chunk_and_in_chunk_offset() -> None:
     assert strat.locate() == ViewportLocation("structural", chunk_seq=2, offset=3)
 
 
+def test_structural_locate_measures_from_the_nearest_chunk_top() -> None:
+    """A viewport 8 rows into a 10-row chunk is 2 rows above the next one."""
+    # Only the boundary survives a width reflow, so the smaller of the two
+    # distances is the one that carries less re-wrap error.
+    deep = _FakeWidget(Region(0, -8, 80, 10))
+    next_up = _FakeWidget(Region(0, 2, 80, 30))
+    pane = _FakePane(height=40)
+    host = _FakeHost(pane, chunk_widgets={2: deep, 3: next_up}, match_targets={})
+    strat = StructuralScrollStrategy(cast(StructuralHost, host))
+
+    assert strat.locate() == ViewportLocation("structural", chunk_seq=3, offset=-2)
+
+
+def test_structural_locate_ignores_culled_chunks() -> None:
+    """``region`` is NULL_REGION for a culled chunk, which reads as y=0."""
+    culled = _FakeWidget(Region(0, 0, 0, 0))
+    real = _FakeWidget(Region(0, -3, 80, 10))
+    pane = _FakePane(height=40)
+    host = _FakeHost(pane, chunk_widgets={9: culled, 2: real}, match_targets={})
+    strat = StructuralScrollStrategy(cast(StructuralHost, host))
+
+    assert strat.locate() == ViewportLocation("structural", chunk_seq=2, offset=3)
+
+
 def test_structural_scroll_to_location_scrolls_to_chunk_plus_offset() -> None:
     # virtual_region.y (content-space top) = 200; restore scrolls to top + the
     # captured 6-row in-chunk offset.
@@ -458,6 +525,18 @@ def test_structural_scroll_to_location_scrolls_to_chunk_plus_offset() -> None:
     strat.scroll_to_location(ViewportLocation("structural", chunk_seq=5, offset=6))
 
     assert pane.scrolled_to_y == 206
+
+
+def test_structural_scroll_to_location_takes_a_negative_offset() -> None:
+    """A location naming the chunk below the viewport top restores above it."""
+    w = _FakeWidget(Region(0, 100, 80, 40), virtual_region=Region(0, 200, 80, 40))
+    pane = _FakePane(height=40)
+    host = _FakeHost(pane, chunk_widgets={5: w}, match_targets={})
+    strat = StructuralScrollStrategy(cast(StructuralHost, host))
+
+    strat.scroll_to_location(ViewportLocation("structural", chunk_seq=5, offset=-4))
+
+    assert pane.scrolled_to_y == 196
 
 
 def _drain(host: _FakeHost, *, limit: int = 200) -> int:
@@ -561,6 +640,9 @@ class _RaisingStrategy:
     def locate(self) -> ViewportLocation | None:
         raise RuntimeError("locate boom")
 
+    def hold_location(self, location: ViewportLocation) -> None:
+        raise RuntimeError("hold boom")
+
     def scroll_to_location(self, location: ViewportLocation, on_done: object = None) -> None:
         raise RuntimeError("scroll boom")
 
@@ -626,6 +708,9 @@ class _CallsThenRaisesStrategy:
         raise RuntimeError("boom after settle")
 
     def locate(self) -> ViewportLocation | None:
+        return None
+
+    def hold_location(self, location: ViewportLocation) -> None:
         return None
 
     def scroll_to_location(self, location: ViewportLocation, on_done: object = None) -> None:

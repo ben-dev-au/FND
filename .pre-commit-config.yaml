@@ -38,10 +38,10 @@ repos:
       - id: pytest-fast
         name: "pytest (testmon: only tests whose code paths changed)"
         # Pre-push, not pre-commit: keeps `git commit` free for WIP
-        # checkpoints. --testmon skips diff-untouched tests; CI runs
-        # the full serial suite without --testmon as the catch-all.
+        # checkpoints. Forceselect, not plain --testmon: `-m` silently
+        # deactivates the latter's selection and runs the whole suite.
         stages: [pre-push]
-        entry: uv run pytest -q -m "not slow" --testmon
+        entry: uv run python scripts/run_tests.py -q -m "not slow" --testmon-forceselect
         language: system
         types: [python]
         pass_filenames: false
