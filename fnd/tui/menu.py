@@ -507,8 +507,8 @@ def _keys_filter_browser() -> tuple[tuple[str, str, str, str], ...]:
             COMMIT_KEY,
             "Save",
             "",
-            "Write the filters. Collections keep their current contents "
-            "until you reindex — saving here indexes nothing.",
+            "Write the filters. Saving here indexes nothing; collections keep "
+            "their current contents until the next Update index.",
         ),
         (
             "Esc / ←",
@@ -2353,14 +2353,14 @@ def _open_filter_browser(app: FNDApp) -> None:
         # Nothing reindexes here, unlike the per-source route, so every
         # collection keeps its current contents until the user says otherwise.
         app.notify(
-            "Filters saved. Collections keep their current contents until you reindex.",
+            "Filters saved. Collections keep their current contents until the next Update index.",
             severity="warning",
         )
 
     app.push_screen(
         FilterBrowserScreen(
             title="Index filters",
-            save_note="saving does not reindex",
+            save_note="applies at the next Update index",
             spec=_spec_from_filters(current),
             gitignore=current.respect_gitignore,
             fndignore=current.respect_fndignore,
@@ -2454,7 +2454,8 @@ def _provider_index_filters(_app: FNDApp) -> tuple[MenuItem, ...]:
             description=(
                 "Which files enter the index: file types, tags, size, dates "
                 "and ignore files, as branches you tick — or as one expression "
-                "if you prefer. Needs a reindex to take effect."
+                "if you prefer. Applies at the next Update index: files that "
+                "now match are added, files that no longer match are dropped."
             ),
             kind=KIND_EXTERNAL,
             external=_open_filter_browser,
@@ -3044,7 +3045,8 @@ def _provider_filters(app: FNDApp) -> tuple[MenuItem, ...]:
                 "comma-separated — e.g. Course, Notes_Type, Topic. Values are "
                 "grouped under the key in the Tags pane (course/algebra), so "
                 "they never collide with a plain tag. Matched "
-                "case-insensitively. Needs a reindex to take effect."
+                "case-insensitively. Needs a Rebuild index: tags are read when "
+                "a file is indexed, and an Update skips unchanged files."
             ),
             kind=KIND_SCALAR,
             setting_path="defaults.tag_frontmatter_keys",
@@ -3061,8 +3063,9 @@ def _provider_filters(app: FNDApp) -> tuple[MenuItem, ...]:
                 "Which sources feed the Tags filter. Tags are read per file: "
                 "a tag on a folder does not apply to what is inside it. Tick "
                 "none to turn tag filtering off. Turning one off hides its tags "
-                "straight away; turning one on needs a reindex, since tags are "
-                "read when a file is indexed."
+                "straight away; turning one on needs a Rebuild index, since "
+                "tags are read when a file is indexed and an Update skips "
+                "unchanged files."
             ),
             kind=KIND_PICKER,
             multi=True,
