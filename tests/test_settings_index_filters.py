@@ -1027,7 +1027,9 @@ def test_the_rename_row_describes_what_rename_does() -> None:
     from fnd.tui.settings_screen import RenameCollectionScreen
 
     row = next(i for i in _provider_collection(None, "c") if i.id == "col.c.rename")
-    source = inspect.getsource(RenameCollectionScreen._save)
+    # The whole class: the rebuild moved out of _save when the old name's
+    # index drop had to run before it, and reading one method missed it.
+    source = inspect.getsource(RenameCollectionScreen)
     assert "rebuild=True" in source, "guard: this test pins the row against the code"
     assert "not rebuilt" not in row.description
     assert "does not follow" in row.description

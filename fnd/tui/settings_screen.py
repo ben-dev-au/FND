@@ -3635,7 +3635,40 @@ class RenameCollectionScreen(Screen[None]):
         # screen — before pushing the IndexerScreen.
         self.app.pop_screen()
         self.app.pop_screen()
-        app._indexer.reindex_with_warning(new_name, rebuild=True)  # type: ignore[attr-defined]
+        self._drop_old_then_reindex(app, new_name)
+
+    def _drop_old_then_reindex(self, app: FNDApp, new_name: str) -> None:
+        """The old name's documents go before the new name's are built.
+
+        Nothing can reach them once the config no longer names them: Delete is
+        the only caller that drops by collection, and a rebuild only touches
+        the names the config still has. Sequential because tantivy takes one
+        writer, and threaded because the drop is seconds on a fragmented index.
+        """
+        import contextlib
+
+        from fnd.index import drop_collection
+
+        old = self._old_name
+        index_dir = app._index_dir  # type: ignore[attr-defined]
+
+        def _then(error: str | None) -> None:
+            if error:
+                app.notify(
+                    f"{old!r} could not be dropped from the index: {error}", severity="error"
+                )
+            app._indexer.reindex_with_warning(new_name, rebuild=True)  # type: ignore[attr-defined]
+
+        def _work() -> None:
+            error: str | None = None
+            try:
+                drop_collection(index_dir, old)
+            except Exception as e:
+                error = str(e)
+            with contextlib.suppress(Exception):
+                app.call_from_thread(_then, error)
+
+        app.run_worker(_work, thread=True, exclusive=True, group=f"rename-{old}")
 
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -3754,15 +3787,10 @@ class DeleteCollectionScreen(Screen[None]):
         index_dir = app._index_dir  # type: ignore[attr-defined]
 
         def _drop() -> str | None:
-            from fnd.index import _ensure_index, commit
-            from fnd.schema import F_COLLECTION
+            from fnd.index import drop_collection
 
             try:
-                index = _ensure_index(index_dir)
-                writer = index.writer(heap_size=50_000_000)
-                writer.delete_documents(F_COLLECTION, name)
-                commit(writer)
-                writer.wait_merging_threads()
+                drop_collection(index_dir, name)
             except Exception as e:
                 return str(e)
             return None

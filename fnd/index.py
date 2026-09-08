@@ -476,6 +476,19 @@ def indexed_parent_ids(index: Index, collection: str) -> set[str]:
     return {str(b["key"]) for b in raw["files"]["buckets"]}
 
 
+def drop_collection(index_dir: Path, collection: str) -> None:
+    """Remove every document of one collection from the index.
+
+    Paired with a config write that removes the collection's name: whichever
+    half is missing, the index keeps documents nothing can reach afterwards.
+    """
+    index = _ensure_index(index_dir)
+    writer = index.writer(heap_size=_WRITER_HEAP)
+    writer.delete_documents(F_COLLECTION, collection)
+    commit(writer)
+    writer.wait_merging_threads()
+
+
 def prune_removed_files(
     index: Index,
     writer: IndexWriter,
