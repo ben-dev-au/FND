@@ -206,13 +206,21 @@ def _fuzzy_pass(
     if body is None:
         return []
     subqueries: list[tuple[tantivy.Occur, tantivy.Query]] = list(body)
-    if collection:
+    if collection is not None:
         # Restrict to a collection (or, for the TUI's multi-collection scope,
         # ANY of a list) on the ``collection`` field. Const-scored to 0 so it's
         # a pure hard filter — without it a multi-collection OR lets per-
         # collection IDF skew BM25 between the selected collections (matches
         # the unscored hard-filter handling in ``query.py::_raw_hits``).
+        #
+        # `is not None`, not truthiness: an empty list is an explicit empty
+        # scope and means NOTHING, which is what ``query.py`` returns for it.
+        # A falsy test skipped the filter entirely, so the pass that recovers
+        # a sparse query answered from every collection while the panel read
+        # "0/N active" — the literal pass was honest and this one was not.
         cols = [collection] if isinstance(collection, str) else list(collection)
+        if not cols:
+            return []
         col_terms = [tantivy.Query.term_query(schema, "collection", c) for c in cols]
         col_q = (
             col_terms[0]

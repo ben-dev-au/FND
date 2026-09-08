@@ -121,3 +121,52 @@ async def test_unticking_every_collection_through_the_panel_finds_nothing(
 
     assert markers == {"alpha": "○", "beta": "○"}, markers
     assert scope == [], f"every row reads off and the search covered them all: {scope!r}"
+
+
+@pytest.mark.asyncio
+async def test_the_search_the_tui_actually_runs_honours_it(
+    two_collections: Path, tmp_path: Path
+) -> None:
+    """End to end, because every layer above this one was already honest.
+
+    `query.py` returns nothing for an explicit empty list and has since the
+    first fix. The cascade — the pass that recovers a sparse query — tested
+    `if collection:`, and an empty list is falsy, so it skipped the collection
+    filter entirely and answered from every collection. The panel read
+    `0/2 active` over results from both, and three tests at three levels all
+    passed because none of them ran the search the TUI runs.
+    """
+    from textual.widgets import Tree
+
+    from fnd.tui import FNDApp
+
+    app = FNDApp(index_dir=two_collections, config=_config(tmp_path))
+    async with app.run_test(size=(100, 30)) as pilot:
+        for _ in range(15):
+            await pilot.pause()
+        assert app._scope.collections, "the premise: a fresh app has both ticked"
+        tree = app.query_one("#collections_panel_tree", Tree)
+        for node in list(tree.root.children):
+            app._scope.on_collections_selected(Tree.NodeSelected(node))
+            await pilot.pause()
+        app._search.run("zebrafish")
+        for _ in range(300):
+            await pilot.pause()
+            if app._search.idle:
+                break
+        groups = len(app._search.groups)
+        title = str(app.query_one("#results_pane", Tree).border_title)
+
+    assert groups == 0, f"every row reads off and the search returned {groups} files"
+    assert "nothing matched" in title, title
+
+
+def test_the_recovery_pass_honours_an_empty_scope_too(two_collections: Path) -> None:
+    """The unit under the end-to-end one: the cascade's own collection gate."""
+    from fnd.cascade import _fuzzy_pass
+    from fnd.query import Searcher
+
+    searcher = Searcher(index_dir=two_collections)
+    hits = _fuzzy_pass(searcher, query="zebrafsh", limit=10, collection=[])
+
+    assert hits == [], f"an empty scope let the recovery pass answer: {len(hits)} hits"
