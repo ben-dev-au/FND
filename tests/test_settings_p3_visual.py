@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -700,3 +701,69 @@ class TestSourceRowMatchesTheWalk:
 
     def test_no_includes_is_every_type(self, tmp_path: Path) -> None:
         assert self._row(tmp_path, []) == "All types"
+
+
+class TestARowNamesAGlobThatCannotReachAFolder:
+    """`*` stops at `/`, so `build` and `build/` match only a FILE called
+    build: inert as an exclude, and as an include the source indexes nothing.
+    Two warnings already cover the other ways a source yields nothing, and
+    this one read "All types" with every column healthy."""
+
+    @staticmethod
+    def _row(tmp_path: Path, **source: object) -> str:
+        from fnd.config import Config
+        from fnd.tui.menu import _source_trailing
+
+        cfg = Config.model_validate(
+            {
+                "defaults": {"filters": {"exclude_tags": []}},
+                "collections": {"c": {"sources": [{"path": str(tmp_path), **source}]}},
+            }
+        )
+
+        class _App:
+            _config = cfg
+
+        return _source_trailing("c", 0)(cast("Any", _App()))
+
+    def test_a_bare_folder_name_in_includes_is_called_out(self, tmp_path: Path) -> None:
+        (tmp_path / "src").mkdir()
+        row = self._row(tmp_path, includes=["src"])
+        assert "⚠" in row
+        assert "'src/**'" in row, row
+
+    def test_a_trailing_slash_is_no_better(self, tmp_path: Path) -> None:
+        (tmp_path / "build").mkdir()
+        assert "⚠" in self._row(tmp_path, excludes=["build/"])
+
+    def test_the_working_glob_says_nothing(self, tmp_path: Path) -> None:
+        """The control: the form it recommends must not warn about itself."""
+        (tmp_path / "build").mkdir()
+        assert "⚠" not in self._row(tmp_path, excludes=["build/**"])
+
+    def test_a_suffix_glob_says_nothing(self, tmp_path: Path) -> None:
+        (tmp_path / "build").mkdir()
+        assert "⚠" not in self._row(tmp_path, includes=["**/*.md"])
+
+    def test_a_name_that_is_not_a_folder_says_nothing(self, tmp_path: Path) -> None:
+        """A literal filename is a legitimate glob; only a real folder misleads."""
+        (tmp_path / "notes.md").write_text("x", encoding="utf-8")
+        assert "⚠" not in self._row(tmp_path, includes=["notes.md"])
+
+    def test_a_missing_path_still_reports_the_missing_path(self, tmp_path: Path) -> None:
+        row = self._row(tmp_path / "gone", includes=["src"])
+        assert "path not found" in row
+
+
+class TestTheCustomGlobPromptSaysWhatAGlobDoes:
+    """The rule box one screen over teaches this exact rule; the field that
+    takes globs had no hint, no example and no validation."""
+
+    def test_both_prompts_carry_the_hint(self) -> None:
+        import inspect
+
+        from fnd.tui.settings_screen import _GLOB_HINT, AddCollectionWizard, SourceFormScreen
+
+        assert "/**" in _GLOB_HINT
+        for screen in (SourceFormScreen, AddCollectionWizard):
+            assert "_GLOB_HINT" in inspect.getsource(screen._prompt_custom), screen.__name__

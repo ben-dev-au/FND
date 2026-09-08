@@ -2717,6 +2717,7 @@ class SourceFormScreen(Screen[None]):
         item = MenuItem(
             id=f"form.{field_key}",
             label=label,
+            hint=_GLOB_HINT,
             kind=KIND_SCALAR,
             value_getter=lambda _app, key=field_key: str(self._fields.get(key) or ""),
         )
@@ -3297,6 +3298,7 @@ class AddCollectionWizard(Screen[None]):
         item = MenuItem(
             id=f"wiz.{field_key}",
             label=label,
+            hint=_GLOB_HINT,
             kind=KIND_SCALAR,
             value_getter=lambda _app, key=field_key: str(self._fields.get(key) or ""),
         )
@@ -5343,6 +5345,10 @@ def _branch_group(branch: Any) -> ToggleGroup:
 
 #: Shown under the rule box. Both hunters wrote an inert glob here: `*` does
 #: not cross `/`, so `'*drafts*'` never matches while `'drafts/**'` does.
+# The same trap _RULE_HELP names, one field over: * stops at /, so a bare
+# folder name matches only a FILE of that name.
+_GLOB_HINT = "'build/**' for a folder; 'build' matches only a file called build"
+
 _RULE_HELP = (
     "fields  file.path/name/ext/kind/size, file.tags.all, or any frontmatter key\n"
     "match   ~~ is a glob and * stops at /, so 'drafts/**' matches, '*drafts*' does not"

@@ -1623,11 +1623,36 @@ def _source_trailing(collection_name: str, idx: int) -> Callable[[FNDApp], str]:
                 # source indexes nothing at all — and every other column reads
                 # perfectly healthy while it does.
                 suffix = " · ⚠ symlink, not followed — indexes nothing"
+            else:
+                folder = _folder_glob(p, [*src.includes, *src.excludes])
+                if folder:
+                    suffix = f" · ⚠ {folder!r} names a folder — use {folder.rstrip('/') + '/**'!r}"
         except Exception:
             suffix = " · ⚠ path not found"
         return f"{types}{suffix}"
 
     return _summary
+
+
+def _folder_glob(root: Path, globs: list[str]) -> str | None:
+    """The first glob that names a folder rather than reaching into it.
+
+    ``*`` stops at ``/``, so ``build`` and ``build/`` only ever match a FILE
+    called build: as an exclude it is inert, and as an include it leaves the
+    source indexing nothing. Bounded to the first few, one stat each.
+    """
+    for glob in globs[:8]:
+        if "*" in glob or "?" in glob or "[" in glob:
+            continue
+        name = glob.strip().rstrip("/")
+        if not name:
+            continue
+        try:
+            if (root / name).is_dir():
+                return glob
+        except OSError:
+            continue
+    return None
 
 
 def _other_filters(src: Any) -> list[str]:
