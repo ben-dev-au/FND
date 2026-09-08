@@ -885,9 +885,38 @@ class ScopeController:
             lexical = QueryPlan.from_user_text(raw).lexical.strip()
             if not lexical:
                 return None
-            return index.parse_query(lexical, DEFAULT_SEARCH_FIELDS)
+            exact = index.parse_query(lexical, DEFAULT_SEARCH_FIELDS)
+            return self._widen_to_fuzzy(index, exact, lexical)
         except Exception:
             return None
+
+    def _widen_to_fuzzy(self, index: Any, exact: Any, lexical: str) -> Any:
+        """The fuzzy expansion too, where the exact query matches nothing.
+
+        A typo the cascade recovers from put tagged files on screen while the
+        branch, parsing exactly, found none and reported "none indexed". Only
+        when exact matches nothing: everything listed then came from the
+        widened passes, so this cannot over-report.
+        """
+        import tantivy
+
+        from fnd.cascade import fuzzy_body_clauses
+
+        if index.searcher().search(exact, 1).count:
+            return exact
+        searcher = getattr(self._app._search, "searcher", None)
+        if searcher is None:
+            return exact
+        defaults = self._app._config.defaults if self._app._config else None
+        clauses = fuzzy_body_clauses(
+            searcher,
+            lexical,
+            auto_fuzzy_enabled=defaults.fuzzy_enabled if defaults else True,
+            min_term_chars=defaults.fuzzy_min_term_chars if defaults else 0,
+        )
+        if not clauses:
+            return exact
+        return tantivy.Query.boolean_query(clauses)
 
     def tag_marker(self, source: str, node: Any) -> str:
         """``●`` included, ``⊘`` excluded, ``◐`` a descendant is selected, ``○`` off.

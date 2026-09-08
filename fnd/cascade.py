@@ -106,6 +106,67 @@ def _strip_fuzzy_modifiers(query: str) -> str:
     return _STRIP_FUZZY_MOD_RE.sub("", query)
 
 
+def fuzzy_body_clauses(
+    searcher: Searcher,
+    query: str,
+    *,
+    auto_fuzzy_enabled: bool = True,
+    min_term_chars: int = 0,
+) -> list[tuple[tantivy.Occur, tantivy.Query]] | None:
+    """The fuzzy pass's body clauses, or None where it would not run.
+
+    ``F_BODY`` is en_stem-analyzed, so the on-disk token form for "Templates"
+    is ``templat``. This bypasses parse_query (and its query-time stemming),
+    so each query term is lowercased and Snowball-stemmed before the
+    dictionary is consulted — otherwise the Levenshtein distance is computed
+    between mismatched token shapes.
+
+    Each stem expands into the indexed stems within edit distance, OR-ed as
+    regular ``term_query``s: the rewrite Lucene applies to ``MultiTermQuery``,
+    so a matched doc lands on BM25 rather than Tantivy's constant-1.0
+    ``fuzzy_term_query`` output.
+
+    Shared with the filters pane, which needs the same expansion to describe
+    the results a fuzzy-only query put on screen.
+    """
+    term_dists = _terms_with_fuzzy(query)
+    if not term_dists:
+        return None
+    schema = build_schema()
+    stems_with_dists: list[tuple[str, int]] = []
+    for term, explicit in term_dists:
+        stem = _fuzzy_stem(term)
+        if explicit is not None:
+            d = explicit
+        elif auto_fuzzy_enabled and len(stem) >= min_term_chars:
+            d = auto_fuzzy_distance(stem)
+        else:
+            d = 0
+        stems_with_dists.append((stem, d))
+    if all(d == 0 for _, d in stems_with_dists):
+        return None
+    clauses: list[tuple[tantivy.Occur, tantivy.Query]] = []
+    for stem, dist in stems_with_dists:
+        variants = _fuzzy_term_variants(searcher, stem, dist)
+        if not variants:
+            # No indexed stem within distance — the AND of fuzzy term clauses
+            # can never match.
+            return None
+        if len(variants) == 1:
+            clauses.append(
+                (tantivy.Occur.Must, tantivy.Query.term_query(schema, F_BODY, variants[0]))
+            )
+        else:
+            term_or = tantivy.Query.boolean_query(
+                [
+                    (tantivy.Occur.Should, tantivy.Query.term_query(schema, F_BODY, v))
+                    for v in variants
+                ]
+            )
+            clauses.append((tantivy.Occur.Must, term_or))
+    return clauses
+
+
 def _fuzzy_pass(
     searcher: Searcher,
     *,
@@ -135,57 +196,16 @@ def _fuzzy_pass(
     from a subset of the active collection's sources, so the cascade
     fallback honours the same source-scope as the literal pass.
     """
-    term_dists = _terms_with_fuzzy(query)
-    if not term_dists:
-        return []
     schema = build_schema()
-    # ``F_BODY`` is en_stem-analyzed, so the on-disk token form for
-    # "Templates" is ``templat``. The fuzzy pass bypasses parse_query
-    # (and its query-time stemming), so we lowercase + Snowball-stem
-    # each query term ourselves before consulting the dictionary —
-    # otherwise the Levenshtein distance is computed between
-    # mismatched token shapes (``templatas`` vs ``templat`` would
-    # read as distance 2).
-    #
-    # We then expand each query stem into the set of indexed stems
-    # within edit distance and OR them as regular ``term_query``s.
-    # This is the same rewrite Lucene applies to ``MultiTermQuery``
-    # so each matched doc lands on BM25 scoring rather than Tantivy's
-    # constant-1.0 ``fuzzy_term_query`` output.
-    stems_with_dists: list[tuple[str, int]] = []
-    for term, explicit in term_dists:
-        stem = _fuzzy_stem(term)
-        if explicit is not None:
-            d = explicit
-        elif auto_fuzzy_enabled and len(stem) >= min_term_chars:
-            d = auto_fuzzy_distance(stem)
-        else:
-            d = 0
-        stems_with_dists.append((stem, d))
-    if all(d == 0 for _, d in stems_with_dists):
+    body = fuzzy_body_clauses(
+        searcher,
+        query,
+        auto_fuzzy_enabled=auto_fuzzy_enabled,
+        min_term_chars=min_term_chars,
+    )
+    if body is None:
         return []
-    subqueries: list[tuple[tantivy.Occur, tantivy.Query]] = []
-    for stem, dist in stems_with_dists:
-        variants = _fuzzy_term_variants(searcher, stem, dist)
-        if not variants:
-            # No indexed stem within distance — the AND of fuzzy term
-            # clauses can never match, so bail early.
-            return []
-        if len(variants) == 1:
-            subqueries.append(
-                (
-                    tantivy.Occur.Must,
-                    tantivy.Query.term_query(schema, F_BODY, variants[0]),
-                )
-            )
-        else:
-            term_or = tantivy.Query.boolean_query(
-                [
-                    (tantivy.Occur.Should, tantivy.Query.term_query(schema, F_BODY, v))
-                    for v in variants
-                ]
-            )
-            subqueries.append((tantivy.Occur.Must, term_or))
+    subqueries: list[tuple[tantivy.Occur, tantivy.Query]] = list(body)
     if collection:
         # Restrict to a collection (or, for the TUI's multi-collection scope,
         # ANY of a list) on the ``collection`` field. Const-scored to 0 so it's
