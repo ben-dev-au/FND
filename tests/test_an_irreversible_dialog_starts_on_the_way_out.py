@@ -7,6 +7,10 @@ and the cache clear were the same defect, in the same file, with the same
 hand-rolled `on_mount`.
 
 `UpdateAllConfirm` is the control: its affirmative is safe, and nothing moves.
+
+Moving the cursor then left the footer behind: four screens went on reading
+`⏎ Confirm` while Enter cancelled, and cancelling is silent, so the screen you
+land on is indistinguishable from the one you would land on if it had worked.
 """
 
 from __future__ import annotations
@@ -130,3 +134,50 @@ def test_no_confirm_screen_focuses_the_list_itself() -> None:
             if "open_confirm_list" not in body:
                 offenders.append(node.name)
     assert not offenders, f"confirm screens that place their own cursor: {offenders}"
+
+
+async def _footer_and_cursor(app: FNDApp, pilot: Any, screen: Any) -> tuple[str, str | None]:
+    app.push_screen(screen)
+    for _ in range(15):
+        await pilot.pause()
+    options = app.screen.query_one("#confirm_list", OptionList)
+    landed = options._options[options.highlighted or 0].id
+    footer = "".join(s.text for s in app.screen._compositor.render_strips()[-1])
+    return footer, landed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda: DeleteCollectionScreen(collection_name="papers"),
+        lambda: DeleteSourceScreen(collection_name="papers", source_index=0),
+        lambda: CacheMaintenanceConfirm(
+            title="Clear texture cache",
+            summary=Text("Deletes every saved texturing."),
+            run=lambda: 0,
+            confirm_label="Yes, clear it",
+            result_label="cleared",
+            irreversible=True,
+        ),
+        lambda: UpdateAllConfirm(collection_names=["papers"]),
+    ],
+    ids=["delete-collection", "delete-source", "clear-cache", "update-all"],
+)
+async def test_the_footer_says_what_enter_will_do(
+    config: Config, tmp_index_dir: Path, make: Any
+) -> None:
+    """The invariant, across every confirm screen: `Confirm` may only be
+    advertised where Enter on arrival actually confirms."""
+    app = FNDApp(index_dir=tmp_index_dir, config=config)
+    async with app.run_test(size=(120, 34)) as pilot:
+        await pilot.pause()
+        footer, landed = await _footer_and_cursor(app, pilot, make())
+
+    if landed == "yes":
+        assert "Confirm" in footer, footer
+    else:
+        assert "Confirm" not in footer, (
+            f"Enter cancels here, and the footer promises otherwise: {footer}"
+        )
+        assert "Select" in footer, footer

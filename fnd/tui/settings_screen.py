@@ -43,7 +43,7 @@ from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Input, OptionList, Static, TextArea
-from textual.widgets.option_list import Option
+from textual.widgets.option_list import Option, OptionDoesNotExist
 
 from fnd.display_text import sanitise_display_text
 from fnd.tui.actions import load_keymap
@@ -225,18 +225,21 @@ def build_confirm_body(
     return text
 
 
-def open_confirm_list(screen: Screen[Any], *, land_on: str = "") -> OptionList:
-    """Focus a screen's ``#confirm_list``; ``land_on`` names the row to start on.
+def open_confirm_list(screen: Screen[Any], *, land_on: str = "") -> tuple[str, str]:
+    """Focus a screen's ``#confirm_list``, and say what Enter does from there.
 
-    Irreversible dialogs start on the way out. Enter is one keypress from a
+    Irreversible dialogs start on the way out — Enter is one keypress from a
     delete otherwise, and Enter is how every one of these screens is reached.
+    The hint comes back from the same call because the two disagreed the moment
+    the cursor moved: four screens went on reading `⏎ Confirm` while Enter
+    cancelled.
     """
     options = screen.query_one("#confirm_list", OptionList)
     if land_on:
-        with contextlib.suppress(StopIteration):
-            options.highlighted = next(i for i, o in enumerate(options._options) if o.id == land_on)
+        with contextlib.suppress(OptionDoesNotExist):
+            options.highlighted = options.get_option_index(land_on)
     options.focus()
-    return options
+    return ("⏎", "Select") if land_on else ("⏎", "Confirm")
 
 
 def confirm_yes_option(label: str, severity: str = "safe") -> Option:
@@ -1338,7 +1341,10 @@ class SettingsScreen(Screen[None]):
         )
         with Vertical(id="settings_box") as box:
             box.border_title = title
-            yield Input(placeholder="Type to filter…", id="settings_search")
+            # Naming the key, as the filter browser's box does: these screens
+            # can open with the LIST focused, where a typed letter runs its
+            # command — `q` on the Keybindings sheet quit the app.
+            yield Input(placeholder="Filter rows…  (/)", id="settings_search")
             yield SettingsList()
             yield DetailStrip()
             if not self._breadcrumb:
@@ -1794,6 +1800,16 @@ class SettingsScreen(Screen[None]):
                 continue
             # Never intercept Enter — that belongs to the regular activate path.
             if item.key.lower() == "enter":
+                continue
+            # Nor `/`: invoking it from here closes the sheet and focuses the
+            # query bar, which left this screen's own filter box unreachable
+            # while a placeholder invited typing into it — and every letter
+            # typed ran a command, `q` included.
+            if item.action_id == "focus_query":
+                continue
+            # Rows documenting another screen's widget keys carry no action, so
+            # "invoking" one closed the whole settings stack and did nothing.
+            if not item.action_id:
                 continue
             if item.key.lower() == pressed_label.lower():
                 ev.stop()
@@ -3873,10 +3889,10 @@ class DeleteCollectionScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        open_confirm_list(self, land_on="no")
+        enter = open_confirm_list(self, land_on="no")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎", "Confirm"), ("Esc", "Cancel")))
+            _hint_bar(app, (("↑↓", "Choose"), enter, ("Esc", "Cancel")))
         )
 
     def action_cursor(self, direction: int) -> None:
@@ -4056,10 +4072,10 @@ class CacheMaintenanceConfirm(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        open_confirm_list(self, land_on="no" if self._irreversible else "")
+        enter = open_confirm_list(self, land_on="no" if self._irreversible else "")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("↑↓", "Nav"), ("⏎", "Confirm"), ("Esc", "Cancel")))
+            _hint_bar(app, (("↑↓", "Nav"), enter, ("Esc", "Cancel")))
         )
 
     def action_cursor(self, direction: int) -> None:
@@ -4201,10 +4217,10 @@ class UpdateAllConfirm(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        open_confirm_list(self)
+        enter = open_confirm_list(self)
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("↑↓", "Nav"), ("⏎", "Confirm"), ("Esc", "Cancel")))
+            _hint_bar(app, (("↑↓", "Nav"), enter, ("Esc", "Cancel")))
         )
 
     def action_cursor(self, direction: int) -> None:
@@ -4393,10 +4409,10 @@ class StructuredPdfConfirmScreen(Screen[None]):
         )
 
     def on_mount(self) -> None:
-        open_confirm_list(self)
+        enter = open_confirm_list(self)
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("↑↓", "Nav"), ("⏎", "Confirm"), ("Esc", "Cancel")))
+            _hint_bar(app, (("↑↓", "Nav"), enter, ("Esc", "Cancel")))
         )
 
     def action_cursor(self, direction: int) -> None:
@@ -4691,10 +4707,10 @@ class RebuildConfirmScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        open_confirm_list(self, land_on="no")
+        enter = open_confirm_list(self, land_on="no")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎", "Confirm"), ("Esc", self._decline_label)))
+            _hint_bar(app, (("↑↓", "Choose"), enter, ("Esc", self._decline_label)))
         )
 
     def action_cursor(self, direction: int) -> None:
@@ -4775,10 +4791,10 @@ class DeleteSourceScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        open_confirm_list(self, land_on="no")
+        enter = open_confirm_list(self, land_on="no")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎", "Confirm"), ("Esc", "Cancel")))
+            _hint_bar(app, (("↑↓", "Choose"), enter, ("Esc", "Cancel")))
         )
 
     def action_cursor(self, direction: int) -> None:
@@ -5623,6 +5639,18 @@ class FilterTextScreen(Screen[None]):
             return
         status.add_class("-ok")
         rows = _describe_spec(spec)
+        dropped = _protection_dropped(self._spec, spec)
+        if dropped:
+            # Replacing the text is how the guard leaves: it is rendered into
+            # the box, so deleting it reads as typing one rule.
+            status.add_class("-bad")
+            status.remove_class("-ok")
+            status.update(
+                f"⚠ this drops the {dropped} exclusion — {rows}"
+                if rows
+                else f"⚠ this drops the {dropped} exclusion"
+            )
+            return
         status.update(f"✓ {rows}" if rows else "✓ no filters")
 
     def action_back(self) -> None:
@@ -5643,6 +5671,21 @@ class FilterTextScreen(Screen[None]):
             return
         self._on_save(spec)
         self.app.pop_screen()
+
+
+def _protection_dropped(before: Any, after: Any) -> str:
+    """A guard tag the edit would remove, or "".
+
+    ``no_index`` is the one exclusion a user cannot see the effect of until a
+    file they meant to keep private turns up in results.
+    """
+    from fnd.tui.widgets.toggle_tree import NEVER_ONLY_TAGS
+
+    def _tags(spec: Any) -> set[str]:
+        return {t for tags in spec.exclude_tags.values() for t in tags}
+
+    lost = sorted((_tags(before) - _tags(after)) & set(NEVER_ONLY_TAGS))
+    return "/".join(lost)
 
 
 def _describe_spec(spec: Any) -> str:
@@ -6409,8 +6452,13 @@ class FilterBrowserScreen(Screen[None]):
 
     def action_edit_text(self) -> None:
         def _save(spec: Any) -> None:
+            # Named when it lands, not only while typing: the text screen's
+            # warning is gone by the time the tree is back.
+            dropped = _protection_dropped(self._spec, spec)
             self._spec = spec
             self._rebuild()
+            if dropped:
+                self.app.notify(f"{dropped} files are no longer excluded", severity="warning")
 
         self.app.push_screen(
             FilterTextScreen(title=f"{self._title} (text)", spec=self._spec, on_save=_save)

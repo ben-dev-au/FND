@@ -218,7 +218,10 @@ async def test_clear_confirm_chrome(built_index: Path, cfg: Config, isolated_cac
         assert opts.option_count == 2
         hint = str(screen.query_one("#footer_hints", Static).content)
         assert "Nav" in hint
-        assert "Confirm" in hint
+        # The cursor starts on Cancel here, so the footer must not promise
+        # otherwise. It said "Confirm" while Enter cancelled.
+        assert "Select" in hint, hint
+        assert "Confirm" not in hint, hint
         assert "Cancel" in hint
 
 
