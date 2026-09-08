@@ -646,3 +646,63 @@ class TestThePickerOffersWhatWouldBeIndexed:
         root = tmp_path.resolve()
         self._corpus(root)
         assert set(sample_source(root, budget_s=1.0, ignore_names=()).kinds) == {"md", "txt"}
+
+
+class TestTagsThatCannotBothHold:
+    """A file must carry a required tag to pass and is dropped if it carries
+    an excluded one, so when every required tag is excluded too the set is
+    empty however large the corpus — and nothing said so."""
+
+    @staticmethod
+    def _survivors(root: Path, spec) -> set[str]:
+        from fnd.file_facts import FileFacts
+        from fnd.filters.text import build_gate
+        from fnd.tags import providers_for
+
+        gate = build_gate(spec)
+        providers = providers_for("linux", ["frontmatter"])
+        return {
+            p.name
+            for p in root.iterdir()
+            if p.suffix == ".md" and gate.passes(FileFacts(p, root=root, tag_providers=providers))
+        }
+
+    @staticmethod
+    def _corpus(root: Path) -> None:
+        (root / "keep.md").write_text("---\ntags: [keep]\n---\nx\n")
+        (root / "other.md").write_text("---\ntags: [other]\n---\ny\n")
+
+    def test_it_is_named_and_really_matches_nothing(self, tmp_path: Path) -> None:
+        from fnd.filters import FilterSpec
+
+        self._corpus(tmp_path)
+        spec = FilterSpec(
+            include_tags={"frontmatter": ("keep",)}, exclude_tags={"frontmatter": ("keep",)}
+        )
+        assert spec.impossible_bounds() == ("tags: every required tag is also excluded",)
+        assert self._survivors(tmp_path, spec) == set(), "the premise of the warning"
+
+    def test_one_of_two_required_tags_excluded_is_workable(self, tmp_path: Path) -> None:
+        """Crying wolf would be worse than silence: files with the other tag
+        still pass, so this must not be flagged."""
+        from fnd.filters import FilterSpec
+
+        self._corpus(tmp_path)
+        spec = FilterSpec(
+            include_tags={"frontmatter": ("keep", "other")},
+            exclude_tags={"frontmatter": ("keep",)},
+        )
+        assert spec.impossible_bounds() == ()
+        assert self._survivors(tmp_path, spec) == {"other.md"}
+
+    def test_the_two_tag_sources_are_different_statements(self) -> None:
+        from fnd.filters import FilterSpec
+
+        spec = FilterSpec(include_tags={"frontmatter": ("keep",)}, exclude_tags={"os": ("keep",)})
+        assert spec.impossible_bounds() == ()
+
+    def test_an_ordinary_pair_is_not_flagged(self) -> None:
+        from fnd.filters import FilterSpec
+
+        assert FilterSpec(include_tags={"frontmatter": ("keep",)}).impossible_bounds() == ()
+        assert FilterSpec(exclude_tags={"frontmatter": ("no_index",)}).impossible_bounds() == ()

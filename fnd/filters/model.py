@@ -148,10 +148,28 @@ class FilterSpec:
             ("created", self.created_after, self.created_before, "starts after it ends"),
             ("modified", self.modified_after, self.modified_before, "starts after it ends"),
         )
-        return tuple(
+        clashes = [
             f"{name}: {why}"
             for name, low, high, why in pairs
             if low is not None and high is not None and low > high  # type: ignore[operator]
+        ]
+        if self._every_required_tag_is_excluded():
+            clashes.append("tags: every required tag is also excluded")
+        return tuple(clashes)
+
+    def _every_required_tag_is_excluded(self) -> bool:
+        """Whether the tag rules can admit nothing at all.
+
+        A file must carry a required tag to pass, and is dropped if it carries
+        an excluded one — so when each required tag is excluded too, the set is
+        empty however large the corpus.
+        """
+        includes = self.tag_includes
+        if not any(includes.values()):
+            return False
+        excludes = self.tag_excludes
+        return all(
+            set(tags) <= set(excludes.get(source, ())) for source, tags in includes.items() if tags
         )
 
     def __post_init__(self) -> None:
