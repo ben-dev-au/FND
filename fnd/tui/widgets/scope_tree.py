@@ -7,10 +7,12 @@ from typing import Any
 from textual import events
 from textual.widgets import Tree
 
+from fnd.tui.widgets.arrow_expansion import ArrowsExpand
+
 __all__ = ["ScopeTree"]
 
 
-class ScopeTree(Tree[dict[str, Any]]):
+class ScopeTree(ArrowsExpand, Tree[dict[str, Any]]):
     """A ``Tree`` whose highlighted row survives a change of viewport.
 
     Every search re-lays the sidebar out — results arriving and leaving change

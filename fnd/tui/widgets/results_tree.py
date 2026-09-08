@@ -14,13 +14,14 @@ from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
 from fnd.tui.preview.warmth import WarmState
+from fnd.tui.widgets.arrow_expansion import ArrowsExpand
 from fnd.tui.widgets.clear_bar import focus_clear_bar
 from fnd.tui.widgets.state_marker import StateMarkerLabel
 
 __all__ = ["ResultsTree"]
 
 
-class ResultsTree(StateMarkerLabel, Tree[dict[str, Any]]):
+class ResultsTree(ArrowsExpand, StateMarkerLabel, Tree[dict[str, Any]]):
     """Results tree where expanded parents (file rows) are literally
     unselectable.
 

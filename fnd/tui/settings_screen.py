@@ -2237,7 +2237,7 @@ class TreePickerScreen(Screen[None]):
             _hint_bar(
                 app,
                 (
-                    ("⏎/Space", "Toggle"),
+                    ("⏎", "Toggle"),
                     ("←/→", "Collapse/Expand"),
                     (f"Esc/{COMMIT_KEY}", "Done"),
                 ),

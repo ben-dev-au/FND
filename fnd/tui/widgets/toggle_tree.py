@@ -7,7 +7,7 @@ each re-deriving it (and re-deriving the same bugs).
 
 Correct by construction — each property kills a class of bug the ad-hoc trees hit:
 
-* ``auto_expand = False`` and Enter/Space = *toggle only*; ←/→ = expand/collapse.
+* ``auto_expand = False`` and Enter = *toggle only*; ←/→ = expand/collapse.
   Toggling a category can never also expand/collapse it.
 * Every node is selectable, so a mouse click toggles whatever row it lands on
   (no "click registers but nothing happens").
@@ -30,6 +30,7 @@ from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
 from fnd.tui.results_labels import _styled_state_row, state_colour
+from fnd.tui.widgets.arrow_expansion import ArrowsExpand
 from fnd.tui.widgets.clear_bar import focus_clear_bar
 from fnd.tui.widgets.state_marker import StateMarkerLabel
 
@@ -138,12 +139,11 @@ class ToggleGroup:
         return (self, *(d for g in self.groups for d in g.walk()))
 
 
-class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
+class ToggleTree(ArrowsExpand, StateMarkerLabel, Tree[dict[str, Any]]):
     """A ``Tree`` of category → item toggles with tri-state parents."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("enter", "toggle_selection", "Toggle", show=False),
-        Binding("space", "toggle_selection", "Toggle", show=False),
         Binding("right", "expand_here", "Expand", show=False),
         Binding("left", "collapse_here", "Collapse", show=False),
     ]
