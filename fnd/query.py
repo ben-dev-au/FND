@@ -781,8 +781,9 @@ def group_by_file(
 
     Hits keep first-seen order, so passing pre-ranked output (BM25,
     reranked, fusion-fused, cascade-stitched) produces FileGroups in the
-    same order. Within a group the sections are re-sorted into document
-    order — they are CHOSEN by score and READ in sequence. Sections are kept when the section's score is at least
+    same order. Within a group, sections that scored equally are ordered by
+    position, so a file's own sections never read out of sequence for want of
+    a tie-break. Sections are kept when the section's score is at least
     ``score_threshold * file_top_score`` and the per-file cap
     ``sections_per_file`` hasn't been hit yet; ``score_threshold = 0``
     disables the relative filter (cap-only behaviour).
@@ -811,12 +812,14 @@ def group_by_file(
             kept = [h for h in all_hits if h.score >= min_score]
         else:
             kept = all_hits
-        # Selected by score, shown in document order: 60 equal-scoring
-        # sections of one file rendered "Day 3 … Day 60, Day 1, Day 2",
-        # because equal scores come back in whatever order the segments hold.
-        # The match navigator already sorted them; the list the user reads did
-        # not. `top` is taken above, so the group still ranks on its best hit.
-        section_hits = sorted(kept[:sections_per_file], key=lambda h: (h.chunk_seq, h.line))
+        # Ranked, then document order as the TIE-BREAK: 60 equal-scoring
+        # sections of one file rendered "Day 3 … Day 60, Day 1, Day 2" because
+        # equal scores come back in whatever order the segments hold. Ordering
+        # by position outright is a different change — it demotes the section
+        # that scored best, and the preview lands on the first one.
+        section_hits = sorted(
+            kept[:sections_per_file], key=lambda h: (-h.score, h.chunk_seq, h.line)
+        )
         out.append(
             FileGroup(
                 parent_id=pid,

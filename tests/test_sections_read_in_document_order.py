@@ -4,6 +4,10 @@ Equal scores come back in whatever order the segments hold, and the list the
 user reads showed them that way. The match navigator already sorted them by
 `chunk_seq` before using them, which is the tell: the order was known to be
 wrong by the one consumer that depended on it.
+
+Position is the TIE-BREAK, not the order. Sorting by position outright demotes
+the section that scored best — and the preview lands on the first one, so that
+is a different change with a different consequence.
 """
 
 from __future__ import annotations
@@ -35,25 +39,33 @@ def test_equal_scores_read_in_sequence() -> None:
     assert [h.chunk_seq for h in groups[0].hits] == [1, 2, 3, 60]
 
 
-def test_the_group_still_ranks_on_its_best_section() -> None:
-    """The control: ordering the sections must not restate the file's score."""
+def test_a_better_section_still_comes_first() -> None:
+    """The control, and the reason position is only the tie-break: the first
+    section is where the preview lands."""
     hits = [_hit(9, score=5.0), _hit(1, score=0.5)]
 
     groups = group_by_file(hits, limit=10, sections_per_file=10)
 
-    assert groups[0].top_score == 5.0, "the group ranks on the best hit, not the first one"
-    assert [h.chunk_seq for h in groups[0].hits] == [1, 9]
+    assert groups[0].top_score == 5.0
+    assert [h.chunk_seq for h in groups[0].hits] == [9, 1], "position must not demote a better hit"
 
 
 def test_selection_is_still_by_score() -> None:
-    """The cap keeps the best sections; only their order changes."""
+    """The cap keeps the best sections, and they stay in their ranked order."""
     hits = [_hit(9, score=5.0), _hit(5, score=4.0), _hit(1, score=0.1)]
 
     groups = group_by_file(hits, limit=10, sections_per_file=2)
 
-    assert [h.chunk_seq for h in groups[0].hits] == [5, 9], (
-        "the weak one is dropped, not reordered in"
-    )
+    assert [h.chunk_seq for h in groups[0].hits] == [9, 5], "the weak one is dropped"
+
+
+def test_ties_inside_a_ranked_list_still_sort() -> None:
+    """The mixed case: two equal sections below a better one read in order."""
+    hits = [_hit(7, score=9.0), _hit(4, score=1.0), _hit(2, score=1.0)]
+
+    groups = group_by_file(hits, limit=10, sections_per_file=10)
+
+    assert [h.chunk_seq for h in groups[0].hits] == [7, 2, 4]
 
 
 def test_files_keep_their_ranked_order() -> None:
