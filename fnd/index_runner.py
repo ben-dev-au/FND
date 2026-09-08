@@ -45,7 +45,7 @@ from fnd.cloud_files import (
     provider_label,
 )
 from fnd.config import CollectionConfig
-from fnd.extract import ExtractError, extract
+from fnd.extract import ExtractError, extract, no_text_reason
 from fnd.fsmeta import read_file_times
 from fnd.index import (
     _COMMIT_BATCH,
@@ -609,6 +609,12 @@ def _process_one_file(
         # collections' chunks on an extraction error.
         writer.delete_documents_by_query(_delete_q)
         return n_chunks, False, False, str(e)
+
+    # Extraction that yields nothing raises nothing, so a caller counting
+    # files would report this one as indexed while the index holds none of
+    # it. The scoped delete above already ran, so it is genuinely absent.
+    if n_chunks == 0:
+        return 0, False, False, no_text_reason(path)
 
     if not is_pdf and non_pdf_sha:
         from fnd.seen_log import mark_seen

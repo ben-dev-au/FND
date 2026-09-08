@@ -13,7 +13,7 @@ from pathlib import Path
 from tantivy import Document, Index, IndexWriter, Query, Schema
 
 from fnd.config import CollectionConfig
-from fnd.extract import Chunk, ExtractError, extract
+from fnd.extract import Chunk, ExtractError, extract, no_text_reason
 from fnd.meta_blob import encode as encode_meta_blob
 from fnd.schema import (
     F_AUTHOR,
@@ -305,6 +305,7 @@ def build_index(
         meta_blob_bytes, file_tags = read_file_metadata(
             path, tag_sources=tag_sources, frontmatter_keys=tag_frontmatter_keys
         )
+        n_chunks = 0
         try:
             for chunk in extract(path):
                 writer.add_document(
@@ -316,11 +317,17 @@ def build_index(
                     )
                 )
                 written += 1
+                n_chunks += 1
                 if written % _COMMIT_BATCH == 0:
                     commit(writer)
         except ExtractError as err:
             writer.delete_documents_by_query(_delete_q)
             print(f"[fnd skip {_skip_stamp()}] {err}", file=sys.stderr)
+        else:
+            # Yielding nothing raises nothing, so without this the file is
+            # skipped in silence.
+            if n_chunks == 0:
+                print(f"[fnd skip {_skip_stamp()}] {no_text_reason(path)}", file=sys.stderr)
     commit(writer)
     # See build_index_from_config: skip the prune when a root is missing, or
     # an offline volume would read as "every file was deleted".
@@ -380,6 +387,7 @@ def build_index_from_config(
             live_parent_ids.add(parent_id)
             _delete_q = _scoped_delete_query(index.schema, collection, parent_id)
             writer.delete_documents_by_query(_delete_q)
+            n_chunks = 0
             try:
                 for chunk in extract(path):
                     writer.add_document(
@@ -392,6 +400,7 @@ def build_index_from_config(
                         )
                     )
                     written += 1
+                    n_chunks += 1
                     if written % _COMMIT_BATCH == 0:
                         commit(writer)
             except ExtractError as err:
@@ -400,6 +409,12 @@ def build_index_from_config(
                 # leave partial chunks indexed.
                 writer.delete_documents_by_query(_delete_q)
                 print(f"[fnd skip {_skip_stamp()}] {err}", file=sys.stderr)
+            else:
+                if n_chunks == 0:
+                    print(
+                        f"[fnd skip {_skip_stamp()}] {no_text_reason(path)}",
+                        file=sys.stderr,
+                    )
     commit(writer)
     # Rebuild already wiped the collection, so nothing can be stale.
     if not rebuild:

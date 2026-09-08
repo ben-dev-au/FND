@@ -15,6 +15,7 @@ its entire collection.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # A fine-grained file-type id (one per format, e.g. "pdf", "python", "epub").
 # The authoritative set lives in ``fnd.kinds.KIND_SPECS``; this is a plain ``str``
@@ -34,6 +35,13 @@ class ExtractError(Exception):
         super().__init__(f"{path}: {reason}")
         self.path = path
         self.reason = reason
+
+
+def no_text_reason(path: str | Path) -> str:
+    """Why a file that raised nothing still put nothing in the index."""
+    is_pdf = Path(path).suffix.lower() == ".pdf"
+    what = "no text layer (scanned or image-only PDF)" if is_pdf else "no text found"
+    return f"{path}: {what}"
 
 
 @dataclass(slots=True, frozen=True)
