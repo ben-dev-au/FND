@@ -1186,6 +1186,29 @@ def _apply_setting(raw: dict[str, Any], dotted_path: str, value: object) -> None
         cursor[leaf] = value
 
 
+def config_fingerprint(config_path: Path) -> str:
+    """What the config file looked like, for spotting a change underneath.
+
+    An editor holds the values it read when it opened. `_rewrite` re-reading
+    from disk does not save it: the values being written are the stale ones,
+    so a second editor's save is silently reverted by the first one's. Compare
+    this before writing and the overwrite becomes a refusal.
+
+    Bytes, not mtime: a second-granularity clock cannot separate two saves a
+    keystroke apart, which is exactly the case that loses work.
+    """
+    import hashlib
+
+    try:
+        return hashlib.sha256(config_path.read_bytes()).hexdigest()
+    except OSError:
+        return ""
+
+
+class ConfigChangedError(RuntimeError):
+    """Raised when the file moved on since the editor read it."""
+
+
 def write_settings(*, config_path: Path, values: dict[str, object]) -> Config:
     """Apply several dotted-path settings in one read-modify-write.
 

@@ -2211,7 +2211,13 @@ def _filters_defaults(app: FNDApp) -> Any:
 
 def _open_filter_browser(app: FNDApp) -> None:
     """The defaults, as branches rather than a column of text boxes."""
-    from fnd.config import default_config_path, load, write_settings
+    from fnd.config import (
+        ConfigChangedError,
+        config_fingerprint,
+        default_config_path,
+        load,
+        write_settings,
+    )
     from fnd.tui.settings_screen import (
         FilterBrowserScreen,
         _spec_from_filters,
@@ -2219,8 +2225,21 @@ def _open_filter_browser(app: FNDApp) -> None:
     )
 
     current = _filters_defaults(app)
+    # What the file looked like when this editor read it. `:` opens a second
+    # settings stack straight over this screen with no gate, so a second Index
+    # filters can be opened, edited and saved while this one still holds the
+    # values it started with — and `^s` here then reverted that save and
+    # reported success. The CLI writing between open and save is the same bug
+    # through a different door.
+    opened_with = config_fingerprint(default_config_path())
 
     def _save(spec: Any, gitignore: bool, fndignore: bool) -> None:
+        if config_fingerprint(default_config_path()) != opened_with:
+            raise ConfigChangedError(
+                "The config changed since this screen opened — most likely "
+                "saved from another Filters screen. Nothing was written. "
+                "Close this screen and reopen it to see the current filters."
+            )
         values = _spec_to_mapping(spec)
         values["respect_gitignore"] = gitignore
         values["respect_fndignore"] = fndignore

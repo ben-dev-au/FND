@@ -2184,10 +2184,32 @@ class FNDApp(App[None]):
         full-screen list of every action and setting, with a search Input
         at the top for free-text filtering across all sections.
         """
-        from fnd.tui.settings_screen import SettingsScreen, open_settings
+        from fnd.tui.settings_screen import (
+            SettingsScreen,
+            UnsavedChangesScreen,
+            open_settings,
+            unsaved_on_stack,
+        )
 
         if isinstance(self.screen, SettingsScreen):
             self._close_settings_stack()
+            return
+        # Opening a stack over a dirty editor is as much a way to lose the
+        # edit as closing one. The filter browser is not a SettingsScreen, so
+        # `:` landed here and pushed a SECOND settings stack over it — from
+        # which a second Index filters could be opened and saved, leaving the
+        # first holding stale values that its own `^s` then wrote back.
+        pending = unsaved_on_stack(self.screen_stack)
+        if pending is not None:
+            what, save = pending
+            self.push_screen(
+                UnsavedChangesScreen(
+                    what=what,
+                    on_save=save,
+                    on_leave=lambda: open_settings(self),
+                    leave_label="Discard and open the menu",
+                )
+            )
             return
         open_settings(self)
 

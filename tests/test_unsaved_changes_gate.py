@@ -365,3 +365,47 @@ class TestEveryAdvertisedExitAsks:
 
         assert gone, "the gate stayed up after discard"
         assert running, "discard should close the stack, not the app"
+
+
+class TestOpeningAStackIsAlsoAnExit:
+    """Opening a settings stack over a dirty editor loses the edit as surely
+    as closing one does.
+
+    The filter browser is not a `SettingsScreen`, so `:` fell through to the
+    open branch and pushed a SECOND stack over it — from which a second Index
+    filters could be opened and saved, leaving the first holding stale values
+    that its own `^s` then wrote back over the newer save.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_menu_key_asks_before_opening_over_a_dirty_screen(
+        self, tmp_index_dir: Path
+    ) -> None:
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(_DirtyScreen())
+            for _ in range(6):
+                await pilot.pause()
+            app.action_open_command_palette()
+            for _ in range(8):
+                await pilot.pause()
+            asked = app.screen.__class__ is UnsavedChangesScreen
+
+        assert asked, "`:` opened a second stack over an unsaved edit"
+
+    @pytest.mark.asyncio
+    async def test_a_clean_screen_still_opens_at_once(self, tmp_index_dir: Path) -> None:
+        """The control: nothing to lose means no prompt in the way."""
+        from fnd.tui.settings_screen import SettingsScreen
+
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.action_open_command_palette()
+            for _ in range(12):
+                await pilot.pause()
+            names = [t.__name__ for t in type(app.screen).__mro__]
+
+        assert SettingsScreen.__name__ in names, app.screen
+        assert UnsavedChangesScreen.__name__ not in names
