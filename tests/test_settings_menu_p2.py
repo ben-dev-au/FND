@@ -303,18 +303,35 @@ class TestSourceRowsCanBeToldApart:
 
         assert _source_labels(["/a/notes"]) == ["notes"]
 
-    def test_two_rows_for_one_path_do_not_grow_forever(self) -> None:
+    def test_two_rows_for_one_path_stop_at_the_whole_path(self) -> None:
+        """Nothing separates them, so they stop where there is nothing to add.
+        Absolute, because stripping the root made an absolute path read as a
+        relative one."""
         from fnd.tui.menu import _source_labels
 
-        labels = _source_labels(["/a/notes", "/a/notes"])
-        assert labels == ["a/notes", "a/notes"]
-        assert not any(label.startswith("/") for label in labels)
+        assert _source_labels(["/a/notes", "/a/notes"]) == ["/a/notes", "/a/notes"]
 
     def test_only_the_colliding_rows_grow(self) -> None:
+        """One depth for every row let one collision widen all of them; a
+        clone of an existing source took every other row to a full path."""
         from fnd.tui.menu import _source_labels
 
         assert _source_labels(["/a/notes", "/b/notes", "/c/other"]) == [
             "a/notes",
             "b/notes",
-            "c/other",
+            "other",
         ]
+
+    def test_an_unresolvable_pair_leaves_the_rest_alone(self) -> None:
+        from fnd.tui.menu import _source_labels
+
+        assert _source_labels(["/tmp/h/globs", "/tmp/h/globs", "/other/vault"]) == [
+            "/tmp/h/globs",
+            "/tmp/h/globs",
+            "vault",
+        ]
+
+    def test_a_label_that_reaches_the_root_keeps_it(self) -> None:
+        from fnd.tui.menu import _source_labels
+
+        assert _source_labels(["/notes", "/x/notes"]) == ["/notes", "x/notes"]

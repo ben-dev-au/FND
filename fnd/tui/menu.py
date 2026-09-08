@@ -1662,31 +1662,35 @@ def _make_open_clone_source(name: str) -> Callable[[FNDApp], None]:
 
 
 def _source_labels(paths: list[str]) -> list[str]:
-    """Names that tell the sources apart.
+    """Names that tell the sources apart, each no longer than it has to be.
 
-    A basename alone left two rows both reading `notes`, with the column
-    spare to say which. Where basenames collide, enough trailing segments are
-    added to separate them.
+    Per row, not one depth for all: two rows on the same path can never
+    separate, and a shared depth took every other row to a full path with
+    them. Joined through ``Path`` so an absolute path keeps its root.
     """
+    from collections import Counter
     from pathlib import Path
 
     parts = [Path(p).parts for p in paths]
 
-    def at(depth: int) -> list[str]:
-        return ["/".join(p[-depth:]).lstrip("/") or paths[i] for i, p in enumerate(parts)]
+    def at(index: int, depth: int) -> str:
+        tail = parts[index][-depth:]
+        return str(Path(*tail)) if tail else paths[index]
 
-    labels = at(1)
-    depth = 1
-    while len(set(labels)) < len(labels) and depth < 6:
-        deeper = at(depth + 1)
-        # Stop only when a deeper label says nothing new — two rows for the
-        # same path can never be separated. Stopping merely because THIS step
-        # did not help gave up at a shared middle segment, one short of the
-        # one that separates.
-        if deeper == labels:
+    depths = [1] * len(paths)
+    for _ in range(5):
+        labels = [at(i, d) for i, d in enumerate(depths)]
+        counts = Counter(labels)
+        deeper = [
+            i
+            for i, label in enumerate(labels)
+            if counts[label] > 1 and at(i, depths[i] + 1) != label
+        ]
+        if not deeper:
             break
-        labels, depth = deeper, depth + 1
-    return labels
+        for i in deeper:
+            depths[i] += 1
+    return [at(i, d) for i, d in enumerate(depths)]
 
 
 def _provider_sources(app: FNDApp, name: str) -> tuple[MenuItem, ...]:
