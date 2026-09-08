@@ -4361,9 +4361,10 @@ class DeleteSourceScreen(Screen[None]):
             yield Static(
                 f"Remove this source from {self._collection_name!r}?\n"
                 f"Path: {path_display}\n\n"
-                "Only the config entry is removed. The files on disk are "
-                "untouched. Indexed chunks for files only reachable via "
-                "this source become orphaned until the next reindex.",
+                "The files on disk are untouched.\n"
+                f"{self._collection_name!r} is rebuilt straight afterwards, which "
+                "takes as long as indexing it does and drops the chunks only "
+                "this source reached. Files another source still reaches stay.",
                 classes="warning",
             )
             yield OptionList(
