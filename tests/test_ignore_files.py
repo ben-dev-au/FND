@@ -455,3 +455,20 @@ class TestTwoIgnoreFilesAreTwoPolicies:
         (root / "drop.md").write_text("b\n")
         (root / ".gitignore").write_text("*.md\n!keep.md\n")
         assert self._walked(root, (".gitignore",)) == {"keep.md"}
+
+
+def test_the_local_git_excludes_are_documented_as_skipped(tmp_path: Path) -> None:
+    """`.git/info/exclude` is git's local, uncommitted half. fnd does not read
+    it, the README said only what it DOES honour, and the differential suite
+    blanks the file for oracle hygiene — so nothing pinned the decision either
+    way. It is a decision, recorded: `.fndignore` is fnd's local half."""
+    readme = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
+    row = next(line for line in readme.splitlines() if line.startswith("| `respect_gitignore` |"))
+    assert ".git/info/exclude" in row, row
+    assert ".fndignore" in row, row
+
+    env = _init_repo(tmp_path)
+    (tmp_path / ".git" / "info" / "exclude").write_text("vendor/\n", encoding="utf-8")
+    _make(tmp_path, "vendor/lib.md")
+    assert _git_ignores(tmp_path, env, "vendor/lib.md"), "the premise: git excludes it"
+    assert not _ours_ignores(tmp_path, "vendor/lib.md"), "and fnd, deliberately, does not"

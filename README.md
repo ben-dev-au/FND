@@ -327,7 +327,7 @@ Index filters** edits the defaults; a source's **Index filters** row edits it.
 | Filter | What it does |
 | --- | --- |
 | *(always on)* | Hidden files and folders (`.foo`) are skipped, whatever the filters say. Only an `includes` glob naming a dot-prefixed component admits one — `.obsidian/**` — and then only the paths that glob itself matches. |
-| `respect_gitignore` | Honours every `.gitignore` down the tree, with git's rules: negation, directory patterns, nearest file wins. **On by default.** |
+| `respect_gitignore` | Honours every `.gitignore` down the tree, with git's rules: negation, directory patterns, nearest file wins. Not `.git/info/exclude` and not `core.excludesFile`: neither is in the tree, so honouring them would make one corpus index differently on two machines. Use `.fndignore` for a rule that is yours alone. **On by default.** |
 | `respect_fndignore` | The same syntax in a `.fndignore`, read only by fnd: how to hide something from search without hiding it from git. **On by default.** |
 | `include_tags` | Index only files carrying one of these tags; the tag rows' `●`. Empty means the tag is not consulted. |
 | `exclude_tags` | Tags that keep a file out; the tag rows' `⊘`. From any source fnd reads: macOS Finder tags and a note's YAML `tags:`. Defaults to `["no_index"]`, so tagging a file `no_index` either way keeps it out. |
