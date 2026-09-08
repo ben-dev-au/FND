@@ -897,9 +897,15 @@ class FNDApp(App[None]):
         """
         if self._preview.parent_id is None:
             return "Preview"
+        # The same disambiguation the results rows use: two files sharing a
+        # basename gave both panes the same title, so the tree could tell them
+        # apart and the pane above it could not.
+        from fnd.tui.results_labels import disambiguated_names
+
+        names = disambiguated_names([g.path for g in self._search.groups])
         for g in self._search.groups:
             if g.parent_id == self._preview.parent_id:
-                name = Path(g.path).name
+                name = names.get(g.path) or Path(g.path).name
                 if edge_width > 0:
                     prefix = "Preview — "
                     name = _elide_middle_keep_suffix(name, edge_width - 6 - len(prefix))
