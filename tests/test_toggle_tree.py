@@ -299,7 +299,11 @@ async def test_enter_on_a_tag_branch_does_not_discard_the_exclusions() -> None:
 
 class TestABranchSaysHowMuchIsOn:
     """A marker says only *that* a branch is partly on, so a collapsed one hid
-    how much — while the radio branches beside it named their choice."""
+    how much — while the radio branches beside it named their choice.
+
+    Few enough to name are named: `1 of 2 types` describes the setting, `PDF`
+    describes what it does. Past three it counts again.
+    """
 
     class _Counted(App[None]):
         def compose(self) -> ComposeResult:
@@ -326,18 +330,18 @@ class TestABranchSaysHowMuchIsOn:
             )
 
     @pytest.mark.asyncio
-    async def test_a_partly_ticked_branch_counts_what_is_on(self) -> None:
+    async def test_a_partly_ticked_branch_names_what_is_on(self) -> None:
         app = self._Counted()
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert "1 of 2 types" in _labels(app.query_one("#tt", ToggleTree))["kinds"]
+            assert "PDF" in _labels(app.query_one("#tt", ToggleTree))["kinds"]
 
     @pytest.mark.asyncio
-    async def test_an_excluding_branch_counts_the_exclusions(self) -> None:
+    async def test_an_excluding_branch_names_the_exclusions(self) -> None:
         app = self._Counted()
         async with app.run_test() as pilot:
             await pilot.pause()
-            assert "1 excluded" in _labels(app.query_one("#tt", ToggleTree))["tags"]
+            assert "a excluded" in _labels(app.query_one("#tt", ToggleTree))["tags"]
 
     @pytest.mark.asyncio
     async def test_an_all_ticked_branch_does_not_repeat_its_marker(self) -> None:
@@ -394,7 +398,7 @@ class TestARollupSurvivesACategoryToggle:
         async with app.run_test() as pilot:
             tt = app.query_one("#tt", ToggleTree)
             await pilot.pause()
-            assert "1 of 2 types" in _labels(tt)["kinds"]
+            assert "PDF" in _labels(tt)["kinds"]
             notes = next(
                 n
                 for n in tt.root.children[0].children
@@ -445,7 +449,9 @@ async def test_one_tag_under_two_sources_counts_once() -> None:
     app = _Tags()
     async with app.run_test() as pilot:
         await pilot.pause()
-        assert "1 excluded" in _labels(app.query_one("#tt", ToggleTree))["tags"]
+        label = _labels(app.query_one("#tt", ToggleTree))["tags"]
+        assert "no_index excluded" in label, label
+        assert label.count("no_index") == 1, f"named once per tag, not per source: {label}"
 
 
 @pytest.mark.asyncio
@@ -530,7 +536,11 @@ async def test_a_branch_without_a_full_label_is_unchanged() -> None:
 class TestCountingWhatTheUserCanTellApart:
     """The dedup keyed on the label, but a tag row's label carries its file
     count — so the same tag seen 1 and 2 times looked like two tags. And the
-    noun never singularised: "only 1 tags"."""
+    noun never singularised: "only 1 tags".
+
+    The same dedup has to hold when the summary NAMES what is on rather than
+    counting it, or one tag under two sources reads "x, x".
+    """
 
     @staticmethod
     def _tree(counts: tuple[int, int]) -> ToggleTree:
@@ -562,13 +572,35 @@ class TestCountingWhatTheUserCanTellApart:
     def test_one_tag_counts_once_whatever_its_counts(self) -> None:
         for counts in ((2, 2), (1, 2), (5, 1)):
             tree = self._tree(counts)
-            label = tree._group_label(tree._by_id["tags"])
-            assert "1 excluded" in label, f"counts {counts} gave {label}"
+            label = str(tree._group_label(tree._by_id["tags"]))
+            assert "x excluded" in label, f"counts {counts} gave {label}"
+            assert label.count("x excluded") == 1, f"counts {counts} gave {label}"
 
     def test_the_noun_agrees_with_the_number(self) -> None:
+        """Past the naming threshold it counts again, and the noun must agree."""
+        tree = ToggleTree("F")
+        group = ToggleGroup(
+            "tags",
+            "Tags",
+            tuple(ToggleItem(f"tag:fm:{n}", n, n) for n in ("a", "b", "c", "d")),
+            mode="cycle",
+            noun="tags",
+        )
+        tree._by_id = {g.id: g for g in group.walk()}
+        tree._selected = {"tag:fm:a", "tag:fm:b", "tag:fm:c", "tag:fm:d"}
+        tree._excluded = set()
+
+        label = str(tree._group_label(tree._by_id["tags"]))
+
+        assert "only 4 tags" in label, label
+
+    def test_one_on_reads_as_one_thing(self) -> None:
+        """And below it, the singular case names the tag rather than counting."""
         tree = self._tree((1, 2))
         tree._selected = {"tag:os:x", "tag:frontmatter:x"}
         tree._excluded = set()
-        label = tree._group_label(tree._by_id["tags"])
-        assert "only 1 tag" in label
+
+        label = str(tree._group_label(tree._by_id["tags"]))
+
+        assert "only x" in label, label
         assert "1 tags" not in label, label

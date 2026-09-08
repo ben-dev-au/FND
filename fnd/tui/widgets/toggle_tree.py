@@ -51,6 +51,23 @@ def _plural(noun: str, n: int) -> str:
     return noun[:-1] if n == 1 and noun.endswith("s") else noun
 
 
+#: Above this many, a list stops being readable at a glance and a count says
+#: more. Three is what the Sources line already names ("csv, md, python").
+_NAMED_MAX = 3
+
+
+def _named(values: list[str], n: int, noun: str, *, total: int = 0) -> str:
+    """What is on, named where that is shorter than counting it.
+
+    `1 of 40 types` describes the setting; `md` describes what it does.
+    """
+    if 0 < len(values) <= _NAMED_MAX:
+        return ", ".join(values)
+    if total:
+        return f"{n} of {total} {_plural(noun, total)}"
+    return f"{n} {_plural(noun, n)}"
+
+
 def tri_state_marker(n_selected: int, n_total: int) -> str:
     """●/◐/○ for a parent whose children are ``n_selected`` of ``n_total`` on."""
     if n_total == 0 or n_selected == 0:
@@ -300,15 +317,20 @@ class ToggleTree(ArrowsExpand, StateMarkerLabel, Tree[dict[str, Any]]):
         if g.name_leaves:
             on = [it.label for it in counted if it.id in self._selected]
             return f"  ({', '.join(on)})" if on else ""
+        # Deduplicated like the counts above: one tag is drawn under every
+        # source that can carry it, and naming it twice is the same defect the
+        # counts were fixed for.
+        on = sorted({_key(it) for it in counted if it.id in self._selected})
+        off = sorted({_key(it) for it in counted if it.id in self._excluded})
         parts = []
         if mode == "cycle":
             if n_on:
-                parts.append(f"only {n_on} {_plural(g.noun, n_on)}")
+                parts.append(f"only {_named(on, n_on, g.noun)}")
             if n_off:
-                parts.append(f"{n_off} excluded")
+                parts.append(f"{_named(off, n_off, g.noun)} excluded")
         elif n_on and n_on < len(seen):
             # ● already says "all of them"; a count there is noise.
-            parts.append(f"{n_on} of {len(seen)} {_plural(g.noun, len(seen))}")
+            parts.append(_named(on, n_on, g.noun, total=len(seen)))
         return f"  ({', '.join(parts)})" if parts else ""
 
     def _group_label(self, g: ToggleGroup) -> Any:
