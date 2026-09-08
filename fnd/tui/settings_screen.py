@@ -6001,6 +6001,10 @@ class FilterBrowserScreen(Screen[None]):
         # As every other settings list binds it, and this is the longest one:
         # a vault's tags run to thousands of rows reachable by arrow key alone.
         Binding("slash", "focus_search", "Filter", show=False),
+        # Down from the filter box reaches the rows, as it does on every other
+        # settings screen. Without it the box was a one-way door: narrow the
+        # tree, then have no key that leaves the Input for what you narrowed.
+        Binding("down", "tree_from_input", show=False),
         Binding("ctrl+s", "save_close", show=False),
         Binding("t", "edit_text", show=False),
         # The sidebar's own clear gesture, not a second letter for the same
@@ -6162,6 +6166,17 @@ class FilterBrowserScreen(Screen[None]):
     def _on_search_submitted(self, _ev: Input.Submitted) -> None:
         """Enter hands the rows back, with the query still narrowing them."""
         self.query_one("#filter_tree", ToggleTree).focus()
+
+    def action_tree_from_input(self) -> None:
+        """Bridge Down from the filter Input into the tree, and land on a row.
+
+        The tree's own Down consumes the key whenever it has focus, so this
+        fires only from the box.
+        """
+        tree = self.query_one("#filter_tree", ToggleTree)
+        if tree.cursor_line < 0 and tree.root.children:
+            tree.cursor_line = 0
+        tree.focus()
 
     def action_focus_search(self) -> None:
         self.query_one("#filter_search", Input).focus()
