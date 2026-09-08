@@ -188,6 +188,12 @@ async def test_the_sidebar_paints_the_same_states_the_same_way(
         painted = _marker_colours(app)
         success = app.get_css_variables().get("success", "")
         error = app.get_css_variables().get("error", "")
+        # Prove the sidebar is what was measured: without this the assertions
+        # below pass on any coloured marker anywhere on the screen.
+        on_screen = "\n".join(
+            "".join(s.text for s in strip) for strip in app.screen._compositor.render_strips()
+        )
 
+    assert "recipe" in on_screen, "the sidebar rows never reached the screen"
     assert any(success.lower() in c.lower() for c in painted["●"]), painted
     assert any(error.lower() in c.lower() for c in painted["⊘"]), painted

@@ -3644,6 +3644,16 @@ class RenameCollectionScreen(Screen[None]):
         if new_name in cfg.collections:
             self.notify(f"{new_name!r} already exists", severity="warning")
             return
+        busy = _indexing_now(app)
+        if busy is not None:
+            self.notify(
+                f"Indexing {busy!r} is still running. Renaming now would leave "
+                f"{self._old_name!r}'s documents in the index with nothing able to "
+                "reach them — cancel it or let it finish first.",
+                severity="warning",
+                timeout=8,
+            )
+            return
         existing = cfg.collections[self._old_name]
         write_collection(
             config_path=default_config_path(),
@@ -3805,6 +3815,16 @@ class DeleteCollectionScreen(Screen[None]):
         from fnd.config import default_config_path, delete_collection, load
 
         app: FNDApp = self.app  # type: ignore[assignment]
+        busy = _indexing_now(app)
+        if busy is not None:
+            self.notify(
+                f"Indexing {busy!r} is still running. Deleting now would leave "
+                f"{self._name!r}'s documents in the index with nothing able to "
+                "reach them — cancel it or let it finish first.",
+                severity="warning",
+                timeout=8,
+            )
+            return
         self._default_moved = delete_collection(config_path=default_config_path(), name=self._name)
         app._config = load()  # type: ignore[attr-defined]
         self._show_deleting()
@@ -4336,6 +4356,21 @@ class StructuredPdfConfirmScreen(Screen[None]):
 
 
 # ── Clone-source flow ───────────────────────────────────────────────
+
+
+def _indexing_now(app: FNDApp) -> str | None:
+    """The collection being indexed, if a run holds the index writer.
+
+    Renaming or deleting pairs a config write with a drop from the index, and
+    the drop needs that writer. Mid-run it cannot have it: the drop failed,
+    the config write had already landed, and the running task went on writing
+    under a name nothing could reach afterwards.
+    """
+    service = getattr(app, "_indexer", None)
+    task = getattr(service, "task", None)
+    if task is None or task.done():
+        return None
+    return str(getattr(service, "collection", "") or "another collection")
 
 
 class UnsavedChangesScreen(Screen[None]):
