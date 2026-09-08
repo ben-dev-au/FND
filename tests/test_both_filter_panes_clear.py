@@ -243,3 +243,76 @@ class TestTheKeyAndTheRowAgree:
             spec = screen._spec
 
         assert spec == _DEFAULTS[0], spec
+
+
+class TestSavingNothingSaysNothingWasSaved:
+    """`^s` on an untouched set toasted `Filters saved.` over a byte-identical
+    config, while the exit guard called that same state clean and left without
+    asking. Two answers to one question — and the save path reindexes, so the
+    lie cost a rebuild as well.
+    """
+
+    @pytest.mark.asyncio
+    async def test_an_untouched_set_is_not_written(self, tmp_index_dir: Path) -> None:
+        saved: list[object] = []
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            screen = FilterBrowserScreen(
+                title="Index filters",
+                spec=_DEFAULTS[0],
+                gitignore=True,
+                fndignore=True,
+                sample_provider=lambda: _SAMPLE,
+                on_save=lambda *a: saved.append(a),
+            )
+            app.push_screen(screen)
+            for _ in range(25):
+                await pilot.pause()
+            assert not screen._dirty(), "the premise: nothing has been touched"
+            screen.action_save_close()
+            for _ in range(8):
+                await pilot.pause()
+
+        assert not saved, "it wrote and reindexed a set nobody had changed"
+
+    @pytest.mark.asyncio
+    async def test_a_changed_set_still_is(self, tmp_index_dir: Path) -> None:
+        """The control: the guard is on 'nothing changed', not on saving."""
+        saved: list[object] = []
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            screen = FilterBrowserScreen(
+                title="Index filters",
+                spec=_DEFAULTS[0],
+                gitignore=True,
+                fndignore=True,
+                sample_provider=lambda: _SAMPLE,
+                on_save=lambda *a: saved.append(a),
+            )
+            app.push_screen(screen)
+            for _ in range(25):
+                await pilot.pause()
+            screen._spec = FilterSpec(kinds=("md",))
+            assert screen._dirty(), "the premise"
+            screen.action_save_close()
+            for _ in range(8):
+                await pilot.pause()
+
+        assert len(saved) == 1, saved
+
+    @pytest.mark.asyncio
+    async def test_the_guard_and_the_save_agree(self, tmp_index_dir: Path) -> None:
+        """Both read one predicate, so neither can call a state clean while
+        the other calls it worth writing."""
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            screen = await _browser(app, pilot, _DEFAULTS[0])
+            clean_guard = screen.unsaved_work()
+            screen._spec = FilterSpec(kinds=("md",))
+            dirty_guard = screen.unsaved_work()
+
+        assert clean_guard is None
+        assert dirty_guard is not None

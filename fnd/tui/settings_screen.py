@@ -6298,6 +6298,14 @@ class FilterBrowserScreen(Screen[None]):
         return "these filters", self.action_save_close
 
     def action_save_close(self) -> None:
+        if not self._dirty():
+            # The screen already knows: the exit guard calls this same state
+            # clean and leaves without asking. Saving it anyway reported
+            # "Filters saved." over a byte-identical config and, worse, the
+            # save path reindexes — a costly answer to a question nobody asked.
+            self.app.notify("No changes to save")
+            self.app.pop_screen()
+            return
         try:
             self._on_save(self._spec, self._gitignore, self._fndignore)
         except Exception as e:
