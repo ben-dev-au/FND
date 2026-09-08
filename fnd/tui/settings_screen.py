@@ -2192,10 +2192,15 @@ class TreePickerScreen(Screen[None]):
     """Nested category→item multi-select for a picker item that supplies a
     ``groups_provider``. Reuses the shared :class:`ToggleTree`, so it toggles,
     cascades, and repaints exactly like the file-type filter. Changes apply as
-    they are toggled, so Esc simply leaves."""
+    they are toggled, so leaving is all there is to do.
+
+    That is the opposite of the filter browser, which holds its edits because
+    saving one reindexes. Both are right for what they edit; what was wrong is
+    that the gesture a user learnt on one did nothing on the other."""
 
     BINDINGS = [  # noqa: RUF012
-        Binding("escape", "back", "Back", show=False),
+        Binding("escape,left", "back", "Back", show=False),
+        Binding("ctrl+s", "back", "Done", show=False),
     ]
 
     CSS = """
@@ -2228,13 +2233,26 @@ class TreePickerScreen(Screen[None]):
         tree.set_model(groups, selected, expanded={g.id for g in groups})
         tree.focus()
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎/Space", "Toggle"), ("←/→", "Collapse/Expand"), ("Esc", "Done")))
+            _hint_bar(
+                app,
+                (
+                    ("⏎/Space", "Toggle"),
+                    ("←/→", "Collapse/Expand"),
+                    (f"Esc/{COMMIT_KEY}", "Done"),
+                ),
+            )
         )
 
     @on(ToggleTree.SelectionChanged)
     def _on_changed(self, ev: ToggleTree.SelectionChanged) -> None:
         # Commit live so the row summary updates as the user toggles.
         self._commit(ev.selected)
+
+    @on(ToggleTree.NavigatedOut)
+    def _on_navigated_out(self, _ev: ToggleTree.NavigatedOut) -> None:
+        """← at the outermost level leaves, as it does everywhere else in
+        Settings. The tree's own binding would otherwise swallow it."""
+        self.action_back()
 
     def action_back(self) -> None:
         self._commit(self.query_one("#tree_picker", ToggleTree).selected)
@@ -5853,6 +5871,38 @@ class FilterBrowserScreen(Screen[None]):
     def action_focus_search(self) -> None:
         self.query_one("#filter_search", Input).focus()
 
+    @on(ToggleTree.NodeHighlighted, "#filter_tree")
+    def _on_row_highlighted(self, _ev: ToggleTree.NodeHighlighted[dict[str, Any]]) -> None:
+        self._refresh_legend()
+
+    def _refresh_legend(self) -> None:
+        """The glyph meanings for the branch the cursor is in.
+
+        The shared line is false on the ignore branch — ● there means "obey
+        this file", which indexes FEWER files — so a branch that reads
+        differently says so, and the rest keep one wording.
+        """
+        from fnd.filters.tree_model import LEGEND
+
+        tree = self.query_one("#filter_tree", ToggleTree)
+        node = tree.cursor_node
+        top: str = ""
+        while node is not None and node.parent is not None:
+            data = node.data if isinstance(node.data, dict) else {}
+            top = str(data.get("id") or data.get("group") or top)
+            node = node.parent
+        branch = next(
+            (
+                b
+                for b in getattr(self, "_branches", ())
+                if top == b.id or top.startswith(b.id + ":")
+            ),
+            None,
+        )
+        self.query_one("#filter_legend", Static).update(
+            (getattr(branch, "legend", "") or LEGEND) if branch is not None else LEGEND
+        )
+
     @on(ToggleTree.NavigatedOut, "#filter_tree")
     def _on_navigated_out(self, _ev: ToggleTree.NavigatedOut) -> None:
         """← at the outermost level leaves the screen, as it does everywhere
@@ -5946,6 +5996,7 @@ class FilterBrowserScreen(Screen[None]):
         if focus_tree:
             tree.focus()
         self._update_clear_bar()
+        self._refresh_legend()
         self._refresh_summary()
 
     @on(ToggleTree.SelectionChanged, "#filter_tree")

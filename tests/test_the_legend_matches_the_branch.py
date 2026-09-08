@@ -1,0 +1,72 @@
+"""The glyph legend says what the glyphs mean on the branch you are in.
+
+One line claimed `●  index ONLY these` for the whole screen. On "Obey ignore
+files" `●` means *obey this file*, which indexes FEWER files, and `○` means
+more — the legend stated the opposite of what the row does.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from fnd.filters import FilterSpec
+from fnd.filters.scan import SourceSample
+from fnd.filters.tree_model import IGNORE_LEGEND, LEGEND, RULES_LEGEND, spec_branches
+from fnd.tui import FNDApp
+from fnd.tui.settings_screen import FilterBrowserScreen
+from fnd.tui.widgets.toggle_tree import ToggleTree
+
+_SAMPLE = SourceSample(kinds={"md": 3}, tags={"frontmatter": {"no_index": 1}})
+
+
+def test_only_the_branches_that_read_differently_override_it() -> None:
+    by_id = {b.id: b for b in spec_branches(FilterSpec(), _SAMPLE)}
+
+    assert by_id["ignore"].legend == IGNORE_LEGEND
+    assert by_id["rules"].legend == RULES_LEGEND
+    for name in ("kinds", "size", "modified", "created"):
+        assert not by_id[name].legend, f"{name} needs no wording of its own"
+
+
+def test_the_shared_line_no_longer_speaks_for_the_ignore_branch() -> None:
+    """The control that names the defect: obeying an ignore file indexes
+    fewer files, which is what `●` does there and the opposite of `index
+    ONLY these`."""
+    assert "index ONLY these" in LEGEND
+    assert "index ONLY these" not in IGNORE_LEGEND
+    assert "fewer" in IGNORE_LEGEND
+
+
+@pytest.mark.asyncio
+async def test_the_painted_legend_follows_the_cursor(tmp_index_dir: Path) -> None:
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(),
+                gitignore=True,
+                fndignore=True,
+                sample_provider=lambda: _SAMPLE,
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(25):
+            await pilot.pause()
+        tree = app.screen.query_one("#filter_tree", ToggleTree)
+        painted: dict[str, str] = {}
+        for node in tree.root.children:
+            tree.move_cursor(node)
+            for _ in range(6):
+                await pilot.pause()
+            painted[str((node.data or {}).get("id"))] = "\n".join(
+                "".join(s.text for s in strip) for strip in app.screen._compositor.render_strips()
+            )
+
+    assert "obey this file" in painted["ignore"], painted["ignore"].splitlines()[:3]
+    assert "opens an editor" in painted["rules"], painted["rules"].splitlines()[:3]
+    assert "index ONLY these" in painted["kinds"], painted["kinds"].splitlines()[:3]
+    assert "obey this file" not in painted["kinds"], "the wording leaked between branches"

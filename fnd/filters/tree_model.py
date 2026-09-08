@@ -28,7 +28,9 @@ TAG_SOURCE_LABELS: dict[str, str] = {
 
 __all__ = [
     "BRANCHES",
+    "IGNORE_LEGEND",
     "LEGEND",
+    "RULES_LEGEND",
     "apply_selection",
     "custom_ids",
     "selection_for",
@@ -54,10 +56,14 @@ _SIZES: tuple[tuple[str, str, int | None], ...] = (
 
 BRANCHES = ("kinds", "tags", "ignore", "size", "modified", "created")
 
-# Shown above the tree. The glyphs carry different polarity per branch —
-# ● on a file type includes, ⊘ on a tag excludes — so the meaning is stated
-# once here rather than guessed from each row.
+# Shown above the tree for the branches this reading holds for.
 LEGEND = "⊘  never index these   ●  index ONLY these   ◐  some of these   ○  no rule"
+
+#: Branches where that reading is FALSE. On the ignore branch ● means "obey
+#: this file", which indexes FEWER files, and ○ means more — the opposite of
+#: what the shared line claims. A branch names its own meaning or inherits.
+IGNORE_LEGEND = "●  obey this file   ○  ignore it — obeying one indexes fewer files"
+RULES_LEGEND = "⏎  opens an editor for this rule"
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +85,8 @@ class Branch:
     empty_label: str = ""
     full_label: str = ""
     noun: str = ""
+    legend: str = ""
+    """What the glyphs mean here, where the shared line would be wrong."""
     complete: bool = True
     """False while the leaves are still being discovered. A roll-up that says
     "all of these" is a claim about leaves the branch has not seen yet."""
@@ -228,6 +236,7 @@ def spec_branches(
             (("ignore:git", ".gitignore"), ("ignore:fnd", ".fndignore")),
             empty_label="none",
             noun="files",
+            legend=IGNORE_LEGEND,
         )
     )
     # Rows stay ordered by the bound they set, so a custom one lands among the
@@ -266,6 +275,7 @@ def spec_branches(
                 f"Set in the text form  ({len(beyond)})",
                 "actions",
                 tuple((f"beyond:{name}", text) for name, text in beyond),
+                legend=RULES_LEGEND,
             )
         )
     # An actions branch carries no marker, so a collapsed one has to say in
@@ -280,6 +290,7 @@ def spec_branches(
                 ("rule:frontmatter", _rule_label("Frontmatter rule", spec.frontmatter)),
                 ("rule:expression", _rule_label("Custom rule", spec.expression)),
             ),
+            legend=RULES_LEGEND,
         )
     )
     return branches
