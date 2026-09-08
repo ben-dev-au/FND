@@ -1130,9 +1130,30 @@ def _set_app_default_for_kind(app: FNDApp, kind: str, value: Any) -> None:
 # ── Collections drill chain (per-collection / per-source) ───────────
 
 
+def interrupted_index(name: str) -> tuple[int, int] | None:
+    """``(files_completed, total_files)`` for a run of ``name`` that stopped
+    part-way, or None.
+
+    The app has always written this state — cancelling at 7% left
+    `files_completed = 210, total_files = 3000` on disk — and then showed the
+    collection as though nothing had happened. A search over it returned 7% of
+    the corpus with no way to tell from any screen.
+    """
+    import contextlib
+
+    from fnd.index_runner import saved_states
+
+    with contextlib.suppress(Exception):
+        for _path, state in saved_states():
+            if state.collection == name and 0 < state.files_completed < state.total_files:
+                return state.files_completed, state.total_files
+    return None
+
+
 def _collection_summary(app: FNDApp, name: str) -> str:
     """Trailing slot for a collection row in the Collections sub-screen —
-    shows scope dot, source count, and ranking profile."""
+    shows scope dot, source count, ranking profile, and whether the last
+    index of it stopped part-way."""
     cfg = app._config  # type: ignore[attr-defined]
     if cfg is None or name not in cfg.collections:
         return ""
@@ -1140,7 +1161,12 @@ def _collection_summary(app: FNDApp, name: str) -> str:
     n = len(coll.sources)
     active = "●" if name in (app._scope.collections or []) else "○"  # type: ignore[attr-defined]
     profile = getattr(coll, "ranking_profile", None) or "default"
-    return f"{active} {n} source{'s' if n != 1 else ''} · ranking:{profile}"
+    summary = f"{active} {n} source{'s' if n != 1 else ''} · ranking:{profile}"
+    part = interrupted_index(name)
+    if part is not None:
+        done, total = part
+        summary = f"⚠ incomplete — {done} of {total} files · {summary}"
+    return summary
 
 
 def _make_open_collection_screen(name: str) -> Callable[[FNDApp], None]:

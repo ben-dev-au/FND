@@ -439,7 +439,24 @@ class IndexerService:
 
         # The opt-in gate is checked after the sweep so stale files get tidied
         # either way; it only guards actually *starting* work.
-        if not cfg.defaults.indexer_auto_resume or not resumable:
+        if not resumable:
+            return
+        if not cfg.defaults.indexer_auto_resume:
+            # Saying nothing is what made an interrupted rebuild invisible: the
+            # state on disk knew a run stopped at 210 of 3000, every screen
+            # showed the collection as whole, and searches answered from 7% of
+            # it forever. Opting out of auto-resume is not opting out of being
+            # told.
+            names = ", ".join(sorted({s.collection for s in resumable}))
+            first = resumable[0]
+            with contextlib.suppress(Exception):
+                self._app.notify(
+                    f"{names} indexed only {first.files_completed} of "
+                    f"{first.total_files} files — Update it to finish.",
+                    title="Interrupted index",
+                    severity="warning",
+                    timeout=10,
+                )
             return
 
         first, rest = resumable[0], resumable[1:]
