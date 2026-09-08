@@ -125,6 +125,30 @@ def _kind_items(sample: SourceSample | None) -> list[tuple[str, str, str]]:
     return out
 
 
+def _facts_in_free_text(spec: FilterSpec) -> frozenset[str]:
+    """Facts named by clauses no picker owns.
+
+    A branch can only light up for the shape it understands: `file.size <= N`
+    fills `max_size`, while `< N` and `> N` stay raw text. Without this the
+    size row read `○ (Any size)` while a live rule took the walk from ten
+    files to six, so the branch says a rule of its own is in the text form
+    rather than claiming there is none.
+    """
+    import contextlib
+
+    from fnd.filter_dsl import parse, referenced_fields
+
+    out: set[str] = set()
+    for text in (spec.expression, *spec.raw):
+        if not (text or "").strip():
+            continue
+        # Unparseable text is the text editor's problem to report; a branch
+        # simply learns nothing from it and says nothing extra.
+        with contextlib.suppress(Exception):
+            out |= set(referenced_fields(parse(text)))
+    return frozenset(out)
+
+
 def _beyond_the_pickers(spec: FilterSpec) -> tuple[tuple[str, str], ...]:
     """Bounds no branch can show, as (field, one-line description)."""
     out: list[tuple[str, str]] = []
@@ -135,6 +159,16 @@ def _beyond_the_pickers(spec: FilterSpec) -> tuple[tuple[str, str], ...]:
         if bound is not None:
             out.append((f"{field}_before", f"{verb} before {bound.isoformat()}"))
     return tuple(out)
+
+
+def _elsewhere_note(has_bound: bool, bound_says: str, in_free_text: bool) -> str:
+    """What a branch adds about rules on its dimension that it cannot show."""
+    parts = [
+        text
+        for flag, text in ((has_bound, bound_says), (in_free_text, "a rule is typed below"))
+        if flag
+    ]
+    return " · ".join(parts)
 
 
 def _rule_label(name: str, value: str) -> str:
@@ -253,13 +287,16 @@ def spec_branches(
         value = int(custom.removeprefix(f"{CUSTOM}:"))
         sized.append((value, f"size:{custom}", f"Up to {_human_size(value)}"))
     size_items = [(i, lbl) for _k, i, lbl in sorted(sized)]
+    free = _facts_in_free_text(spec)
     branches.append(
         Branch(
             "size",
             "Maximum file size",
             "radio",
             tuple(size_items),
-            elsewhere="a minimum is set" if spec.min_size is not None else "",
+            elsewhere=_elsewhere_note(
+                spec.min_size is not None, "a minimum is set", "file.size" in free
+            ),
         )
     )
     for field_name, label in (("modified", "Modified within"), ("created", "Created within")):
@@ -284,10 +321,10 @@ def spec_branches(
                 label,
                 "radio",
                 tuple(items),
-                elsewhere=(
-                    "an upper bound is set"
-                    if getattr(spec, f"{field_name}_before") is not None
-                    else ""
+                elsewhere=_elsewhere_note(
+                    getattr(spec, f"{field_name}_before") is not None,
+                    "an upper bound is set",
+                    f"file.{field_name}" in free,
                 ),
             )
         )

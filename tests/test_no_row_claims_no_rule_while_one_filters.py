@@ -63,3 +63,62 @@ async def test_the_row_stops_reading_no_rule(tmp_index_dir: Path) -> None:
     row = next(line for line in on_screen.splitlines() if "Maximum file size" in line)
     assert "◐" in row, row
     assert "a minimum is set" in row, row
+
+
+class TestABoundTheBranchCannotParse:
+    """The pickers understand `<=` and `>=`. A user writing `<` or `>` gets a
+    live rule and a row that says there is none.
+
+    Measured by a hunter on a real corpus: `file.size < 150` took the walk from
+    ten files to six, including the only PDF, while `Maximum file size` read
+    `○ (Any size)` and no tree row mentioned it.
+    """
+
+    @pytest.mark.parametrize(
+        ("text", "branch"),
+        [
+            ("file.size < 150", "size"),
+            ("file.size > 150", "size"),
+            ("file.modified > 2020-01-01", "modified"),
+            ("file.created < 2020-01-01", "created"),
+        ],
+    )
+    def test_the_branch_says_a_rule_is_typed_below(self, text: str, branch: str) -> None:
+        from fnd.filters.text_form import parse
+
+        spec = parse(text)
+        row = next(b for b in spec_branches(spec, _SAMPLE) if b.id == branch)
+
+        assert row.elsewhere, f"{text!r} left {branch!r} claiming no rule"
+        assert "typed below" in row.elsewhere, row.elsewhere
+
+    def test_a_bound_the_picker_owns_adds_no_note(self) -> None:
+        """The control: `<=` fills the picker, so the row speaks for itself
+        and a second sentence would be noise."""
+        from fnd.filters.text_form import parse
+
+        spec = parse("file.size <= 150")
+        row = next(b for b in spec_branches(spec, _SAMPLE) if b.id == "size")
+
+        assert spec.max_size == 150, spec
+        assert not row.elsewhere, row.elsewhere
+
+    def test_a_rule_about_something_else_stays_out_of_it(self) -> None:
+        """The other control: only the dimension the rule names says anything."""
+        from fnd.filters.text_form import parse
+
+        spec = parse("file.size < 150")
+        dates = [
+            b.elsewhere for b in spec_branches(spec, _SAMPLE) if b.id in ("modified", "created")
+        ]
+
+        assert dates == ["", ""], dates
+
+    def test_unparseable_text_teaches_a_branch_nothing(self) -> None:
+        """It is the editor's job to report, and a branch must not guess."""
+        from fnd.filters import FilterSpec
+
+        spec = FilterSpec(expression="file.size < (((")
+        row = next(b for b in spec_branches(spec, _SAMPLE) if b.id == "size")
+
+        assert not row.elsewhere, row.elsewhere
