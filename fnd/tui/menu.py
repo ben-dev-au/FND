@@ -2358,6 +2358,10 @@ def _open_filter_browser(app: FNDApp) -> None:
             "Filters saved. Collections keep their current contents until the next Update index.",
             severity="warning",
         )
+        # These govern EVERY collection, so a save leaves all of them behind
+        # the config at once and a toast was the only thing that said so.
+        # Offered after the browser pops, so the dialog lands on the menu.
+        app.call_later(_push_update_all_confirm, app, texturise_override=None)
 
     app.push_screen(
         FilterBrowserScreen(
