@@ -31,7 +31,7 @@ import copy
 import textwrap
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from rich.text import Text
 from textual import events, on
@@ -2304,9 +2304,6 @@ class SourceFormScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
-        # `q` reaches the app's quit otherwise, and unsaved edits die with
-        # it. On a screen that edits something, `q` leaves the screen.
-        Binding("q", "back", "Back", show=False),
         Binding("tab", "cycle_focus(1)", show=False),
         Binding("shift+tab", "cycle_focus(-1)", show=False),
         Binding("ctrl+s", "save_close", show=False),
@@ -3004,6 +3001,12 @@ class SourceFormScreen(Screen[None]):
 
         self.app.call_later(_chain)
 
+    def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
+        """What leaving now would lose, and how to keep it."""
+        if self._snapshot == self._fields:
+            return None
+        return "This source", self.action_save_close
+
     def action_back(self) -> None:
         # The filter browser saves into `_fields`, not to disk, so leaving the
         # form is what discards it — including an edit the user had just
@@ -3040,9 +3043,6 @@ class AddCollectionWizard(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Cancel", show=False),
-        # `q` reaches the app's quit otherwise, and unsaved edits die with it.
-        # On a screen that edits something, `q` leaves the screen.
-        Binding("q", "back", "Cancel", show=False),
         Binding("ctrl+s", "save_close", "Save", show=False),
         Binding("tab", "cycle_focus(1)", show=False),
         Binding("shift+tab", "cycle_focus(-1)", show=False),
@@ -3408,6 +3408,11 @@ class AddCollectionWizard(Screen[None]):
         # Re-evaluate the sample tester since the filter may have changed.
         self._refresh_match_status()
         self.query_one(SettingsList).focus()
+
+    def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
+        if self._fields == getattr(self, "_opened_with", self._fields):
+            return None
+        return "This collection", self.action_save_close
 
     def action_back(self) -> None:
         _leave_or_confirm(
@@ -4390,10 +4395,19 @@ class UnsavedChangesScreen(Screen[None]):
 
     CSS = chrome_css("UnsavedChangesScreen", confirm=True)
 
-    def __init__(self, *, what: str, on_save: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        *,
+        what: str,
+        on_save: Callable[[], None],
+        on_leave: Callable[[], None] | None = None,
+        leave_label: str = "Discard changes",
+    ) -> None:
         super().__init__()
         self._what = what
         self._on_save = on_save
+        self._leave_action = on_leave
+        self._leave_label = leave_label
 
     def compose(self) -> ComposeResult:
         with Vertical(id="settings_box") as box:
@@ -4401,7 +4415,7 @@ class UnsavedChangesScreen(Screen[None]):
             yield Static(f"{self._what} has changes that are not saved.", classes="warning")
             yield OptionList(
                 Option(Text("Save changes", style="bold"), id="save"),
-                Option("Discard changes", id="discard"),
+                Option(self._leave_label, id="discard"),
                 Option("Keep editing", id="stay"),
                 id="confirm_list",
             )
@@ -4436,7 +4450,10 @@ class UnsavedChangesScreen(Screen[None]):
             self._on_save()
         elif choice == "discard":
             with contextlib.suppress(Exception):
-                self.app.pop_screen()
+                if self._leave_action is not None:
+                    self._leave_action()
+                else:
+                    self.app.pop_screen()
 
 
 def _leave_or_confirm(
@@ -4447,6 +4464,25 @@ def _leave_or_confirm(
         screen.app.pop_screen()
         return
     screen.app.push_screen(UnsavedChangesScreen(what=what, on_save=on_save))
+
+
+def unsaved_on(screen: object) -> tuple[str, Callable[[], None]] | None:
+    """What a screen would lose if it were left now, and how to save it.
+
+    One seam so `q` can ask the same question Esc does. A screen answers by
+    exposing ``unsaved_work``; anything else has nothing to lose.
+    """
+    ask = getattr(screen, "unsaved_work", None)
+    if not callable(ask):
+        return None
+    try:
+        answer = ask()
+    except Exception:
+        return None
+    if not isinstance(answer, tuple) or len(answer) != 2:
+        return None
+    what, save = answer
+    return str(what), cast("Callable[[], None]", save)
 
 
 class DeleteSourceScreen(Screen[None]):
@@ -4986,9 +5022,6 @@ class StillFlatDrillIn(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
-        # `q` reaches the app's quit otherwise, and unsaved edits die with
-        # it. On a screen that edits something, `q` leaves the screen.
-        Binding("q", "back", "Back", show=False),
         Binding("up,k", "move(-1)", show=False),
         Binding("down,j", "move(1)", show=False),
         Binding("enter,r", "retry", "Retry", show=True),
@@ -5290,9 +5323,6 @@ class FilterTextScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape", "back", "Back", show=False),
-        # `q` reaches the app's quit otherwise, and unsaved edits die with
-        # it. On a screen that edits something, `q` leaves the screen.
-        Binding("q", "back", "Back", show=False),
         Binding("ctrl+s", "save_close", show=False),
     ]
 
@@ -5529,9 +5559,6 @@ class RuleTextScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape", "back", "Back", show=False),
-        # `q` reaches the app's quit otherwise, and unsaved edits die with
-        # it. On a screen that edits something, `q` leaves the screen.
-        Binding("q", "back", "Back", show=False),
         Binding("ctrl+s", "save_close", show=False),
     ]
 
@@ -5664,9 +5691,6 @@ class FilterBrowserScreen(Screen[None]):
 
     BINDINGS = [  # noqa: RUF012
         Binding("escape,left", "back", "Back", show=False),
-        # `q` reaches the app's quit otherwise, and unsaved filter edits die
-        # with it. On a screen that edits something, `q` leaves the screen.
-        Binding("q", "back", "Back", show=False),
         # As every other settings list binds it, and this is the longest one:
         # a vault's tags run to thousands of rows reachable by arrow key alone.
         Binding("slash", "focus_search", "Filter", show=False),
@@ -6035,6 +6059,11 @@ class FilterBrowserScreen(Screen[None]):
         _leave_or_confirm(
             self, dirty=self._dirty(), what="These filters", on_save=self.action_save_close
         )
+
+    def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
+        if not self._dirty():
+            return None
+        return "These filters", self.action_save_close
 
     def action_save_close(self) -> None:
         try:

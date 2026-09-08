@@ -936,6 +936,29 @@ class FNDApp(App[None]):
             painting=self._effective_match_spec,
         )
 
+    def action_quit(self) -> None:  # type: ignore[override]
+        """Quit, unless the screen is holding work nobody has saved.
+
+        `q` used to mean "back" on six editing screens and "quit" everywhere
+        else — one key, two meanings, a screen apart — because nothing stopped
+        a quit throwing an edit away. Esc is back; `q` is quit; both ask first.
+        """
+        from fnd.tui.settings_screen import UnsavedChangesScreen, unsaved_on
+
+        pending = unsaved_on(self.screen if self.screen_stack else None)
+        if pending is None:
+            self.exit()
+            return
+        what, save = pending
+        self.push_screen(
+            UnsavedChangesScreen(
+                what=what,
+                on_save=save,
+                on_leave=self.exit,
+                leave_label="Discard and quit",
+            )
+        )
+
     def _dispatch_apps_notice(self, message: str) -> None:
         """Route a notice from fnd.apps through the right UI surface.
 

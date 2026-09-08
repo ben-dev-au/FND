@@ -126,3 +126,42 @@ def test_no_editing_screen_leaves_unsaved_work_silently() -> None:
         if computes_dirty and "_leave_or_confirm" not in back:
             offenders.append(node.name)
     assert not offenders, f"screens that decide about unsaved work without asking: {offenders}"
+
+
+def test_every_screen_can_actually_be_left() -> None:
+    """A screen whose Esc neither pops nor asks is a trap with no way out.
+
+    One shipped: a method inserted into the middle of `action_back` stranded
+    its exit as dead code, so the filter browser could not be left once its
+    search box was empty. A single end-to-end test caught it; this catches the
+    shape.
+    """
+    source = _MODULE.read_text(encoding="utf-8")
+    trapped: list[str] = []
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.ClassDef):
+            continue
+        back = next(
+            (f for f in node.body if isinstance(f, ast.FunctionDef) and f.name == "action_back"),
+            None,
+        )
+        if back is None:
+            continue
+        body = ast.get_source_segment(source, back) or ""
+        if "pop_screen" not in body and "_leave_or_confirm" not in body:
+            trapped.append(node.name)
+    assert not trapped, f"screens with no way out of action_back: {trapped}"
+
+
+def test_no_method_hides_code_after_its_return() -> None:
+    """The mechanism of that bug, class-wide: an edit that lands inside
+    another method leaves its tail unreachable and silent."""
+    source = _MODULE.read_text(encoding="utf-8")
+    dead: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for index, stmt in enumerate(node.body[:-1]):
+            if isinstance(stmt, ast.Return) and index < len(node.body) - 1:
+                dead.append(f"{node.name}:{stmt.lineno}")
+    assert not dead, f"unreachable code after a return: {dead}"
