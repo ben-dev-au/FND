@@ -64,19 +64,22 @@ def check_schema_status(index_dir: Path) -> tuple[SchemaStatus, str | None]:
     return SchemaStatus.READY, None
 
 
-def _next_step(config: Config) -> str:
-    """What to do next, given what has been done already.
+def _next_step(config: Config, *, invoked: str = "") -> str:
+    """What to do next, given what has been done already and what was just run.
 
     The message used to name `collection add` unconditionally, so a user who
     had just run it was told to run it again — the same text, verbatim, with
-    no way forward.
+    no way forward. The fix mended one branch and left the identical loop in
+    the other: `fnd tui` answered with "run `fnd tui`". ``invoked`` names the
+    command that is printing, and it is never the advice.
     """
     names = list(config.collections)
     if not names:
+        add = "`fnd collection add <name> --source <path>`"
+        if invoked == "tui":
+            return f"No collections yet. Add one with {add}, then run `fnd tui` again."
         return (
-            "No collections yet. Add one with "
-            "`fnd collection add <name> --source <path>`, or run `fnd tui` "
-            "and choose Add Collection."
+            f"No collections yet. Add one with {add}, or run `fnd tui` and choose Add Collection."
         )
     listed = ", ".join(f"`fnd collection reindex {name}`" for name in names[:3])
     more = " (and your other collections)" if len(names) > 3 else ""
@@ -88,6 +91,7 @@ def prompt_and_rebuild_or_exit(
     index_dir: Path,
     config: Config,
     is_tty: bool | None = None,
+    invoked: str = "",
 ) -> None:
     """Read-side CLI helper: detect schema state, prompt to rebuild on
     TTY, exit 1 with a clear command on non-TTY.
@@ -102,7 +106,7 @@ def prompt_and_rebuild_or_exit(
     if status is SchemaStatus.READY:
         return
     if status is SchemaStatus.EMPTY:
-        typer.echo(f"no index at {index_dir}. {_next_step(config)}", err=True)
+        typer.echo(f"no index at {index_dir}. {_next_step(config, invoked=invoked)}", err=True)
         raise typer.Exit(code=1)
 
     # STALE.

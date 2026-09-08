@@ -304,7 +304,7 @@ def tui(
     collection = resolve_launch_collection(collection, cfg, issues)
     resolve_or_exit(issues)
 
-    prompt_and_rebuild_or_exit(index_dir=default_index_dir(), config=cfg)
+    prompt_and_rebuild_or_exit(index_dir=default_index_dir(), config=cfg, invoked="tui")
 
     # Spawn the PDF extraction worker before Textual's run() rewires
     # stdin/stderr. macOS multiprocessing.spawn validates fds_to_keep
