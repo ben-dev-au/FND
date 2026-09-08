@@ -1229,7 +1229,12 @@ class SettingsList(Widget, can_focus=True):
                 self.post_message(self.Activated(item))
 
     def action_jump(self, n: int) -> None:
-        """1-9 jumps to the Nth selectable item (skipping headers)."""
+        """1-9 jumps to the Nth selectable item (skipping headers) and opens it.
+
+        The opening is deliberate — it is the accelerator, not a side effect —
+        and was described nowhere, so a hunter pressing a digit to move the
+        cursor found itself on another screen.
+        """
         target_count = n
         for i, item in enumerate(self._items):
             if item.kind == KIND_HEADER:

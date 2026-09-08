@@ -352,10 +352,10 @@ _KEYS_SETTINGS: tuple[tuple[str, str, str, str], ...] = (
         "1-9",
         "Jump by index",
         "",
-        "Number keys jump the cursor straight to the nth visible row in the "
-        "current section — with the row list focused. A settings screen opens "
-        "with the filter box focused, where digits type instead; press ↓ to "
-        "reach the rows first.",
+        "Number keys jump the cursor to the nth visible row in the current "
+        "section AND open it — it is a shortcut, not a move. With the row "
+        "list focused: a settings screen opens with the filter box focused, "
+        "where digits type instead, so press ↓ to reach the rows first.",
     ),
     (
         "Shift+Enter",
