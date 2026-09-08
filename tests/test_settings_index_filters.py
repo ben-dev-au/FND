@@ -1343,14 +1343,25 @@ class TestClearSaysWhatItTook:
 
         assert set(_SPEC_FIELDS) == set(_FIELD_WORDS), "a field with no word to name it"
 
-    def test_the_defaults_route_names_the_protection_it_dropped(self) -> None:
+    def test_it_names_the_protection_it_dropped(self) -> None:
+        """A tag exclusion is a protection, not a preference, so losing one
+        has to be said out loud."""
         from fnd.filters import FilterSpec
         from fnd.tui.settings_screen import _cleared_note
 
         before = FilterSpec(kinds=("md",), exclude_tags={"os": ("no_index",)})
-        note = _cleared_note(before, FilterSpec(), inheriting=False)
+        note = _cleared_note(before, FilterSpec())
         assert "skipped tags" in note, note
         assert "file types" in note
+
+    def test_no_wording_claims_nothing_is_filtered_out(self) -> None:
+        """It was never true — ignore files and hidden-name pruning survive
+        any clear — and the route that said it no longer exists."""
+        import inspect
+
+        from fnd.tui import settings_screen
+
+        assert "nothing is filtered out" not in inspect.getsource(settings_screen)
 
     def test_the_source_route_says_it_went_back_to_inherited(self) -> None:
         from fnd.filters import FilterSpec
@@ -1358,7 +1369,7 @@ class TestClearSaysWhatItTook:
 
         before = FilterSpec(kinds=("md",), exclude_tags={"os": ("no_index",)})
         after = FilterSpec(exclude_tags={"os": ("no_index",)})
-        note = _cleared_note(before, after, inheriting=True)
+        note = _cleared_note(before, after)
         assert "inherited" in note
         assert "skipped tags" not in note, "the exclusion survived, so it was not taken"
 
@@ -1366,7 +1377,7 @@ class TestClearSaysWhatItTook:
         from fnd.filters import FilterSpec
         from fnd.tui.settings_screen import _cleared_note
 
-        assert _cleared_note(FilterSpec(), FilterSpec(), inheriting=False) == "Nothing to clear"
+        assert _cleared_note(FilterSpec(), FilterSpec()) == "Nothing to return"
 
     @pytest.mark.asyncio
     async def test_clearing_raises_it(self, built_index: Path) -> None:

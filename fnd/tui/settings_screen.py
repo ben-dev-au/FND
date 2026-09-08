@@ -5797,8 +5797,15 @@ _FIELD_WORDS: dict[str, str] = {
 }
 
 
-def _cleared_note(before: Any, after: Any, *, inheriting: bool) -> str:
-    """What `c` just took away, named as the screens name it."""
+def _cleared_note(before: Any, after: Any) -> str:
+    """What returning to the defaults just took away, named as screens name it.
+
+    There was a second wording for a set that inherits from nothing — "nothing
+    is filtered out now" — which was false even then, since ignore files and
+    hidden-name pruning survive any clear. That route no longer exists: a set
+    with nothing to return to refuses the act, so the sentence is gone rather
+    than left unreachable.
+    """
     dropped = list(
         dict.fromkeys(
             _FIELD_WORDS[name]
@@ -5807,11 +5814,9 @@ def _cleared_note(before: Any, after: Any, *, inheriting: bool) -> str:
         )
     )
     if not dropped:
-        return "Nothing to clear"
+        return "Nothing to return"
     lost = ", ".join(dropped)
-    if inheriting:
-        return f"Back to the inherited filters — this source no longer overrides {lost}"
-    return f"Cleared {lost} — nothing is filtered out now"
+    return f"Back to the inherited filters — this source no longer overrides {lost}"
 
 
 #: What the sidebar's clear bar answers to. Read once, like the app's own
@@ -6258,7 +6263,7 @@ class FilterBrowserScreen(Screen[None]):
         self._rebuild()
         # It takes no confirmation, so it has to say what it took — above all
         # a tag exclusion, which is a protection rather than a preference.
-        self.notify(_cleared_note(before, self._spec, inheriting=True))
+        self.notify(_cleared_note(before, self._spec))
 
     def action_edit_text(self) -> None:
         def _save(spec: Any) -> None:
