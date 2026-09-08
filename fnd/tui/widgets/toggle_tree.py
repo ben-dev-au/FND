@@ -105,11 +105,30 @@ class ToggleGroup:
     a red "never index any of these" that became ◐ when the scan landed."""
     groups: tuple[ToggleGroup, ...] = ()
     """Sub-categories. A group carries items or sub-groups, not usually both."""
+    elsewhere: str = ""
+    """A bound on this dimension the branch cannot show. A radio branch reading
+    `○ (Any size)` while a minimum filtered was a false statement, not a
+    partial one."""
+    hidden: tuple[ToggleItem, ...] = ()
+    """Leaves a row filter is not showing. They still belong to the branch, so
+    a roll-up counted over the visible ones alone read `● every type` with one
+    of forty ticked."""
 
     @property
     def leaves(self) -> tuple[ToggleItem, ...]:
-        """Every item at or below this group."""
+        """Every item at or below this group, as the tree shows it."""
         return self.items + tuple(it for g in self.groups for it in g.leaves)
+
+    @property
+    def counted_leaves(self) -> tuple[ToggleItem, ...]:
+        """Every item the branch HAS, shown or not. What a roll-up speaks for;
+        toggling still acts on what is on screen.
+
+        Each level holds only the leaves it dropped itself, so nothing is
+        counted twice — an inflated denominator is the same defect as a
+        shrunken one.
+        """
+        return self.items + self.hidden + tuple(it for g in self.groups for it in g.counted_leaves)
 
     def walk(self) -> tuple[ToggleGroup, ...]:
         return (self, *(d for g in self.groups for d in g.walk()))
@@ -270,9 +289,10 @@ class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
         def _key(item: ToggleItem) -> str:
             return item.key or item.label
 
-        seen = {_key(it) for it in g.leaves}
-        n_on = len({_key(it) for it in g.leaves if it.id in self._selected})
-        n_off = len({_key(it) for it in g.leaves if it.id in self._excluded})
+        counted = g.counted_leaves
+        seen = {_key(it) for it in counted}
+        n_on = len({_key(it) for it in counted if it.id in self._selected})
+        n_off = len({_key(it) for it in counted if it.id in self._excluded})
         parts = []
         if mode == "cycle":
             if n_on:
@@ -291,7 +311,9 @@ class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
         leaves meant a user saw no colour at all until they expanded a branch.
         """
         mode = self._mode(g)
-        leaves = g.leaves
+        # A roll-up speaks for the whole branch; a row filter hides rows, it
+        # does not shrink what "all of them" means.
+        leaves = g.counted_leaves
         if mode == "actions":
             return f"{_MARKER_GAP}{g.label}"
         n_ex = sum(1 for it in leaves if it.id in self._excluded)
@@ -311,8 +333,10 @@ class ToggleTree(StateMarkerLabel, Tree[dict[str, Any]]):
             # The "any" option is the absence of a filter, so the branch reads
             # as unset — a ● there says a bound is active when none is.
             active = chosen is not None and not chosen.id.endswith(":any")
-            marker = _FULL if active else _EMPTY
+            marker = _FULL if active else (_PARTIAL if g.elsewhere else _EMPTY)
             suffix = f"  ({chosen.label})" if chosen else "  (any)"
+            if g.elsewhere:
+                suffix = f"{suffix[:-1]} · {g.elsewhere})"
             return _styled_state_row(
                 marker, f"{_MARKER_GAP}{g.label}{suffix}", self._state_colour(marker)
             )

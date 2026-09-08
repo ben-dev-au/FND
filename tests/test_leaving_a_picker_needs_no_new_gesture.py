@@ -63,7 +63,7 @@ async def test_every_leaving_gesture_leaves(tmp_index_dir: Path, key: str) -> No
         await pilot.press(key)
         for _ in range(10):
             await pilot.pause()
-        left = not isinstance(app.screen, TreePickerScreen)
+        left = app.screen.__class__ is not TreePickerScreen
 
     assert left, f"{key!r} did nothing on the picker"
 

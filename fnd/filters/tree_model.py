@@ -87,6 +87,10 @@ class Branch:
     noun: str = ""
     legend: str = ""
     """What the glyphs mean here, where the shared line would be wrong."""
+    elsewhere: str = ""
+    """A bound on this dimension that this branch cannot show. Without it the
+    row read `○ Maximum file size (Any size)` while a minimum was filtering —
+    two rows contradicting each other on the same frame."""
     complete: bool = True
     """False while the leaves are still being discovered. A roll-up that says
     "all of these" is a claim about leaves the branch has not seen yet."""
@@ -246,7 +250,15 @@ def spec_branches(
         value = int(custom.removeprefix(f"{CUSTOM}:"))
         sized.append((value, f"size:{custom}", f"Up to {_human_size(value)}"))
     size_items = [(i, lbl) for _k, i, lbl in sorted(sized)]
-    branches.append(Branch("size", "Maximum file size", "radio", tuple(size_items)))
+    branches.append(
+        Branch(
+            "size",
+            "Maximum file size",
+            "radio",
+            tuple(size_items),
+            elsewhere="a minimum is set" if spec.min_size is not None else "",
+        )
+    )
     for field_name, label in (("modified", "Modified within"), ("created", "Created within")):
         # A window resolves to an absolute date the moment it is picked, so the
         # row names that date: "Last 7 days" alone reads as rolling.
@@ -263,7 +275,19 @@ def spec_branches(
             days = (dt.date.today() - dt.date.fromisoformat(since)).days
             dated.append((days, f"{field_name}:{custom}", f"Since {since}"))
         items = [(i, lbl) for _k, i, lbl in sorted(dated)]
-        branches.append(Branch(field_name, label, "radio", tuple(items)))
+        branches.append(
+            Branch(
+                field_name,
+                label,
+                "radio",
+                tuple(items),
+                elsewhere=(
+                    "an upper bound is set"
+                    if getattr(spec, f"{field_name}_before") is not None
+                    else ""
+                ),
+            )
+        )
     beyond = _beyond_the_pickers(spec)
     if beyond:
         # These dimensions have no picker: "Maximum file size" cannot hold a

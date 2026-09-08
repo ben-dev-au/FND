@@ -5542,7 +5542,15 @@ def _matching_group(group: ToggleGroup, query: str) -> ToggleGroup | None:
     groups = tuple(g for g in (_matching_group(s, query) for s in group.groups) if g is not None)
     if not items and not groups:
         return None
-    return replace(group, items=items, groups=groups)
+    # Kept so the branch's roll-up still speaks for the whole branch: counted
+    # over the surviving rows alone it read `● File types (every type)` with
+    # one of forty ticked. Each level holds only what it dropped itself.
+    kept_items = {i.id for i in items}
+    kept_groups = {g.id for g in groups}
+    hidden = tuple(i for i in group.items if i.id not in kept_items) + tuple(
+        leaf for sub in group.groups if sub.id not in kept_groups for leaf in sub.leaves
+    )
+    return replace(group, items=items, groups=groups, hidden=hidden)
 
 
 def _branch_group(branch: Any) -> ToggleGroup:
@@ -5555,6 +5563,7 @@ def _branch_group(branch: Any) -> ToggleGroup:
         empty_label=branch.empty_label,
         full_label=branch.full_label,
         noun=branch.noun,
+        elsewhere=branch.elsewhere,
         complete=branch.complete,
         groups=tuple(_branch_group(b) for b in branch.groups),
     )
