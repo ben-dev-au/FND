@@ -21,7 +21,7 @@ import pytest
 from fnd.config import Config, load
 from fnd.index import build_index_from_config
 from fnd.tui import FNDApp
-from fnd.tui.menu import _sample_first_source
+from fnd.tui.menu import _indexed_tags
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ async def test_a_tag_from_the_last_collection_is_offered(
     async with app.run_test(size=(110, 30)) as pilot:
         for _ in range(15):
             await pilot.pause()
-        sample = _sample_first_source(app)
+        sample = _indexed_tags(app)
 
     assert sample is not None
     offered = set(sample.tags.get("frontmatter", {}))
@@ -70,19 +70,35 @@ async def test_it_does_not_call_itself_partial(
     async with app.run_test(size=(110, 30)) as pilot:
         for _ in range(15):
             await pilot.pause()
-        sample = _sample_first_source(app)
+        sample = _indexed_tags(app)
 
     assert sample is not None
     assert not sample.truncated, "it called a complete answer partial"
 
 
 @pytest.mark.asyncio
-async def test_an_unbuilt_corpus_still_gets_suggestions(
+async def test_the_index_sample_carries_no_kinds(
+    three_collections: tuple[Config, Path],
+) -> None:
+    """Every kind is offered from the registry, so a sampled subset of them
+    would only shrink the picker as collections were added."""
+    cfg, index_dir = three_collections
+    app = FNDApp(index_dir=index_dir, config=cfg)
+    async with app.run_test(size=(110, 30)) as pilot:
+        for _ in range(15):
+            await pilot.pause()
+        sample = _indexed_tags(app)
+
+    assert sample is not None
+    assert sample.kinds == {}
+
+
+@pytest.mark.asyncio
+async def test_an_unbuilt_corpus_offers_no_tags(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tmp_index_dir: Path
 ) -> None:
-    """The control: a corpus that has never been indexed has no indexed tags,
-    and a first-run user still needs the picker to offer something. The walk
-    stays as the fallback, not as a second mechanism."""
+    """Owner's call: none is the right answer before the first index. The walk
+    that stood in for it offered tags from files the index does not hold."""
     root = tmp_path / "vault"
     root.mkdir()
     (root / "a.md").write_text("---\ntags: [never_indexed]\n---\n\nbody\n", encoding="utf-8")
@@ -101,10 +117,45 @@ async def test_an_unbuilt_corpus_still_gets_suggestions(
     async with app.run_test(size=(110, 30)) as pilot:
         for _ in range(15):
             await pilot.pause()
-        sample = _sample_first_source(app)
+        sample = _indexed_tags(app)
 
-    assert sample is not None
-    assert "never_indexed" in sample.tags.get("frontmatter", {}), sample.tags
+    assert sample is None
+
+
+@pytest.mark.asyncio
+async def test_the_screen_says_why_it_offers_none(tmp_index_dir: Path) -> None:
+    """A branch that is simply absent reads as a missing feature."""
+    from textual.containers import Vertical
+
+    from fnd.filters import FilterSpec
+    from fnd.tui.settings_screen import FilterBrowserScreen
+
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(),
+                gitignore=True,
+                fndignore=True,
+                sample_provider=lambda: None,
+                no_tags_note="tags are offered once a collection is indexed",
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(25):
+            await pilot.pause()
+        assert app.screen.query_one("#settings_box", Vertical) is not None
+        rows = [
+            "".join(s.text for s in strip).strip().strip("│").strip()
+            for strip in app.screen._compositor.render_strips()
+        ]
+        # The note wraps inside the box, so the border and the wrap have to go
+        # before the sentence can be looked for at all.
+        painted = " ".join(" ".join(rows).split())
+
+    assert "tags are offered once a collection is indexed" in painted, painted
 
 
 def test_the_index_lookup_survives_a_stub_app() -> None:

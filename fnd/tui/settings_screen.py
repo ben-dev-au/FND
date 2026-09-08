@@ -2040,6 +2040,7 @@ def open_source_filter_browser(
             gitignore=resolved.respect_gitignore,
             fndignore=resolved.respect_fndignore,
             sample_provider=_sample,
+            no_tags_note="no tags found in this source",
             globs=list(globs or ()),
             excludes=list(excludes or ()),
             inherited=(
@@ -5942,6 +5943,7 @@ class FilterBrowserScreen(Screen[None]):
         excludes: list[str] | None = None,
         inherited: tuple[Any, bool, bool] | None = None,
         save_note: str = "",
+        no_tags_note: str = "",
         commit_label: str = "Save",
         on_save: Callable[[Any, bool, bool], None],
     ) -> None:
@@ -5952,6 +5954,9 @@ class FilterBrowserScreen(Screen[None]):
         # What Ctrl+S does to the index. The two routes differ: a source save
         # reindexes its collection, the defaults save reindexes nothing.
         self._save_note = save_note
+        # A branch that is simply absent reads as a missing feature, and the
+        # two routes are silent for different reasons.
+        self._no_tags_note = no_tags_note
         # And what it does at all. On a source this screen stages into the
         # form, which owns the write, so calling it "Save" promised something
         # only the form does.
@@ -6277,6 +6282,8 @@ class FilterBrowserScreen(Screen[None]):
             head.append(f"showing rows matching {self._query!r}")
         if self._scanning:
             head.append("scanning source for types and tags…")
+        elif self._no_tags_note and not getattr(self._sample, "tags", None):
+            head.append(self._no_tags_note)
         elif getattr(self._sample, "truncated", False):
             # The scan stopped at its time budget, so the branches below list
             # some of the source's types and tags rather than all of them.

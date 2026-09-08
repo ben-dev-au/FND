@@ -26,7 +26,7 @@ that share the same chrome.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -2278,61 +2278,11 @@ def _open_filter_browser(app: FNDApp) -> None:
             spec=_spec_from_filters(current),
             gitignore=current.respect_gitignore,
             fndignore=current.respect_fndignore,
-            # The defaults' own ignore settings, as the per-source route already
-            # threads them: sampling with the wrong ones offers tags from a
-            # narrower set than the walk indexes.
-            sample_provider=lambda: _sample_first_source(
-                app,
-                ignore_names=tuple(
-                    name
-                    for name, on in (
-                        (".gitignore", current.respect_gitignore),
-                        (".fndignore", current.respect_fndignore),
-                    )
-                    if on
-                ),
-            ),
+            sample_provider=lambda: _indexed_tags(app),
+            no_tags_note="tags are offered once a collection is indexed",
             on_save=_save,
         )
     )
-
-
-def _distinct_roots(cfg: Any) -> tuple[list[Path], bool]:
-    """Folders to sample once each, and whether the caps left any out.
-
-    Counts are per file, so sampling the same folder twice doubles them: one
-    vault listed in two collections reported six files carrying a tag that
-    three files carry, and a nested source counted its contents twice.
-
-    The caps bound the I/O; the flag is what stops a two-source sample being
-    presented as the whole story. Candidates are compared as strings because
-    a stat here would reach every configured source, including the offline
-    volumes the caps exist to avoid.
-    """
-    from pathlib import Path
-
-    candidates: list[str] = []
-    every: set[str] = set()
-    for index, collection in enumerate(cfg.collections.values()):
-        for position, source in enumerate(collection.sources):
-            key = str(Path(source.path).expanduser())
-            every.add(key)
-            if index < 3 and position < 2 and key not in candidates:
-                candidates.append(key)
-
-    chosen: list[Path] = []
-    for key in candidates:
-        try:
-            root = Path(key).resolve()
-        except OSError:
-            continue
-        if not root.exists():
-            continue
-        if any(root == seen or root.is_relative_to(seen) for seen in chosen):
-            continue
-        chosen = [s for s in chosen if not s.is_relative_to(root)]
-        chosen.append(root)
-    return chosen, len(every) > len(candidates)
 
 
 def _indexed_tags(app: FNDApp) -> Any:
@@ -2344,8 +2294,9 @@ def _indexed_tags(app: FNDApp) -> Any:
     65 ms for 141 distinct tags — against a walk that reached the first three
     collections and called itself a partial scan.
 
-    Returns None when there is nothing indexed yet, so the caller can fall
-    back to sampling the sources for a corpus that has never been built.
+    Returns None when nothing is indexed yet — the screen says so rather
+    than walking the sources, which would offer tags from files the index
+    does not hold.
     """
     import contextlib
 
@@ -2354,9 +2305,8 @@ def _indexed_tags(app: FNDApp) -> Any:
     cfg = app._config  # type: ignore[attr-defined]
     if cfg is None:
         return None
-    # Every getter here has to survive the settings tests' stub app, which is
-    # a SimpleNamespace carrying only `_config`: reaching straight through
-    # `app._search` raised AttributeError and took the walk fallback with it.
+    # Every getter here has to survive the settings tests' stub app, which
+    # is a SimpleNamespace carrying only `_config`.
     searcher = getattr(getattr(app, "_search", None), "searcher", None)
     index = getattr(searcher, "_index", None)
     if index is None:
@@ -2376,43 +2326,6 @@ def _indexed_tags(app: FNDApp) -> Any:
         if merged.tags:
             return merged
     return None
-
-
-def _sample_first_source(app: FNDApp, *, ignore_names: Sequence[str] | None = None) -> Any:
-    """Tag values for the picker to offer.
-
-    Asks the INDEX first: these are the defaults for every collection, so the
-    answer wanted is every tag across all of them, and the index has it
-    without touching the disk. Falls back to sampling the sources only when
-    nothing is indexed yet — a corpus that has never been built has no
-    indexed tags to offer, and a first-run user still needs suggestions.
-
-    The fallback stays bounded: a picker wants suggestions, not an inventory,
-    and a cloud-backed folder must not stall the screen opening. Kinds are
-    deliberately NOT sampled — the scan reaches only the first few sources, so
-    offering the types it happened to see made file-type groups vanish from
-    this screen as collections were added.
-    """
-    from fnd.filters.scan import SourceSample, sample_source
-
-    cfg = app._config  # type: ignore[attr-defined]
-    if cfg is None:
-        return None
-    indexed = _indexed_tags(app)
-    if indexed is not None:
-        return indexed
-    merged = SourceSample()
-    roots, capped = _distinct_roots(cfg)
-    merged.truncated = capped
-    for root in roots:
-        part = sample_source(root, budget_s=0.6, ignore_names=ignore_names)
-        merged.files_seen += part.files_seen
-        merged.truncated = merged.truncated or part.truncated
-        for src, values in part.tags.items():
-            bucket = merged.tags.setdefault(src, {})
-            for value, n in values.items():
-                bucket[value] = bucket.get(value, 0) + n
-    return merged
 
 
 def _summary_index_filters(app: FNDApp) -> str:
