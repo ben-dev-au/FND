@@ -123,6 +123,17 @@ def _format_current_line(
             f"[dim]Fetching from {wait.provider}:[/] {_short_name(wait.path)}"
             f"   [yellow]· waiting {int(wait.seconds_waiting())}s[/]"
         )
+    return _current_line(current_path, stuck_suffix)
+
+
+def _current_line(current_path: str, stuck_suffix: str = "") -> str:
+    """The "what is happening right now" line, or nothing.
+
+    `_short_name("")` is `?`, which reads as a file the modal cannot name. On a
+    finished run there is no current file, so the line says nothing at all.
+    """
+    if not current_path:
+        return ""
     return f"[dim]Current:[/] {_short_name(current_path)}{stuck_suffix}"
 
 
@@ -402,12 +413,12 @@ class IndexerScreen(ModalScreen[None]):
 
         pages, page_secs = live_progress.session_snapshot()
         per_page = fmt_per_page(pages, page_secs)
+        # `?` is honest while pages are still being counted and noise on a run
+        # that has none to count — a corpus with no PDFs never gets an average.
+        average = "" if per_page == "?" else f"    [dim]·[/]    [dim]Avg:[/] {per_page}"
         with contextlib.suppress(Exception):
             timing = self.query_one("#indexer_timing", Static)
-            timing.update(
-                f"[dim]Elapsed:[/] {fmt_duration(elapsed_seconds)}    "
-                f"[dim]·[/]    [dim]Avg:[/] {per_page}"
-            )
+            timing.update(f"[dim]Elapsed:[/] {fmt_duration(elapsed_seconds)}{average}")
 
     def _render_timing_from_event(self, ev: Any) -> None:
         self._render_timing(getattr(ev, "elapsed_s", 0.0))
@@ -592,7 +603,7 @@ class IndexerScreen(ModalScreen[None]):
             bar = self.query_one("#indexer_progress", ProgressBar)
             bar.update(total=max(1, state.total_files), progress=state.files_completed)
             self.query_one("#indexer_current_file", Static).update(
-                f"[dim]Current:[/] {_short_name(state.current_file)}"
+                _current_line(state.current_file)
             )
             self._update_status_lines(
                 pdfs_total=state.pdfs_total,
@@ -639,7 +650,7 @@ class IndexerScreen(ModalScreen[None]):
             status.update(f"[green]Done.[/]   {ev.files_done} / {ev.files_total} files")
             self._refresh_todo_after_run()
 
-        current.update(f"[dim]Current:[/] {_short_name(ev.current_file)}")
+        current.update(_current_line(ev.current_file))
         self._render_timing(ev.elapsed_s)
         self._update_status_lines(
             pdfs_total=ev.pdfs_total,
