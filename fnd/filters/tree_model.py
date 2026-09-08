@@ -87,28 +87,17 @@ def _offers_every_kind(items: list[tuple[str, str, str]]) -> bool:
     return {k.removeprefix("kind:") for _cat, k, _label in items} >= set(ALL_KIND_IDS)
 
 
-def _kind_items(
-    sample: SourceSample | None, configured: tuple[str, ...] = ()
-) -> list[tuple[str, str, str]]:
-    """(category id, kind id, label) for kinds present, or all when unknown.
+def _kind_items(sample: SourceSample | None) -> list[tuple[str, str, str]]:
+    """(category id, kind id, label) for every kind, counted where the sample saw one.
 
-    A kind the filter already names is offered even when the sample saw none:
-    dropping the row leaves a rule the user can neither see nor switch off,
-    under a branch that reads as unfiltered.
-
-    A truncated sample narrows nothing. The scan stops at 4000 files in walk
-    order, so 4500 notes beside 200 PDFs offered Markdown alone and "md + pdf"
-    could not be said here at all; what it did not reach is not absence.
+    Every kind is offered, whatever the sample saw. A picker that shows only
+    today's types has to be revisited as the corpus grows, and a filter set
+    once should keep holding: the counts say what is there now, the rows say
+    what can be chosen.
     """
-    truncated = bool(sample and sample.truncated)
-    present = set(sample.kinds) if sample and sample.kinds and not truncated else None
-    if present is not None:
-        present |= set(configured)
     out: list[tuple[str, str, str]] = []
     for cat in CATEGORIES:
         for kind in KINDS_IN_CATEGORY.get(cat.id, ()):
-            if present is not None and kind not in present:
-                continue
             spec = KIND_BY_ID.get(kind)
             if spec is None:
                 continue
@@ -186,7 +175,7 @@ def spec_branches(
     """
     branches: list[Branch] = []
 
-    kinds = _kind_items(sample, spec.kinds)
+    kinds = _kind_items(sample)
     by_cat: dict[str, list[tuple[str, str]]] = {}
     for cat_id, kind, label in kinds:
         by_cat.setdefault(cat_id, []).append((kind, label))

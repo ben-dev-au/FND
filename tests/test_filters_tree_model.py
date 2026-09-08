@@ -38,12 +38,16 @@ def _sample() -> SourceSample:
 
 
 class TestBranches:
-    def test_only_kinds_present_are_offered(self) -> None:
-        """A picker listing types the source does not contain is noise."""
-        found = {
-            i for i in _leaves(spec_branches(FilterSpec(), _sample())) if i.startswith("kind:")
-        }
-        assert found == {"kind:md", "kind:pdf"}
+    def test_every_kind_is_offered_and_the_present_ones_are_counted(self) -> None:
+        """Overruled deliberately: a picker showing only today's types has to
+        be revisited as files are added. The counts carry what the sample saw."""
+        from fnd.kinds import ALL_KIND_IDS
+
+        branch = next(b for b in spec_branches(FilterSpec(), _sample()) if b.id == "kinds")
+        items = {i.removeprefix("kind:"): label for g in branch.groups for i, label in g.items}
+        assert set(items) == set(ALL_KIND_IDS)
+        assert "·" in items["md"], items["md"]
+        assert "·" not in items["epub"], "a kind the sample never saw carries no count"
 
     def test_every_kind_is_offered_when_nothing_is_known(self) -> None:
         kinds = {i for i in _leaves(spec_branches(FilterSpec(), None)) if i.startswith("kind:")}

@@ -27,11 +27,11 @@ def test_a_truncated_scan_offers_every_kind() -> None:
     assert _offered(seen_only_md) == set(ALL_KIND_IDS)
 
 
-def test_a_complete_scan_still_narrows() -> None:
-    """The control: a scan that reached the end is evidence, and the short
-    relevant list is the whole point of sampling."""
+def test_a_complete_scan_offers_every_kind_too() -> None:
+    """A picker showing only today's types has to be revisited as the corpus
+    grows; a filter set once should keep holding."""
     whole_source = SourceSample(kinds={"md": 3}, tags={}, truncated=False)
-    assert _offered(whole_source) == {"md"}
+    assert _offered(whole_source) == set(ALL_KIND_IDS)
 
 
 def test_a_configured_kind_survives_either_way() -> None:
@@ -46,3 +46,14 @@ def test_a_truncated_branch_may_claim_every_type() -> None:
     sample = SourceSample(kinds={"md": 4000}, tags={}, truncated=True)
     kinds = next(b for b in spec_branches(FilterSpec(), sample) if b.id == "kinds")
     assert kinds.full_label == "every type"
+
+
+def test_the_counts_still_say_what_is_there_now() -> None:
+    """Offering every kind must not cost the counts: the rows say what can be
+    chosen, the counts say what the source holds today."""
+    sample = SourceSample(kinds={"md": 40, "pdf": 3}, tags={}, truncated=False)
+    kinds = next(b for b in spec_branches(FilterSpec(), sample) if b.id == "kinds")
+    labels = {i: label for g in kinds.groups for i, label in g.items}
+    assert "40" in labels["kind:md"], labels["kind:md"]
+    assert "3" in labels["kind:pdf"], labels["kind:pdf"]
+    assert "·" not in labels["kind:epub"], "a kind with none seen carries no count"

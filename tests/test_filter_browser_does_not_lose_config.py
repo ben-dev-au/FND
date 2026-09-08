@@ -158,7 +158,11 @@ class TestAHomogeneousFolderKeepsItsRule:
         sample = SourceSample(kinds={"md": 12}, tags={})
         assert _round_trip(spec, sample=sample).kinds == ("md",)
 
-    def test_the_branch_does_not_claim_every_type(self) -> None:
+    def test_the_branch_may_now_claim_every_type(self) -> None:
+        """The guard existed because ticking every VISIBLE kind on a sampled
+        list would collapse to "every type" and silently widen. The list is
+        never sampled now, so the promise is honest — and the collapse test
+        below still proves ticking all of them is what earns it."""
         from fnd.filters.scan import SourceSample
         from fnd.filters.tree_model import spec_branches
 
@@ -166,7 +170,7 @@ class TestAHomogeneousFolderKeepsItsRule:
         branch = next(
             b for b in spec_branches(FilterSpec(kinds=("md",)), sample) if b.id == "kinds"
         )
-        assert branch.full_label == "", "a sampled list cannot promise every type"
+        assert branch.full_label == "every type"
 
     def test_a_complete_offer_still_collapses(self) -> None:
         from fnd.filters.scan import SourceSample
