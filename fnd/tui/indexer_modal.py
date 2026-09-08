@@ -485,14 +485,26 @@ class IndexerScreen(ModalScreen[None]):
                 with contextlib.suppress(Exception):
                     opts.remove_option(opt_id)
                     self._removed_options.add(opt_id)
-        self._sync_footer(done=want_done, todo=want_todo)
+        self._sync_footer(
+            done=want_done,
+            todo=want_todo,
+            history=bool(getattr(app._indexer, "chain_history", None)),
+        )
 
-    def _sync_footer(self, *, done: bool, todo: bool) -> None:
+    def _sync_footer(self, *, done: bool, todo: bool, history: bool) -> None:
         """The keys this screen answers, in the state it is in. Read from the
-        same call that decides the action rows, so the two cannot disagree."""
+        same call that decides the action rows, so the two cannot disagree.
+
+        ``history`` comes from the chain state rather than the band's own
+        class, so the footer does not depend on which refresh ran first.
+        """
         from fnd.tui.app import render_hint_bar
 
         hints: tuple[tuple[str, str], ...] = (("↑↓", "Choose"), ("⏎", "Select"))
+        # The per-collection summary — which is where the removed-file counts
+        # are read — is focusable and was named nowhere.
+        if history:
+            hints = (*hints, ("Tab", "Completed"))
         if done:
             hints = (*hints, ("Esc", "Close"))
         else:
