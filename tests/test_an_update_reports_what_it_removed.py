@@ -23,11 +23,15 @@ def _collection(root: Path, *, max_size: int | None) -> CollectionConfig:
     )
 
 
-def _run(config: CollectionConfig, index_dir: Path) -> ProgressEvent:
+def _run(config: CollectionConfig, index_dir: Path, *, rebuild: bool = False) -> ProgressEvent:
     async def _drive() -> ProgressEvent:
         last: ProgressEvent | None = None
         async for ev in run_indexer(
-            config=config, collection="notes", index_dir=index_dir, echo_skips=True
+            config=config,
+            collection="notes",
+            index_dir=index_dir,
+            rebuild=rebuild,
+            echo_skips=True,
         ):
             last = ev
         assert last is not None
@@ -64,3 +68,33 @@ def test_the_line_says_so() -> None:
 def test_a_run_that_removed_nothing_stays_quiet() -> None:
     """The control: an ordinary update must not grow a "0 removed" chip."""
     assert "removed" not in _format_indexed_line(2, 9, 0, 0)
+
+
+def test_a_rebuild_counts_what_did_not_come_back(corpus: Path, tmp_index_dir: Path) -> None:
+    """A rebuild wipes and re-adds, so the prune pass never runs. Removing a
+    source takes that path, and reported its departures as arrivals."""
+    _run(_collection(corpus, max_size=None), tmp_index_dir)
+
+    narrowed = _run(_collection(corpus, max_size=100), tmp_index_dir, rebuild=True)
+
+    assert narrowed.kind == "done"
+    assert narrowed.indexed_newly_total == 1, "a rebuild re-adds what survives"
+    assert narrowed.removed_total == 1, "and one file did not come back"
+
+
+def test_a_rebuild_that_loses_nothing_reports_nothing(corpus: Path, tmp_index_dir: Path) -> None:
+    """The control: an ordinary rebuild must not claim to have removed files."""
+    _run(_collection(corpus, max_size=None), tmp_index_dir)
+
+    again = _run(_collection(corpus, max_size=None), tmp_index_dir, rebuild=True)
+
+    assert again.removed_total == 0
+
+
+def test_the_first_rebuild_of_a_collection_removes_nothing(
+    corpus: Path, tmp_index_dir: Path
+) -> None:
+    """Nothing was there to lose, so the count must not read as loss."""
+    first = _run(_collection(corpus, max_size=None), tmp_index_dir, rebuild=True)
+
+    assert first.removed_total == 0

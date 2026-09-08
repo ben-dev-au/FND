@@ -55,6 +55,7 @@ from fnd.index import (
     _path_parent_id,
     commit,
     commit_async,
+    indexed_parent_ids,
     prune_removed_files,
     read_file_metadata,
     sources_are_enumerable,
@@ -860,7 +861,7 @@ async def run_indexer(
     _walked = {p for p, _src in paths}
     scan_blocked = [(p, reason) for p, reason in scan_blocked if p not in _walked]
 
-    def _prepare() -> tuple[dict[str, int], int, int, Any, Any, Any]:
+    def _prepare() -> tuple[dict[str, int], int, int, Any, Any, Any, set[str]]:
         local_paths = paths
         local_sizes: dict[str, int] = {}
         for p, _src in local_paths:
@@ -872,7 +873,13 @@ async def run_indexer(
         local_bytes_total = sum(local_sizes.values())
         local_index = _ensure_index(index_dir, force=rebuild)
         local_writer = local_index.writer(heap_size=_WRITER_HEAP)
+        local_held: set[str] = set()
         if rebuild:
+            # What the collection held before the wipe. A rebuild deletes and
+            # re-adds, so the prune pass never runs and nothing counted what
+            # left: removing a source reported its departures as arrivals.
+            with contextlib.suppress(Exception):
+                local_held = indexed_parent_ids(local_index, collection)
             local_writer.delete_documents(F_COLLECTION, collection)
             commit(local_writer)
         # Prior-committed snapshot for the incremental skip. A point-in-time
@@ -890,6 +897,7 @@ async def run_indexer(
             local_index,
             local_writer,
             local_prior_searcher,
+            local_held,
         )
 
     try:
@@ -900,6 +908,7 @@ async def run_indexer(
             index,
             writer,
             prior_searcher,
+            held_before,
         ) = await asyncio.to_thread(_prepare)
     except Exception as e:
         # Without this backstop a LockBusy (concurrent indexer on the
@@ -1133,10 +1142,14 @@ async def run_indexer(
         # Skipped on cancel, where the partial walk would read as mass
         # deletion, and on a missing root (offline volume, same trap).
         removed = 0
-        if not rebuild and not (cancel is not None and cancel.is_set()):
+        if not (cancel is not None and cancel.is_set()):
             live_parent_ids = {_path_parent_id(p) for p, _src in paths}
             live_parent_ids.update(_path_parent_id(p) for p, _reason in scan_blocked)
-            if sources_are_enumerable(Path(s.path).expanduser() for s in config.sources):
+            if rebuild:
+                # The wipe already removed them; this is the count of the ones
+                # the walk did not bring back.
+                removed = len(held_before - live_parent_ids)
+            elif sources_are_enumerable(Path(s.path).expanduser() for s in config.sources):
                 removed = prune_removed_files(
                     index, writer, collection=collection, live_parent_ids=live_parent_ids
                 )
