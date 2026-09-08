@@ -2119,7 +2119,11 @@ class FNDApp(App[None]):
         """Map the current screen / focused panel to the Keybindings
         section that should appear right after Global. Returns ``None``
         when nothing more specific than Global is appropriate."""
-        from fnd.tui.settings_screen import SettingsScreen, SourceFormScreen
+        from fnd.tui.settings_screen import (
+            FilterBrowserScreen,
+            SettingsScreen,
+            SourceFormScreen,
+        )
 
         # If we're inside the Settings stack, the relevant section
         # depends on which screen the user is on. SourceFormScreen
@@ -2127,6 +2131,8 @@ class FNDApp(App[None]):
         # (Preferences / Collections / Keybindings sub-screens — the
         # SettingsList widget bindings apply across all of them).
         current = self.screen
+        if isinstance(current, FilterBrowserScreen):
+            return "Index filters"
         if isinstance(current, SourceFormScreen):
             return "Source form"
         if isinstance(current, SettingsScreen):

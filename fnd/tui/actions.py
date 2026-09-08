@@ -75,7 +75,9 @@ REGISTRY: tuple[Action, ...] = (
         default_key="left",
         command="collapse",
         footer_label="Collapse",
-        contexts=("results", "collections"),
+        # All three sidebar trees: `_focused_tree` serves the filters panel too,
+        # and the help sheet lists an action under every context it names.
+        contexts=("results", "collections", "filters"),
         show_in_footer=False,
     ),
     Action(
@@ -86,7 +88,7 @@ REGISTRY: tuple[Action, ...] = (
         default_key="right",
         command="expand",
         footer_label="Expand",
-        contexts=("results", "collections"),
+        contexts=("results", "collections", "filters"),
         show_in_footer=False,
     ),
     Action(

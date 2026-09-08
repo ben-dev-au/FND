@@ -352,7 +352,10 @@ _KEYS_SETTINGS: tuple[tuple[str, str, str, str], ...] = (
         "1-9",
         "Jump by index",
         "",
-        "Number keys jump the cursor straight to the nth visible row in the current section.",
+        "Number keys jump the cursor straight to the nth visible row in the "
+        "current section — with the row list focused. A settings screen opens "
+        "with the filter box focused, where digits type instead; press ↓ to "
+        "reach the rows first.",
     ),
     (
         "Shift+Enter",
@@ -372,9 +375,11 @@ _KEYS_SETTINGS: tuple[tuple[str, str, str, str], ...] = (
 _KEYS_SOURCE_FORM: tuple[tuple[str, str, str, str], ...] = (
     (
         "Tab / Shift+Tab",
-        "Cycle fields",
+        "Field list ↔ sample",
         "",
-        "Move forward (Tab) or backward (Shift+Tab) through the form fields and the frontmatter sample at the bottom.",
+        "Move between the field list and the frontmatter sample tester below "
+        "it. The sample is only shown once a frontmatter rule is set, so with "
+        "no rule there is nowhere else to go and the keys do nothing.",
     ),
     (
         "Enter",
@@ -451,6 +456,69 @@ _KEYS_AX_MODAL: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
+# The filter browser's keys are screen and ToggleTree bindings, so the registry
+# does not know them and the sheet had no Index-filters section at all. A
+# function because the clear key is the user's keymap, not a literal.
+def _keys_filter_browser() -> tuple[tuple[str, str, str, str], ...]:
+    from fnd.tui.settings_screen import _CLEAR_FILTERS_KEY
+
+    return (
+        (
+            "Enter",
+            "Toggle the row",
+            "",
+            "Turn the focused rule on or off. On a branch it toggles every "
+            "child at once; on a branch with nothing to toggle it expands.",
+        ),
+        (
+            "→ / ←",
+            "Open / close a branch",
+            "",
+            "Expand the focused branch or collapse it. ← on the outermost "
+            "level leaves the screen, as it does everywhere in Settings.",
+        ),
+        (
+            "/",
+            "Filter rows",
+            "",
+            "Narrow the rows by label. A vault's tags run to thousands of "
+            "rows, so this is how you reach one without arrowing to it.",
+        ),
+        (
+            "t",
+            "Edit as text",
+            "",
+            "Open the whole filter set as its expression, for anything the "
+            "pickers cannot say. Applies back into the screen, not to disk.",
+        ),
+        (
+            "y",
+            "Copy the expression",
+            "",
+            "Put the filter set on the clipboard as text, to paste into a config file or share.",
+        ),
+        (
+            _CLEAR_FILTERS_KEY,
+            "Return to defaults",
+            "",
+            "Drop every rule on this screen. Shown only while there is something to drop.",
+        ),
+        (
+            COMMIT_KEY,
+            "Save",
+            "",
+            "Write the filters. Collections keep their current contents "
+            "until you reindex — saving here indexes nothing.",
+        ),
+        (
+            "Esc / ←",
+            "Discard",
+            "",
+            "Leave without saving. Asks first when there are unsaved edits.",
+        ),
+    )
+
+
 # Results-pane keys owned by ``ResultsTree`` widget bindings (not the action
 # registry), so they're hand-curated here and appended to the Results section.
 # A function, not a constant: the Apple-Terminal workaround is conditional
@@ -516,6 +584,7 @@ def _key_row(
     description: str,
     *,
     section: str = "",
+    id_suffix: str = "",
 ) -> MenuItem:
     """Build a Keybindings cheat-sheet row. ``label`` is the short title
     shown in the row list; ``description`` is the long-form explanation
@@ -530,6 +599,10 @@ def _key_row(
     # Slug the row id from the *un*localised key/label so ids stay identical on
     # every OS — "⌥ ↑" and "Alt ↑" must not mint two different ids for one row.
     item_id = f"key.{action_id}" if action_id else "key." + _slug(section, key, label)
+    # An action that works in several panes is listed in each of them; the
+    # first keeps the plain id so nothing referring to it moves.
+    if id_suffix:
+        item_id = f"{item_id}.{_slug(id_suffix)}"
     # Single localise seam for the whole cheat sheet: registry-derived rows and
     # the static widget tables both land here, so neither can drift into
     # hardcoded macOS vocabulary. ``key`` is localised too — the skim row's
@@ -590,16 +663,20 @@ def _provider_keybindings(_app: FNDApp, *, context_hint: str | None = None) -> t
     for action in REGISTRY:
         if action.default_key is None:
             continue  # palette-only — no key to show
-        primary_ctx = action.contexts[0] if action.contexts else ""
-        section = _CONTEXT_TO_SECTION.get(primary_ctx, "Global")
-        sections[section].append(
-            _key_row(
-                _pretty_key(action.default_key),
-                _action_label(action),
-                action.id,
-                action.description,
+        # Every pane it works in, not just the first: ←/→ expand and collapse
+        # in all three trees but were documented under Results alone, so the
+        # Filters section named neither of the keys that move around it.
+        for nth, ctx in enumerate(action.contexts or ("",)):
+            section = _CONTEXT_TO_SECTION.get(ctx, "Global")
+            sections[section].append(
+                _key_row(
+                    _pretty_key(action.default_key),
+                    _action_label(action),
+                    action.id,
+                    action.description,
+                    id_suffix=section if nth else "",
+                )
             )
-        )
 
     # Results-pane widget bindings (Option-skim, Enter-load) live on ResultsTree,
     # not the registry — append them to the registry-derived Results section.
@@ -613,6 +690,9 @@ def _provider_keybindings(_app: FNDApp, *, context_hint: str | None = None) -> t
     # sections (multiple "Cancel" rows) get distinct MenuItem ids.
     sections["Settings menu"] = [_key_row(*row, section="settings") for row in _KEYS_SETTINGS]
     sections["Source form"] = [_key_row(*row, section="source_form") for row in _KEYS_SOURCE_FORM]
+    sections["Index filters"] = [
+        _key_row(*row, section="filter_browser") for row in _keys_filter_browser()
+    ]
     sections["Open with… modal"] = [_key_row(*row, section="open_with") for row in _KEYS_OPEN_WITH]
     # AX permission gates the macOS Preview AppleScript page-jump, so the modal
     # can never surface on Linux/Windows — listing its keys there would point
