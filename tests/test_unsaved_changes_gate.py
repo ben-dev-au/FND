@@ -327,8 +327,11 @@ class TestEveryAdvertisedExitAsks:
             app._close_settings_stack()
             for _ in range(8):
                 await pilot.pause()
-            closed = not isinstance(app.screen, SettingsScreen)
-            prompted = app.screen.__class__ is UnsavedChangesScreen
+            # By name: pyright narrows `app.screen` from the assert above, so
+            # an isinstance here reads as always-true and never runs.
+            names = [t.__name__ for t in type(app.screen).__mro__]
+            closed = SettingsScreen.__name__ not in names
+            prompted = UnsavedChangesScreen.__name__ in names
 
         assert closed, "a clean settings stack did not close"
         assert not prompted
