@@ -1260,13 +1260,21 @@ def _make_rebuild(name: str) -> Callable[[FNDApp], None]:
     (cache bypassed). The deliberate, costly redo."""
 
     def _run(app: FNDApp) -> None:
-        app._indexer.reindex_with_warning(  # type: ignore[attr-defined]
-            name,
-            texturise_override=True,
-            skip_unchanged=False,
-            force_fresh=True,
-            rebuild=True,
-        )
+        from fnd.tui.settings_screen import RebuildConfirmScreen
+
+        def _go() -> None:
+            app._indexer.reindex_with_warning(  # type: ignore[attr-defined]
+                name,
+                texturise_override=True,
+                skip_unchanged=False,
+                force_fresh=True,
+                rebuild=True,
+            )
+
+        # Confirmed, like every other act that removes something. This one
+        # empties the collection first and sat one Enter away, one row under
+        # "Update index", which adds and drops without emptying anything.
+        app.push_screen(RebuildConfirmScreen(collection_name=name, on_confirm=_go))
 
     return _run
 

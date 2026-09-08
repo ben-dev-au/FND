@@ -4534,6 +4534,78 @@ def unsaved_on(screen: object) -> tuple[str, Callable[[], None]] | None:
     return str(what), cast("Callable[[], None]", save)
 
 
+class RebuildConfirmScreen(Screen[None]):
+    """Confirm a rebuild, which drops the collection's chunks first.
+
+    Delete-source, delete-collection and Update-all all confirmed; the one act
+    that empties an index did not, and it sat one row under "Update index" on
+    the same panel, reachable by a single Enter. The two rows differ only in
+    cost and consequence, which is exactly what a label cannot carry alone.
+    """
+
+    BINDINGS = [  # noqa: RUF012
+        Binding("escape,left", "back", "Cancel", show=False),
+        Binding("up,k", "cursor(-1)", show=False),
+        Binding("down,j", "cursor(1)", show=False),
+        Binding("enter", "activate", show=False),
+    ]
+
+    CSS = chrome_css("RebuildConfirmScreen", confirm=True)
+
+    def __init__(self, *, collection_name: str, on_confirm: Callable[[], None]) -> None:
+        super().__init__()
+        self._collection_name = collection_name
+        self._on_confirm = on_confirm
+
+    def compose(self) -> ComposeResult:
+        name = self._collection_name
+        with Vertical(id="settings_box") as box:
+            box.border_title = f"Collections › {name} › Rebuild"
+            yield Static(
+                f"Rebuild {name!r} from scratch?\n\n"
+                "Its chunks are dropped first, so until the run finishes this "
+                "collection holds less than it does now — and a rebuild that "
+                "is cancelled or interrupted leaves it part-built.\n\n"
+                "The files on disk are untouched. Update index adds and drops "
+                "what changed without emptying anything, and is what you want "
+                "unless you are re-texturising after an engine upgrade.",
+                classes="warning",
+            )
+            yield OptionList(
+                Option(Text(f"Yes, rebuild {name}", style="bold"), id="yes"),
+                Option("Cancel", id="no"),
+                id="confirm_list",
+            )
+        yield Static("", id="footer_hints")
+
+    def on_mount(self) -> None:
+        self.query_one("#confirm_list", OptionList).focus()
+        app: FNDApp = self.app  # type: ignore[assignment]
+        self.query_one("#footer_hints", Static).update(
+            _hint_bar(app, (("⏎", "Confirm"), ("Esc", "Cancel")))
+        )
+
+    def action_cursor(self, direction: int) -> None:
+        lst = self.query_one("#confirm_list", OptionList)
+        if direction > 0:
+            lst.action_cursor_down()
+        else:
+            lst.action_cursor_up()
+
+    def action_activate(self) -> None:
+        self.query_one("#confirm_list", OptionList).action_select()
+
+    def action_back(self) -> None:
+        self.app.pop_screen()
+
+    @on(OptionList.OptionSelected, "#confirm_list")
+    def _chosen(self, ev: OptionList.OptionSelected) -> None:
+        confirmed = ev.option.id == "yes"
+        self.app.pop_screen()
+        if confirmed:
+            self._on_confirm()
+
+
 class DeleteSourceScreen(Screen[None]):
     """Confirm + remove a single source from a collection.
 
