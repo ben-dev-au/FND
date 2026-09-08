@@ -313,6 +313,10 @@ def _enumerate_iter(
         skip = resolve_skip_dirs(_load_config().defaults)
     except Exception:
         skip = resolve_skip_dirs(None)
+    # The first source to reach a file owns it, as in build_index_from_config:
+    # a folder listed twice, or nested inside another source, reported seven
+    # files for five and did the extraction twice.
+    claimed: set[str] = set()
     for source in config.sources:
         try:
             source_id = str(Path(source.path).expanduser().resolve())
@@ -321,6 +325,10 @@ def _enumerate_iter(
         for path in walk_sources(
             sources=[source], skip_dirs=skip, read_frontmatter=read_frontmatter
         ):
+            key = str(path.resolve())
+            if key in claimed:
+                continue
+            claimed.add(key)
             yield (path, source_id)
 
 
