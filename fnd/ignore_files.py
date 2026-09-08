@@ -71,9 +71,13 @@ class IgnoreMatch:
 
 
 def _strip_trailing_space(line: str) -> str:
-    """Trailing whitespace is insignificant unless backslash-escaped."""
+    """Trailing spaces are insignificant unless backslash-escaped.
+
+    Spaces only: git's ``trim_trailing_spaces`` leaves a tab in place, so
+    stripping one here excludes a file git keeps.
+    """
     out = line
-    while out.endswith((" ", "\t")):
+    while out.endswith(" "):
         stripped = out[:-1]
         if stripped.endswith("\\"):
             break
@@ -98,13 +102,21 @@ def _fold_case(directory: Path, name: str) -> bool:
         return False
 
 
+def _lines(text: str) -> list[str]:
+    """Newline-separated lines, each without its trailing carriage return."""
+    return [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
+
+
 def parse_patterns(text: str, *, fold_case: bool = False) -> tuple[Pattern, ...]:
     """One :class:`Pattern` per significant line, in file order.
 
     ``fold_case`` matches git's ``core.ignorecase``; see :func:`_fold_case`.
     """
     out: list[Pattern] = []
-    for lineno, raw in enumerate(text.splitlines(), start=1):
+    # git splits on newlines alone. ``splitlines`` also breaks on \r, \f,
+    # \x1c-\x1e, \x85 and U+2028/9, so one of those inside a pattern
+    # silently becomes two.
+    for lineno, raw in enumerate(_lines(text), start=1):
         line = _strip_trailing_space(raw)
         if not line.strip() or line.lstrip().startswith("#"):
             continue
@@ -176,7 +188,10 @@ def load_ignore_file(directory: Path, name: str) -> IgnoreFile | None:
         raw = path.read_bytes()[:_MAX_BYTES]
     except OSError:
         return None
-    text = raw.decode("utf-8", errors="replace")
+    # utf-8-sig, because git strips a BOM and PowerShell 5.1 and VS Code's
+    # "UTF-8 with BOM" both write one. Kept, it makes the first pattern —
+    # usually the big one — match nothing while every later line works.
+    text = raw.decode("utf-8-sig", errors="replace")
     patterns = parse_patterns(text, fold_case=_fold_case(directory, name))
     return IgnoreFile(path=path, anchor=directory, patterns=patterns) if patterns else None
 

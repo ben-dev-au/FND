@@ -113,6 +113,45 @@ CASES: list[tuple[str, str, bool]] = [
 ]
 
 
+# Every case above is written utf-8 with \n, so the encoding and the line
+# separator were graded over exactly one shape. (bytes, path, is_dir):
+BYTE_CASES: list[tuple[bytes, str, bool]] = [
+    # A BOM — PowerShell 5.1 and VS Code's "UTF-8 with BOM" write one, git
+    # strips it — used to kill the first pattern, usually the big one.
+    (b"\xef\xbb\xbfdist/\r\nbuild.md\r\n", "dist/sub/a.md", False),
+    (b"\xef\xbb\xbfdist/\r\nbuild.md\r\n", "build.md", False),
+    (b"dist/\r\n", "dist/sub/a.md", False),
+    # git trims trailing spaces, not tabs, so this pattern names "b.md\t".
+    (b"b.md\t\r\n", "b.md", False),
+    (b"b.md  \n", "b.md", False),
+    # One pattern containing a carriage return, not two patterns.
+    (b"a.md\rb.md\n", "a.md", False),
+    (b"a.md\rb.md\n", "b.md", False),
+]
+
+
+@pytest.mark.parametrize(("contents", "rel", "is_dir"), BYTE_CASES)
+def test_matches_git_whatever_the_bytes(
+    tmp_path: Path, contents: bytes, rel: str, is_dir: bool
+) -> None:
+    env = _init_repo(tmp_path)
+    (tmp_path / ".gitignore").write_bytes(contents)
+    _make(tmp_path, rel, is_dir=is_dir)
+    assert _ours_ignores(tmp_path, rel) == _git_ignores(tmp_path, env, rel), (
+        f"bytes {contents!r} path {rel!r}"
+    )
+
+
+def test_a_bom_does_not_disarm_our_own_ignore_file(tmp_path: Path) -> None:
+    """No git-compatibility excuse here: .fndignore is fnd's own format."""
+    _init_repo(tmp_path)
+    (tmp_path / ".fndignore").write_bytes(b"\xef\xbb\xbfprivate/\r\nscratch.md\r\n")
+    _make(tmp_path, "private/diary.md")
+    _make(tmp_path, "pub/notes.md")
+    assert _ours_ignores(tmp_path, "private/diary.md")
+    assert not _ours_ignores(tmp_path, "pub/notes.md")
+
+
 @pytest.mark.parametrize(("contents", "rel", "is_dir"), CASES)
 def test_matches_git(tmp_path: Path, contents: str, rel: str, is_dir: bool) -> None:
     env = _init_repo(tmp_path)
