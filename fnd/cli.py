@@ -429,6 +429,12 @@ def search(
     if prefix_clauses:
         query = f"{' '.join(prefix_clauses)} {query}".strip()
 
+    if limit < 1:
+        # Tantivy takes it unchecked: 0 panics out of Rust with a build
+        # path in the message, and a negative one overflows into usize.
+        typer.echo(f"--limit must be 1 or more, not {limit}", err=True)
+        raise typer.Exit(code=2)
+
     prompt_and_rebuild_or_exit(index_dir=default_index_dir(), config=cfg)
 
     # Tags never enter the query string — see fnd/tag_query.py. They are
@@ -783,8 +789,15 @@ def collection_reindex(
     scoped = resolve_collection_option(raw, cfg, issues, flag="-c")
     resolve_or_exit(issues)
     targets = scoped if scoped is not None else list(cfg.collections)
-    if not targets:
-        typer.echo("no collections configured; add one with `fnd collection add`")
+    # An empty config skips the vocabulary check, since an ad-hoc
+    # `fnd index -c <name>` is legitimate. A collection you can RE-index is
+    # not: without this the name reached cfg.collection() as a raw KeyError.
+    unknown = [t for t in targets if t not in cfg.collections]
+    if not targets or unknown:
+        if not cfg.collections:
+            typer.echo("no collections configured; add one with `fnd collection add`", err=True)
+        else:
+            typer.echo(f"-c: no collection named {unknown[0]!r}", err=True)
         raise typer.Exit(1)
     if len(targets) > 1:
         typer.echo(f"indexing {len(targets)} collections: {', '.join(targets)}")
