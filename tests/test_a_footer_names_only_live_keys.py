@@ -130,3 +130,16 @@ def test_a_configured_profile_is_offered_beside_it(tmp_path: Path) -> None:
 
     assert "recent" in offered
     assert DEFAULT_RANKING_PROFILE in offered, "the fallback must not vanish once one is defined"
+
+
+def test_a_source_that_carries_no_tags_is_flagged_as_such() -> None:
+    """`sample_source` seeds `tags` with an empty dict per provider, so the
+    mapping is truthy on a source with none and the note never fired."""
+    from fnd.filters.scan import SourceSample
+    from fnd.tui.settings_screen import _any_tag
+
+    seeded = SourceSample(tags={"frontmatter": {}, "os": {}})
+
+    assert not _any_tag(seeded), "an empty dict per provider is not a tag"
+    assert not _any_tag(None)
+    assert _any_tag(SourceSample(tags={"frontmatter": {"keep": 1}}))

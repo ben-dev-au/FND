@@ -126,6 +126,7 @@ def _hint_clusters(
     *,
     elided: bool = False,
 ) -> Any:
+    from rich.markup import escape
     from rich.text import Text
 
     def _cluster(pairs: tuple[tuple[str, str], ...]) -> Text:
@@ -142,7 +143,8 @@ def _hint_clusters(
             # and the Keybindings page then can't disagree.
             key = os_labels.localise(key)
             label = os_labels.localise(label)
-            out.append_text(Text.from_markup(f"[reverse] {key} [/] {label}"))
+            # `[key]` is markup to Rich, so the chip painted a reversed blank.
+            out.append_text(Text.from_markup(f"[reverse] {escape(key)} [/] {escape(label)}"))
         return out
 
     from rich.text import Text as _Text

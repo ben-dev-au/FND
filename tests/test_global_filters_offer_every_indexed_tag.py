@@ -170,3 +170,82 @@ def test_the_index_lookup_survives_a_stub_app() -> None:
 
     stub = SimpleNamespace(_config=None)
     assert _indexed_tags(cast("Any", stub)) is None
+
+
+@pytest.mark.asyncio
+async def test_an_indexed_but_tagless_corpus_is_not_called_unindexed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`None` meant three things, so a fully indexed collection with no tags
+    was told "tags are offered once a collection is indexed"."""
+    index_dir = tmp_path / "index"
+    root = tmp_path / "plain"
+    root.mkdir()
+    (root / "note.md").write_text("no frontmatter, no tags\n", encoding="utf-8")
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        textwrap.dedent(f"""
+            [[collections.plain.sources]]
+            path = "{root}"
+        """),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("fnd.config.default_config_path", lambda: cfg_path)
+    cfg = load(cfg_path)
+    build_index_from_config(
+        config=cfg.collections["plain"], collection="plain", index_dir=index_dir
+    )
+
+    app = FNDApp(index_dir=index_dir, config=cfg)
+    async with app.run_test(size=(110, 30)) as pilot:
+        for _ in range(15):
+            await pilot.pause()
+        sample = _indexed_tags(app)
+
+    assert sample is not None, "it could ask, and did"
+    assert not any(sample.tags.values())
+
+
+@pytest.mark.asyncio
+async def test_the_two_states_say_different_things(tmp_index_dir: Path) -> None:
+    """The one the user reads. Unindexed and tagless are different sentences."""
+    from textual.containers import Vertical
+
+    from fnd.filters import FilterSpec
+    from fnd.filters.scan import SourceSample
+    from fnd.tui.settings_screen import FilterBrowserScreen
+
+    def _painted(app: FNDApp) -> str:
+        rows = [
+            "".join(s.text for s in strip).strip().strip("│").strip()
+            for strip in app.screen._compositor.render_strips()
+        ]
+        return " ".join(" ".join(rows).split())
+
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        for provider, expected, forbidden in (
+            (lambda: None, "tags are offered once a collection is indexed", "no tags in what"),
+            (lambda: SourceSample(), "no tags in what is indexed", "once a collection is indexed"),
+        ):
+            app.push_screen(
+                FilterBrowserScreen(
+                    title="Index filters",
+                    spec=FilterSpec(),
+                    gitignore=True,
+                    fndignore=True,
+                    sample_provider=provider,
+                    no_tags_note="no tags in what is indexed",
+                    unindexed_note="tags are offered once a collection is indexed",
+                    on_save=lambda *_a: None,
+                )
+            )
+            for _ in range(25):
+                await pilot.pause()
+            assert app.screen.query_one("#settings_box", Vertical) is not None
+            painted = _painted(app)
+            assert expected in painted, painted
+            assert forbidden not in painted, painted
+            app.pop_screen()
+            await pilot.pause()

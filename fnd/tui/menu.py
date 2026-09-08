@@ -505,10 +505,12 @@ def _keys_filter_browser() -> tuple[tuple[str, str, str, str], ...]:
         ),
         (
             COMMIT_KEY,
-            "Save",
+            "Save / Apply",
             "",
-            "Write the filters. Saving here indexes nothing; collections keep "
-            "their current contents until the next Update index.",
+            "On the global defaults this writes them and indexes nothing — "
+            "collections keep their current contents until the next Update "
+            "index. On a source it is Apply, handing the set back to the form, "
+            "which is what saves and rebuilds that collection.",
         ),
         (
             "Esc / ←",
@@ -2365,7 +2367,8 @@ def _open_filter_browser(app: FNDApp) -> None:
             gitignore=current.respect_gitignore,
             fndignore=current.respect_fndignore,
             sample_provider=lambda: _indexed_tags(app),
-            no_tags_note="tags are offered once a collection is indexed",
+            no_tags_note="no tags in what is indexed",
+            unindexed_note="tags are offered once a collection is indexed",
             on_save=_save,
         )
     )
@@ -2380,9 +2383,10 @@ def _indexed_tags(app: FNDApp) -> Any:
     65 ms for 141 distinct tags — against a walk that reached the first three
     collections and called itself a partial scan.
 
-    Returns None when nothing is indexed yet — the screen says so rather
-    than walking the sources, which would offer tags from files the index
-    does not hold.
+    Returns None only when it could not ASK — no config, or no index open. An
+    index that holds no tags returns an empty sample, because "nothing indexed
+    yet" and "indexed, and none of it is tagged" are different sentences and
+    the screen says one of them.
     """
     import contextlib
 
@@ -2409,8 +2413,7 @@ def _indexed_tags(app: FNDApp) -> Any:
         for source, entries in catalogue.items():
             if entries:
                 merged.tags[source] = {entry.value: entry.files for entry in entries}
-        if merged.tags:
-            return merged
+        return merged
     return None
 
 

@@ -131,6 +131,19 @@ def test_the_number_row_names_the_filter_box() -> None:
     assert "filter box" in description, description
 
 
+def _key_cells(section: str) -> set[str]:
+    """The key column, split into the tokens a row actually offers.
+
+    Substring-matching the joined column let `"t" in "Enter"` pass, so deleting
+    the `t` row left the guard green — a test that could not fail.
+    """
+    cells: set[str] = set()
+    for key, _label, _description in _rows(section):
+        # " / " with spaces: a row whose whole key IS `/` must survive.
+        cells.update(part.strip() for part in key.split(" / ") if part.strip())
+    return cells
+
+
 def test_the_filter_browser_has_a_section() -> None:
     """Derived from the screen's own bindings, so the table cannot drift."""
     from textual.binding import Binding
@@ -138,14 +151,19 @@ def test_the_filter_browser_has_a_section() -> None:
     from fnd.tui.settings_screen import FilterBrowserScreen
     from fnd.tui.widgets import COMMIT_KEY
 
-    listed = " ".join(key for key, _l, _d in _rows("Index filters"))
-    globals_ = " ".join(key for key, _l, _d in _rows("Global"))
+    listed = _key_cells("Index filters") | _key_cells("Global")
     pretty = {"escape": "Esc", "slash": "/", "ctrl+s": COMMIT_KEY, "question_mark": "?"}
     for binding in FilterBrowserScreen.BINDINGS:
         assert isinstance(binding, Binding)
         first = binding.key.split(",")[0]
         token = pretty.get(first, first)
-        assert token in listed or token in globals_, f"{binding.key} is documented nowhere"
+        assert token in listed, f"{binding.key} is documented nowhere ({sorted(listed)})"
+
+
+def test_that_guard_can_actually_fail() -> None:
+    """The reviewer deleted a row and the guard stayed green. It must not."""
+    assert "t" in _key_cells("Index filters"), "the row this guard exists for"
+    assert "t" not in _key_cells("Global"), "a cell, not a substring of Enter"
 
 
 def test_a_key_that_works_in_three_panes_is_listed_in_three() -> None:

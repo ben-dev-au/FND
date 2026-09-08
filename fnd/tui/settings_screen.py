@@ -5688,6 +5688,16 @@ def _protection_dropped(before: Any, after: Any) -> str:
     return "/".join(lost)
 
 
+def _any_tag(sample: Any) -> bool:
+    """Whether a sample offers a single tag.
+
+    ``sample_source`` seeds ``tags`` with an empty dict per provider, so the
+    mapping is truthy on a source that carries none.
+    """
+    tags = getattr(sample, "tags", None) or {}
+    return any(values for values in tags.values())
+
+
 def _describe_spec(spec: Any) -> str:
     """Which rows the text currently fills, so the effect is visible on save."""
     parts: list[str] = []
@@ -6050,6 +6060,7 @@ class FilterBrowserScreen(Screen[None]):
         inherited: tuple[Any, bool, bool] | None = None,
         save_note: str = "",
         no_tags_note: str = "",
+        unindexed_note: str = "",
         commit_label: str = "Save",
         on_save: Callable[[Any, bool, bool], None],
     ) -> None:
@@ -6061,8 +6072,10 @@ class FilterBrowserScreen(Screen[None]):
         # reindexes its collection, the defaults save reindexes nothing.
         self._save_note = save_note
         # A branch that is simply absent reads as a missing feature, and the
-        # two routes are silent for different reasons.
+        # two routes are silent for different reasons — as are "nothing is
+        # indexed yet" and "indexed, and none of it is tagged".
         self._no_tags_note = no_tags_note
+        self._unindexed_note = unindexed_note
         # And what it does at all. On a source this screen stages into the
         # form, which owns the write, so calling it "Save" promised something
         # only the form does.
@@ -6388,7 +6401,9 @@ class FilterBrowserScreen(Screen[None]):
             head.append(f"showing rows matching {self._query!r}")
         if self._scanning:
             head.append("scanning source for types and tags…")
-        elif self._no_tags_note and not getattr(self._sample, "tags", None):
+        elif self._unindexed_note and self._sample is None:
+            head.append(self._unindexed_note)
+        elif self._no_tags_note and not _any_tag(self._sample):
             head.append(self._no_tags_note)
         elif getattr(self._sample, "truncated", False):
             # The scan stopped at its time budget, so the branches below list
