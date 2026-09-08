@@ -60,3 +60,24 @@ def test_a_source_scope_without_a_collection_still_works(
         "zebrafish", collection=None, active_sources=[source]
     )
     assert len(hits) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_scope_nobody_has_expressed_yet_still_searches(two_collections: Path) -> None:
+    """The regression this fix caused, and the distinction it missed.
+
+    An empty selection MAP is not the user unticking everything — it is a
+    scope nobody has expressed, which is what a launch looks like before the
+    panel populates. Treating the two the same made a fresh app find nothing,
+    and only a preview-navigation test noticed.
+    """
+    from fnd.tui import FNDApp
+
+    app = FNDApp(index_dir=two_collections)
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        app._scope.selection = {}
+        request = app._search._prepare("zebrafish")  # type: ignore[attr-defined]
+        scope = request.collection if request is not None else "no request"
+
+    assert scope is None, f"an unexpressed scope must not narrow to nothing: {scope!r}"
