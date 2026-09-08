@@ -82,3 +82,22 @@ async def test_the_row_carries_it(config: Config, tmp_index_dir: Path) -> None:
     assert "incomplete" not in healthy, healthy
     assert "⚠ incomplete — 210 of 3000 files" in interrupted, interrupted
     assert "ranking:" in interrupted, "the row lost what it already said"
+
+
+@pytest.mark.asyncio
+async def test_the_update_row_carries_it_too(config: Config, tmp_index_dir: Path) -> None:
+    """On the screen whose button fixes it, not only where someone browsing
+    would notice. The first version marked the Collections LIST and left the
+    collection's own screen — the one you open to act — saying nothing."""
+    from fnd.tui.menu import _summary_collection_update
+
+    app = FNDApp(index_dir=tmp_index_dir, config=config)
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        healthy = _summary_collection_update(app, "bulk")
+        _stopped_at(210, 3000)
+        interrupted = _summary_collection_update(app, "bulk")
+
+    assert "incomplete" not in healthy, healthy
+    assert "⚠ incomplete — 210 of 3000 files" in interrupted, interrupted
+    assert "sources" in interrupted, "the row lost what it already said"

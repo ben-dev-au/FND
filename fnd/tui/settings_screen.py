@@ -6173,6 +6173,7 @@ class FilterBrowserScreen(Screen[None]):
         self._update_clear_bar()
         self._refresh_legend()
         self._refresh_summary()
+        self._say_when_nothing_matches(bool(groups))
 
     @on(ToggleTree.SelectionChanged, "#filter_tree")
     def _on_selection(self, ev: ToggleTree.SelectionChanged) -> None:
@@ -6182,6 +6183,23 @@ class FilterBrowserScreen(Screen[None]):
             self._spec, ev.selected, ev.excluded, self._offered_kind_ids()
         )
         self._refresh_summary()
+
+    def _say_when_nothing_matches(self, any_rows: bool) -> None:
+        """Put an empty row filter in the pane's title.
+
+        A query matching nothing painted a blank tree and said nothing — a
+        hunter probed the process for liveness thinking it had hung. The
+        border title is where this app already carries counts, so it is where
+        the absence of them belongs too.
+        """
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            box = self.query_one("#settings_box", Vertical)
+            if self._query and not any_rows:
+                box.border_title = f"{self._title} — no rows match {self._query!r}"
+            else:
+                box.border_title = self._title
 
     def _can_return_to_defaults(self) -> bool:
         """Whether this screen has defaults to go back to, and has left them.

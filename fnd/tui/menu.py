@@ -1349,13 +1349,21 @@ def _provider_collections(app: FNDApp) -> tuple[MenuItem, ...]:
 
 
 def _summary_collection_update(app: FNDApp, name: str) -> str:
-    """Trailing context on the per-collection Update row. Counts the
-    sources configured for the collection, plus an ETA based on the
-    calibrated per-PDF cost when pdf-structure is installed."""
+    """Trailing context on the per-collection Update row, and the place an
+    interrupted run has to say so.
+
+    The warning went on the Collections LIST, where someone browsing sees it,
+    and not here — on the row whose button is what fixes it. A user who opened
+    this screen to act had no idea anything was wrong.
+    """
     cfg = app._config  # type: ignore[attr-defined]
     if cfg is None or name not in cfg.collections:
         return ""
     n_sources = len(cfg.collections[name].sources)
+    part = interrupted_index(name)
+    if part is not None:
+        done, total = part
+        return f"⚠ incomplete — {done} of {total} files · {n_sources} sources"
     return f"{n_sources} sources"
 
 
