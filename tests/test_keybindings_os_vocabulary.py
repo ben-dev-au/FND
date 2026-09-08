@@ -237,4 +237,9 @@ def test_a_narrow_footer_keeps_the_screen_s_own_keys() -> None:
     fitted = bar.fitted(80)
     assert "Save" in fitted.plain
     assert fitted.cell_len <= 80
-    assert fitted.plain.endswith("…"), "a dropped hint must be marked"
+    # Marked on the side the cut happened. Anchors go off the LEFT, so a
+    # trailing marker pointed at a tail that was still there — which is what
+    # the assertion used to require.
+    assert "…" in fitted.plain, "a dropped hint must be marked"
+    assert fitted.plain.lstrip().startswith("…"), fitted.plain
+    assert "Quit" not in fitted.plain, "the premise: the anchors are what went"
