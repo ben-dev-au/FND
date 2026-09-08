@@ -105,3 +105,17 @@ async def test_an_unbuilt_corpus_still_gets_suggestions(
 
     assert sample is not None
     assert "never_indexed" in sample.tags.get("frontmatter", {}), sample.tags
+
+
+def test_the_index_lookup_survives_a_stub_app() -> None:
+    """The settings invariant tests drive these getters with a SimpleNamespace
+    carrying only `_config`. Reaching straight through `app._search` raised
+    AttributeError and took the walk fallback down with it — eight tests, all
+    of them about the fallback rather than about the index."""
+    from types import SimpleNamespace
+    from typing import Any, cast
+
+    from fnd.tui.menu import _indexed_tags
+
+    stub = SimpleNamespace(_config=None)
+    assert _indexed_tags(cast("Any", stub)) is None

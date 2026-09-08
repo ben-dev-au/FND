@@ -2327,7 +2327,10 @@ def _indexed_tags(app: FNDApp) -> Any:
     cfg = app._config  # type: ignore[attr-defined]
     if cfg is None:
         return None
-    searcher = getattr(app._search, "searcher", None)  # type: ignore[attr-defined]
+    # Every getter here has to survive the settings tests' stub app, which is
+    # a SimpleNamespace carrying only `_config`: reaching straight through
+    # `app._search` raised AttributeError and took the walk fallback with it.
+    searcher = getattr(getattr(app, "_search", None), "searcher", None)
     index = getattr(searcher, "_index", None)
     if index is None:
         return None
