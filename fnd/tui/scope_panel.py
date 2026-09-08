@@ -61,7 +61,9 @@ FULL = _FullScope()
 # source ids (partial / granular). Absence from the map = out of scope.
 
 
-def _tags_summary(n_selected: int, n_available: int, *, sources_on: bool) -> str:
+def _tags_summary(
+    n_selected: int, n_available: int, *, sources_on: bool, n_missing: int = 0
+) -> str:
     """What the Tags branch is doing, without claiming more than it knows.
 
     The catalogue is scoped to the TICKED tag sources, so an empty one said
@@ -70,6 +72,8 @@ def _tags_summary(n_selected: int, n_available: int, *, sources_on: bool) -> str
     live tag filter kept narrowing the search with no row to show for it.
     """
     if n_available:
+        if n_missing:
+            return f"{n_selected} of {n_available}, {n_missing} not in the index"
         return f"{n_selected} of {n_available}"
     if n_selected:
         return f"{n_selected} still filtering, no rows to show"
@@ -945,6 +949,19 @@ class ScopeController:
             t for t in (normalise_tag(k) for k in cfg.defaults.tag_frontmatter_keys) if t
         )
 
+    def _ghost_tag_values(self, catalogue: dict[str, list[Any]]) -> list[tuple[str, str]]:
+        """Selected tags the catalogue no longer offers, source by source.
+
+        Only asked of a catalogue that produced something: an unopened index
+        returns nothing, and every selection would read as missing.
+        """
+        out: list[tuple[str, str]] = []
+        for source in sorted(set(self.tag_include) | set(self.tag_exclude)):
+            live = {entry.value for entry in catalogue.get(source, ())}
+            selected = self.tag_include.get(source, set()) | self.tag_exclude.get(source, set())
+            out.extend((source, value) for value in sorted(selected - live))
+        return out
+
     def _render_tags_branch(self, tree: Tree[dict[str, object]]) -> None:
         from fnd.tag_catalogue import build_tag_tree
 
@@ -954,7 +971,13 @@ class ScopeController:
             self._distinct_tag_values(self.tag_exclude)
         )
         n_available = sum(len(v) for v in catalogue.values())
-        summary = _tags_summary(n_selected, n_available, sources_on=bool(self._tag_source_ids()))
+        ghosts = self._ghost_tag_values(catalogue) if n_available else []
+        summary = _tags_summary(
+            n_selected,
+            n_available,
+            sources_on=bool(self._tag_source_ids()),
+            n_missing=len(ghosts),
+        )
         tags_node = tree.root.add(
             _styled_parent_label(f"Tags             ({summary})"),
             data={"kind": "filter_category", "category": "tags"},
@@ -977,6 +1000,34 @@ class ScopeController:
                 expand=f"tags:{source}" in self.expanded_filter_branches,
             )
             self._add_tag_nodes(branch, source, build_tag_tree(counts), 0, namespaces)
+        self._add_ghost_tag_branch(tags_node, ghosts)
+
+    def _add_ghost_tag_branch(self, tags_node: Any, ghosts: list[tuple[str, str]]) -> None:
+        """Rows for tags that still filter but no longer exist.
+
+        Expanded whether or not the branch was left open: a filter the user
+        cannot see is the whole defect, and the branch goes away once unticked.
+        """
+        from fnd.tag_catalogue import TagNode
+
+        if not ghosts:
+            return
+        branch = tags_node.add(
+            _styled_parent_label("No longer in the index"),
+            data={"kind": "filter_category", "category": "tags:missing"},
+            expand=True,
+        )
+        for source, value in ghosts:
+            marker = self.tag_marker(source, TagNode(label=value, value=value))
+            branch.add_leaf(
+                f"{_LEAF_MARKER_PAD}{marker}  {value}",
+                data={
+                    "kind": "filter_value",
+                    "category": "tags",
+                    "source": source,
+                    "value": value,
+                },
+            )
 
     def _cycle_tag(self, source: str, value: str) -> None:
         """``○ off → ● include → ⊘ exclude → off``."""
