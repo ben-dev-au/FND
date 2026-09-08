@@ -1794,13 +1794,17 @@ def _folder_glob(root: Path, globs: list[str]) -> str | None:
 
 
 def _other_filters(src: Any) -> list[str]:
-    """Dimensions narrowing this source besides file type and path.
+    """Dimensions narrowing this source besides file type and include path.
 
     The row named only types, so a source an inherited rule had cut to one
     file in sixteen still read "All types".
     """
     f = src.effective_filters
     named = []
+    # Excludes drop files before any other rule runs, so a source cut to a
+    # third of itself by one `build/**` read as unfiltered.
+    if getattr(src, "excludes", None):
+        named.append("excludes")
     if f.include_tags or f.exclude_tags:
         named.append("tags")
     if f.min_size is not None or f.max_size is not None:
