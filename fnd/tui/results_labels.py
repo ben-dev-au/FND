@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +24,7 @@ __all__ = [
     "_styled_parent_label",
     "_styled_state_row",
     "_trim_redundant_heading",
+    "disambiguated_names",
     "reapply_state_marker",
     "state_colour",
 ]
@@ -313,8 +314,35 @@ def _format_hit_label(h: Hit, *, max_score: float = 0.0, match_visible: bool = T
     return _build_label(f"{prefix}{body}{pass_marker}", h.score, max_score)
 
 
-def _format_file_label(g: FileGroup, *, max_score: float = 0.0, name_budget: int = 0) -> Any:
-    name = Path(g.path).name
+def disambiguated_names(paths: Sequence[str]) -> dict[str, str]:
+    """path → the shortest tail that tells it apart from the others shown.
+
+    Rows carry the basename, so a build folder's `out-01.md` and a note of the
+    same name were two identical rows: a user asking "which ones?" could not
+    tell from the result which file it was.
+    """
+    from collections import Counter
+
+    names = {p: Path(p).name for p in paths}
+    shared = {n for n, count in Counter(names.values()).items() if count > 1}
+    out: dict[str, str] = {}
+    for path, name in names.items():
+        if name not in shared:
+            out[path] = name
+            continue
+        parts = Path(path).parts
+        rivals = [q for q in names if q != path and names[q] == name]
+        depth = 2
+        while depth < len(parts) and any(Path(q).parts[-depth:] == parts[-depth:] for q in rivals):
+            depth += 1
+        out[path] = "/".join(parts[-depth:])
+    return out
+
+
+def _format_file_label(
+    g: FileGroup, *, max_score: float = 0.0, name_budget: int = 0, display_name: str = ""
+) -> Any:
+    name = display_name or Path(g.path).name
     if name_budget > 0:
         name = _elide_middle_keep_suffix(name, name_budget)
     return _build_label(name, g.top_score, max_score)

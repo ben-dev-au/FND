@@ -12,7 +12,12 @@ from textual.widgets import Tree
 
 from fnd.tui.match_evidence import evidence_spec_for_pass, has_paintable_match
 from fnd.tui.preview.warmth import WarmState
-from fnd.tui.results_labels import _format_file_label, _format_hit_label, _styled_parent_label
+from fnd.tui.results_labels import (
+    _format_file_label,
+    _format_hit_label,
+    _styled_parent_label,
+    disambiguated_names,
+)
 from fnd.tui.widgets.results_tree import ResultsTree
 
 if TYPE_CHECKING:
@@ -101,6 +106,9 @@ class ResultsView:
             )
         max_score = max((g.top_score for g in self._app._search.groups), default=0.0)
         budget = self.file_label_budget(tree)
+        # Two files can share a basename; the row is the only thing the user
+        # has to tell them apart.
+        names = disambiguated_names([g.path for g in self._app._search.groups])
         # Rows are never filtered on paintability — see fnd.tui.match_evidence.
         # A row the preview can't highlight is marked, not withheld.
         strict = self._app._effective_evidence_spec
@@ -109,7 +117,12 @@ class ResultsView:
         for i, g in enumerate(self._app._search.groups):
             file_node = tree.root.add(
                 _styled_parent_label(
-                    _format_file_label(g, max_score=max_score, name_budget=budget)
+                    _format_file_label(
+                        g,
+                        max_score=max_score,
+                        name_budget=budget,
+                        display_name=names.get(g.path, ""),
+                    )
                 ),
                 data={"kind": "file", "group": g},
                 expand=(i == 0),
@@ -177,12 +190,19 @@ class ResultsView:
             return
         budget = self.file_label_budget(tree)
         max_score = max((g.top_score for g in self._app._search.groups), default=0.0)
+        names = disambiguated_names([g.path for g in self._app._search.groups])
         for node in tree.root.children:
             data = node.data
             if isinstance(data, dict) and data.get("kind") == "file":
+                group = data["group"]
                 node.set_label(
                     _styled_parent_label(
-                        _format_file_label(data["group"], max_score=max_score, name_budget=budget)
+                        _format_file_label(
+                            group,
+                            max_score=max_score,
+                            name_budget=budget,
+                            display_name=names.get(group.path, ""),
+                        )
                     )
                 )
 
