@@ -83,7 +83,8 @@ class Branch:
 
 def _offers_every_kind(items: list[tuple[str, str, str]]) -> bool:
     """Whether the tree is showing the whole registry rather than a sample."""
-    return {kind for _cat, kind, _label in items} >= set(ALL_KIND_IDS)
+    # The ids carry the widget prefix; ALL_KIND_IDS does not.
+    return {k.removeprefix("kind:") for _cat, k, _label in items} >= set(ALL_KIND_IDS)
 
 
 def _kind_items(
@@ -94,8 +95,13 @@ def _kind_items(
     A kind the filter already names is offered even when the sample saw none:
     dropping the row leaves a rule the user can neither see nor switch off,
     under a branch that reads as unfiltered.
+
+    A truncated sample narrows nothing. The scan stops at 4000 files in walk
+    order, so 4500 notes beside 200 PDFs offered Markdown alone and "md + pdf"
+    could not be said here at all; what it did not reach is not absence.
     """
-    present = set(sample.kinds) if sample and sample.kinds else None
+    truncated = bool(sample and sample.truncated)
+    present = set(sample.kinds) if sample and sample.kinds and not truncated else None
     if present is not None:
         present |= set(configured)
     out: list[tuple[str, str, str]] = []
