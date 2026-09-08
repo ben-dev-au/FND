@@ -46,19 +46,17 @@ class Rule:
     facts: frozenset[str] = field(default_factory=frozenset)
     applies_to: frozenset[str] | None = None
     needs_frontmatter: bool = False
-    """Skip a file with no frontmatter block.
+    """This rule asks about frontmatter, so a file carrying a block is judged
+    whatever its kind. Frontmatter is not a Markdown-only convention.
 
-    A rule about ``Course`` can only be answered by a file that has
-    frontmatter. Scoping it by file kind instead was arbitrary in both
-    directions: it judged a .txt that carries no block, and ignored one that
-    does. Frontmatter is not a Markdown-only convention.
+    It does NOT excuse a file that has no block: a note with none is exactly
+    the file a rule about ``Course`` is there to exclude, and skipping it made
+    "index this course" mean "index everything except other courses".
     """
     unknown: Unknown = Unknown.PASS
 
     def passes(self, facts: FileFacts) -> bool:
         if not self._in_scope(facts):
-            return True
-        if self.needs_frontmatter and not facts.has_frontmatter():
             return True
         if self.unknown is Unknown.PASS and self._has_unknown(facts):
             return True
@@ -66,14 +64,18 @@ class Rule:
 
     def _in_scope(self, facts: FileFacts) -> bool:
         """A rule scoped to kinds ignores every other kind, so a frontmatter
-        predicate cannot silently drop the PDFs it was never about."""
-        if self.applies_to is None:
-            return True
-        try:
-            kind = facts["file.kind"]
-        except KeyError:
-            return False
-        return kind in self.applies_to
+        predicate cannot silently drop the PDFs it was never about — and, with
+        ``needs_frontmatter``, still judges any file that carries a block."""
+        if self.applies_to is not None:
+            try:
+                kind = facts["file.kind"]
+            except KeyError:
+                kind = None
+            if kind in self.applies_to:
+                return True
+        if self.needs_frontmatter:
+            return facts.has_frontmatter()
+        return self.applies_to is None
 
     def _has_unknown(self, facts: FileFacts) -> bool:
         return any(facts.is_unknown(name) for name in self.facts)

@@ -322,7 +322,7 @@ def walk_sources(
     from fnd.config import SourceConfig  # local import: avoid cycle
     from fnd.file_facts import FileFacts
     from fnd.filters import FileGate, FilterSpec, build_gate
-    from fnd.filters.dimensions import rule_from_text, tag_selection
+    from fnd.filters.dimensions import dimension, tag_selection
     from fnd.ignore_files import IGNORE_FILENAMES
     from fnd.tags import TAG_PROVIDERS
 
@@ -347,12 +347,19 @@ def walk_sources(
             frontmatter=resolved.frontmatter or "",
         )
         gate = build_gate(spec)
-        # Scoped to note kinds: strict null would otherwise fail a frontmatter
-        # comparison on every PDF and drop the lot.
+        # Scoped through the dimension rather than by hand: strict null would
+        # otherwise fail a frontmatter comparison on every PDF and drop the
+        # lot, and a hand-rolled scope here is what let a note with no block
+        # through the rule that named its course.
+        frontmatter_dim = dimension("frontmatter")
         scoped = [
-            rule_from_text(text, needs_frontmatter=True)
-            for text in (source.legacy_frontmatter, spec.frontmatter)
-            if text
+            rule
+            for rule in (
+                frontmatter_dim.rule(text)
+                for text in (source.legacy_frontmatter, spec.frontmatter)
+                if text
+            )
+            if rule is not None
         ]
         # One gate, not a second `all(...)` beside it: the walk reimplementing
         # the rule combination is how an OR there would go unnoticed.

@@ -230,22 +230,37 @@ class _ExpressionDimension:
         text = str(value or "").strip()
         if not text:
             return None
-        return _compile(text, needs_frontmatter=self.applies_to is not None)
+        return _compile(
+            text,
+            needs_frontmatter=self.applies_to is not None,
+            applies_to=self.applies_to,
+        )
 
 
-def _compile(text: str, *, needs_frontmatter: bool = False) -> Rule:
+def _compile(
+    text: str,
+    *,
+    needs_frontmatter: bool = False,
+    applies_to: frozenset[str] | None = None,
+) -> Rule:
     node = parse_dsl(text)
     return Rule(
         predicate=compile_filter(text),
         text=text,
         facts=referenced_fields(node),
+        applies_to=applies_to,
         needs_frontmatter=needs_frontmatter,
     )
 
 
-def rule_from_text(text: str, *, needs_frontmatter: bool = False) -> Rule:
+def rule_from_text(
+    text: str,
+    *,
+    needs_frontmatter: bool = False,
+    applies_to: frozenset[str] | None = None,
+) -> Rule:
     """Compile arbitrary DSL text into a rule. Raises :class:`FilterError`."""
-    return _compile(text, needs_frontmatter=needs_frontmatter)
+    return _compile(text, needs_frontmatter=needs_frontmatter, applies_to=applies_to)
 
 
 DIMENSIONS: Final[tuple[Dimension, ...]] = (
