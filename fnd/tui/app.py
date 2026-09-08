@@ -116,6 +116,10 @@ def _action_priority(action_id: str) -> bool:
     return False
 
 
+#: Marks the join where hints were dropped, rather than the end of the bar.
+_ELISION = ("…", "")
+
+
 def _hint_clusters(
     anchors: tuple[tuple[str, str], ...],
     contextual: tuple[tuple[str, str], ...],
@@ -130,6 +134,9 @@ def _hint_clusters(
         for i, (key, label) in enumerate(pairs):
             if i:
                 out.append_text(sep)
+            if (key, label) == _ELISION:
+                out.append_text(Text("…", style="dim"))
+                continue
             # Both clusters run through localise so a hint table can hold
             # ``{alt_key}`` and render ⌥ on macOS, Alt elsewhere — the footer
             # and the Keybindings page then can't disagree.
@@ -143,7 +150,9 @@ def _hint_clusters(
         if anchors:
             joined.append_text(Text("      ", style=""))
         joined.append_text(_cluster(contextual))
-    if elided:
+    # An `elided` flag with nothing marking WHERE only reaches here when the
+    # anchors were dropped, which does happen off the right.
+    if elided and _ELISION not in contextual:
         joined.append_text(Text(" …", style="dim"))
     return joined
 
@@ -199,7 +208,12 @@ class _HintBar:
         must = [h for h in self._contextual if _is_commit(h[0]) or _is_leave(h[0])]
         room = max(0, n - len(must))
         kept = [h for h in self._contextual[:n] if h not in must][:room]
-        return (*kept, *must)
+        dropped = len(self._contextual) - len(kept) - len(must)
+        # The cut is in the MIDDLE — the keys that save and leave are held back
+        # to the end — so a trailing ellipsis pointed at a tail that is still
+        # there. Mark the join instead.
+        gap = (_ELISION,) if dropped > 0 else ()
+        return (*kept, *gap, *must)
 
     def fitted(self, width: int) -> Text:
         for n in range(len(self._anchors), -1, -1):

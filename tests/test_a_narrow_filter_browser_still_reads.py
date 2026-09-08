@@ -149,3 +149,31 @@ class TestTheHeadNamesWhatTheExpressionCannot:
 
         head = next(line for line in rows if "Outside the expression" in line)
         assert "ignore files off" in head, head
+
+
+class TestTheElisionMarksWhereTheCutIs:
+    """The bar held the save and leave keys back to the end, so the drop moved
+    to the middle — and the `…` stayed at the tail, pointing at hints that
+    were still there. It reads as "there is more after Discard" when what is
+    missing is `Clear` and `Copy`, three columns to the left.
+    """
+
+    def test_the_marker_sits_at_the_join(self) -> None:
+        trimmed = _HintBar((), _CONTEXTUAL).fitted(90).plain
+
+        assert "…" in trimmed, trimmed
+        assert not trimmed.rstrip().endswith("…"), "it still points off the right"
+        assert trimmed.index("…") < trimmed.index("Save"), trimmed
+        assert trimmed.index("…") > trimmed.index("Toggle"), trimmed
+
+    def test_a_bar_that_fits_carries_no_marker(self) -> None:
+        """The control: nothing was dropped, so nothing is claimed missing."""
+        assert "…" not in _HintBar((), _CONTEXTUAL).fitted(400).plain
+
+    def test_the_keys_either_side_are_the_ones_that_matter(self) -> None:
+        """What survives the cut is what the bar refuses to drop."""
+        trimmed = _HintBar((), _CONTEXTUAL).fitted(50).plain
+
+        assert "Save" in trimmed, trimmed
+        assert "Discard" in trimmed, trimmed
+        assert "Copy" not in trimmed, trimmed
