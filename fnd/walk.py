@@ -6,8 +6,9 @@ Includes/excludes precedence:
 2. If ``includes`` is set, the path must match at least one ``includes`` glob.
 3. If the path matches **any** ``excludes`` glob, it is dropped — even if it
    matched an ``includes``.
-4. Hidden files (``.foo``) are excluded by default unless an explicit include
-   matches.
+4. Hidden files (``.foo``) are excluded by default. Only an include glob that
+   names a dot-prefixed component admits one, and only the paths that glob
+   itself matches — ``**/*.md`` alongside it does not widen the exception.
 5. Symlinks are followed only if ``follow_symlinks = True``. This applies in
    two places:
    - The collection root itself — if the user-supplied ``root`` is a symlink,
@@ -43,14 +44,14 @@ def _is_hidden(rel: Path) -> bool:
     return any(part.startswith(".") for part in rel.parts)
 
 
-def _glob_targets_hidden(globs: list[str]) -> bool:
-    """True if any include pattern explicitly references a dot-prefixed
-    component (e.g. ``.git/**`` or ``**/.foo/**``)."""
-    for g in globs:
-        for part in g.split("/"):
-            if part.startswith("."):
-                return True
-    return False
+def _hidden_includes(globs: list[str]) -> GlobSet:
+    """The include patterns that explicitly name a dot-prefixed component.
+
+    A set, not a flag: one ``.obsidian/**`` beside ``**/*.md`` used to lift the
+    hidden prune for the whole tree, so an Obsidian vault indexed every note in
+    ``.trash``. Only these globs may admit a hidden path.
+    """
+    return GlobSet.parse([g for g in globs if any(p.startswith(".") for p in g.split("/"))])
 
 
 def resolve_skip_dirs(defaults: object | None = None) -> frozenset[str]:
@@ -105,7 +106,7 @@ def walk(
     suffixes = supported_suffixes()
     inc = GlobSet.parse(includes)
     exc = GlobSet.parse(excludes)
-    inc_targets_hidden = _glob_targets_hidden(list(includes or []))
+    hidden_inc = _hidden_includes(list(includes or []))
 
     for root in roots:
         original = root.expanduser()
@@ -130,7 +131,7 @@ def walk(
             suffixes=suffixes,
             inc=inc,
             exc=exc,
-            inc_targets_hidden=inc_targets_hidden,
+            hidden_inc=hidden_inc,
             follow_symlinks=follow_symlinks,
             skip_dirs=skip_dirs,
             ignore_names=ignore_names,
@@ -168,7 +169,7 @@ def _scandir_walk(
     suffixes: frozenset[str],
     inc: GlobSet,
     exc: GlobSet,
-    inc_targets_hidden: bool,
+    hidden_inc: GlobSet,
     follow_symlinks: bool,
     skip_dirs: frozenset[str],
     ignore_names: Sequence[str] = (),
@@ -238,11 +239,10 @@ def _scandir_walk(
                 # index lives inside a scanned corpus.
                 if _is_index_dir(entry.path):
                     continue
-                # Hidden directories pruned by default. Skipping at
-                # descent saves walking gigabytes of e.g. ``.git`` on
-                # cloned repos even when the user's includes happen to
-                # target hidden files for a different reason.
-                if name.startswith(".") and not inc_targets_hidden:
+                # Descent asks only whether any hidden-targeting glob exists —
+                # a glob cannot say whether something under a prefix could match
+                # it. The file test below is what decides membership.
+                if name.startswith(".") and not hidden_inc:
                     continue
                 child = Path(entry.path)
                 if scope and scope.ignored(child, is_dir=True):
@@ -272,10 +272,9 @@ def _scandir_walk(
             # would yield backslash separators and never match.
             rel_str = rel.as_posix()
 
-            # Hidden-file filter mirrors the historical post-rglob check
-            # for the file itself; descent-time prune already dropped
-            # hidden ancestor directories.
-            if _is_hidden(rel) and not inc_targets_hidden:
+            # A hidden path needs a glob that names a dot-prefixed component;
+            # ``**/*.md`` matching it is not consent to index ``.trash``.
+            if _is_hidden(rel) and not hidden_inc.matches(rel_str):
                 continue
             if inc and not inc.matches(rel_str):
                 continue
