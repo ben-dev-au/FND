@@ -2161,6 +2161,26 @@ def _merge_frontmatter(
     return filters
 
 
+def _overlapping_source(sources: Any, new: Any, editing: int | None) -> str:
+    """A sibling whose folder contains the new one, or is contained by it.
+
+    Not a refusal: the index keys on the file, so a file two sources both
+    reach is stored once. It is silence that misleads — a source added inside
+    another indexes nothing new and reads like it did.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        target = Path(new.path).expanduser().resolve()
+        for i, other in enumerate(sources):
+            if i == editing or not other.path:
+                continue
+            path = Path(other.path).expanduser().resolve()
+            if target == path or target.is_relative_to(path) or path.is_relative_to(target):
+                return str(other.path)
+    return ""
+
+
 def _source_filters_or_none(raw: dict[str, Any] | None) -> Any:
     """Sparse overrides as a ``SourceFilters``, or ``None`` when none are set.
 
@@ -3022,6 +3042,7 @@ class SourceFormScreen(Screen[None]):
             self._show_error(_summarise(e))
             return
 
+        overlap = _overlapping_source(col.sources, new_source, self._source_index)
         if self._source_index is None:
             col.sources.append(new_source)
         else:
@@ -3037,6 +3058,15 @@ class SourceFormScreen(Screen[None]):
             return
         app._config = load()  # type: ignore[attr-defined]
         app._scope.refresh_collections_panel()  # type: ignore[attr-defined]
+        if overlap:
+            # Harmless — the index keys on the file, so a file reached twice is
+            # stored once — but a source that indexes nothing new is worth
+            # knowing about rather than discovering from a file count.
+            app.notify(
+                f"This folder is already inside {overlap!r} in this collection; "
+                "files reached by both are indexed once.",
+                severity="warning",
+            )
         # Trigger a reindex if the source set materially changed. Pop
         # FIRST so the IndexerScreen lands on top of the menu, not on
         # top of this wizard.
