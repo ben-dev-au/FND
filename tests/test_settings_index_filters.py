@@ -1458,7 +1458,10 @@ class TestSettingsScreenTyping:
             await pilot.pause()
             screen = await self._open(app, pilot)
             footer = screen.query_one("#footer_hints", Static)
-            assert "Search" in footer.render_line(0).text, "idle, the anchors do work"
+            # `Menu`, not `Search`: `/` is no longer an anchor in Settings,
+            # because there it focuses the row filter rather than the query
+            # bar and the screen's own cluster names it.
+            assert "Menu" in footer.render_line(0).text, "idle, the anchors do work"
 
             rows = screen.query_one(SettingsList)
             rows.cursor_index = next(
