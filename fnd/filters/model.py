@@ -139,32 +139,6 @@ class FilterSpec:
 
         return tag_selection(self.exclude_tags)
 
-    def active_filter_count(self) -> int:
-        """Individual selections switched on, as the clear bar counts them.
-
-        The same reading the search pane uses: one per kind, one per distinct
-        tag, one per bound, one per typed rule. Ignore files are not counted —
-        clearing does not turn them off.
-        """
-        distinct = len({v for values in self.tag_includes.values() for v in values}) + len(
-            {v for values in self.tag_excludes.values() for v in values}
-        )
-        bounds = (
-            self.min_size,
-            self.max_size,
-            self.created_after,
-            self.created_before,
-            self.modified_after,
-            self.modified_before,
-        )
-        return (
-            len(self.kinds)
-            + distinct
-            + sum(1 for b in bounds if b is not None)
-            + sum(1 for text in (self.frontmatter, self.expression) if (text or "").strip())
-            + len(self.raw)
-        )
-
     def impossible_bounds(self) -> tuple[str, ...]:
         """Pairs that cannot both hold, so the set matches nothing.
 
