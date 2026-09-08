@@ -231,6 +231,12 @@ def parse(text: str) -> FilterSpec:
     stripped = text.strip()
     if not stripped:
         return FilterSpec()
+    # Before anything is recognised: a dotted name that is not a reserved fact
+    # is a typo, and every downstream path treats it as a frontmatter key that
+    # no file has. `file.kinds == 'pdf'` validated with a tick and indexed
+    # nothing. Frontmatter keys cannot contain a dot, so nothing legitimate is
+    # caught here.
+    _reject_unknown_facts(parse_dsl(stripped))
     updates: dict[str, object] = {}
     tags: dict[str, tuple[str, ...]] = {}
     leftover: list[str] = []
@@ -317,6 +323,26 @@ def split_frontmatter(text: str) -> tuple[str, str]:
         else:
             rest = _and_join(rest, _unparse(clause) or text)
     return fm or "", rest or ""
+
+
+def _reject_unknown_facts(node: object) -> None:
+    """Raise on any ``file.*`` name the fact registry does not define.
+
+    `RESERVED_FACTS` has said callers should do this in its own comment since
+    it was written, and none did — so the live-validating editor showed ✓ for
+    a misspelled field, the tree silently dropped the clause it could not
+    place, and only the save refused it.
+    """
+    from fnd.file_facts import RESERVED_FACTS, is_fact_name
+    from fnd.filter_dsl import referenced_fields
+
+    unknown = sorted(
+        f for f in referenced_fields(node) if is_fact_name(f) and f not in RESERVED_FACTS
+    )
+    if not unknown:
+        return
+    known = ", ".join(sorted(RESERVED_FACTS))
+    raise FilterError(f"unknown field {unknown[0]!r} — known fields are: {known}", 1)
 
 
 def parse_or_error(text: str) -> tuple[FilterSpec | None, FilterError | None]:

@@ -15,7 +15,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol
 
-from fnd.file_facts import frontmatter_kinds, is_fact_name
+from fnd.file_facts import RESERVED_FACTS, frontmatter_kinds, is_fact_name
 from fnd.filter_dsl import FilterError, compile_filter, referenced_fields
 from fnd.filter_dsl import parse as parse_dsl
 from fnd.filters.model import Rule
@@ -240,6 +240,26 @@ class _ExpressionDimension:
         )
 
 
+def _reject_unknown_facts(facts: frozenset[str]) -> None:
+    """A dotted name that is not a reserved fact is a typo, not a field.
+
+    `RESERVED_FACTS` has said so in its own comment since it was written —
+    "callers can reject it at parse time instead of strict-nulling to False" —
+    and no caller did. So `file.kinds == 'pdf'`, one letter from `file.kind`,
+    validated with a tick, indexed nothing, and the tree quietly dropped the
+    clause it could not place. Frontmatter keys cannot contain a dot, so
+    nothing legitimate is caught here.
+    """
+    unknown = sorted(f for f in facts if is_fact_name(f) and f not in RESERVED_FACTS)
+    if not unknown:
+        return
+    known = ", ".join(sorted(RESERVED_FACTS))
+    raise FilterError(
+        f"unknown field {unknown[0]!r} — known fields are: {known}",
+        1,
+    )
+
+
 def _compile(
     text: str,
     *,
@@ -248,6 +268,7 @@ def _compile(
 ) -> Rule:
     node = parse_dsl(text)
     facts = referenced_fields(node)
+    _reject_unknown_facts(facts)
     # A rule naming a frontmatter key cannot be answered by a file with no
     # block, whatever ELSE it names. Scoping only the rules that name nothing
     # else sent a mixed one — `Course == 'X' OR file.size < 10` — to the
