@@ -266,3 +266,62 @@ class _Filler(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Static("collection")
+
+
+class TestTheDeclineSaysWhatItDeclines:
+    """ "Cancel" on the rename dialog cancelled nothing: the rename is written
+    before the dialog appears, and only the reindex is on offer. A user
+    reading "Cancel" reasonably expects the rename undone.
+
+    And the cursor starts on the safe option, which every other irreversible
+    dialog in the app gets wrong — only the unsaved-changes gate defaults to
+    safe today.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_rename_decline_does_not_say_cancel(
+        self, sandboxed: Config, tmp_index_dir: Path
+    ) -> None:
+        app = FNDApp(index_dir=tmp_index_dir, config=sandboxed)
+        async with app.run_test(size=(120, 34)) as pilot:
+            await pilot.pause()
+            await TestARenameAsksBeforeDroppingTheIndex._rename_to(app, pilot, "papers2", [])
+            on_screen = "\n".join(
+                "".join(s.text for s in strip) for strip in app.screen._compositor.render_strips()
+            )
+
+        assert "leave the index for now" in on_screen, on_screen[:500]
+        assert "Cancel" not in on_screen, "it still offers to cancel what is already done"
+
+    @pytest.mark.asyncio
+    async def test_the_cursor_starts_on_the_safe_option(
+        self, sandboxed: Config, tmp_index_dir: Path
+    ) -> None:
+        from textual.widgets import OptionList
+
+        app = FNDApp(index_dir=tmp_index_dir, config=sandboxed)
+        async with app.run_test(size=(120, 34)) as pilot:
+            await pilot.pause()
+            await TestARenameAsksBeforeDroppingTheIndex._rename_to(app, pilot, "papers2", [])
+            options = app.screen.query_one("#confirm_list", OptionList)
+            landed = options._options[options.highlighted or 0].id
+
+        assert landed == "no", "Enter on arrival would have started the rebuild"
+
+    @pytest.mark.asyncio
+    async def test_the_rebuild_dialog_defaults_to_safe_too(
+        self, config: Config, tmp_index_dir: Path
+    ) -> None:
+        """The same screen serves both acts, so both land safely."""
+        from textual.widgets import OptionList
+
+        app = FNDApp(index_dir=tmp_index_dir, config=config)
+        async with app.run_test(size=(120, 34)) as pilot:
+            await pilot.pause()
+            _make_rebuild("papers")(app)
+            for _ in range(10):
+                await pilot.pause()
+            options = app.screen.query_one("#confirm_list", OptionList)
+            landed = options._options[options.highlighted or 0].id
+
+        assert landed == "no", "Enter on arrival would have emptied the collection"

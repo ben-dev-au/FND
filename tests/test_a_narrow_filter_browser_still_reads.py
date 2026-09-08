@@ -177,3 +177,42 @@ class TestTheElisionMarksWhereTheCutIs:
         assert "Save" in trimmed, trimmed
         assert "Discard" in trimmed, trimmed
         assert "Copy" not in trimmed, trimmed
+
+
+class TestTheAnchorMarkerGoesLeft:
+    """Anchors are dropped off the LEFT, so their marker belongs there.
+
+    At 120 columns the bar lost `/ Search`, `: Menu`, `? Keys` and `q Quit` —
+    every advertised way to search, get help or quit — and put the `…` after
+    `Discard`, which was still on screen. The middle-drop marker added for the
+    contextual keys had left this path appending at the end.
+    """
+
+    _ANCHORS = (("/", "Search"), (":", "Menu"), ("?", "Keys"), ("q", "Quit"))
+
+    def test_it_leads_when_anchors_were_dropped(self) -> None:
+        trimmed = _HintBar(self._ANCHORS, _CONTEXTUAL).fitted(120).plain
+
+        assert "…" in trimmed, trimmed
+        assert trimmed.lstrip().startswith("…"), trimmed
+        assert "Quit" not in trimmed, "the premise: the anchors went"
+
+    def test_it_does_not_also_trail(self) -> None:
+        """Two markers would claim a cut at an end that is intact."""
+        trimmed = _HintBar(self._ANCHORS, _CONTEXTUAL).fitted(120).plain
+
+        assert trimmed.count("…") == 1, trimmed
+        assert not trimmed.rstrip().endswith("…"), trimmed
+
+    def test_a_contextual_cut_still_marks_the_middle(self) -> None:
+        """The control: the other path keeps its own placement."""
+        trimmed = _HintBar(self._ANCHORS, _CONTEXTUAL).fitted(100).plain
+
+        assert not trimmed.lstrip().startswith("…"), trimmed
+        assert trimmed.index("…") < trimmed.index("Save"), trimmed
+
+    def test_a_bar_that_fits_carries_none(self) -> None:
+        full = _HintBar(self._ANCHORS, _CONTEXTUAL).fitted(400).plain
+
+        assert "…" not in full, full
+        assert "Quit" in full, full

@@ -3714,6 +3714,10 @@ class RenameCollectionScreen(Screen[None]):
                     "old name until you run Update index."
                 ),
                 confirm_label=f"Yes, reindex {new_name}",
+                # NOT "Cancel": the rename is already written, and only the
+                # reindex is on offer here. A user reading "Cancel" reasonably
+                # expects the rename undone, and it is not.
+                decline_label="No, leave the index for now",
                 on_confirm=lambda: self._drop_old_then_reindex(app, new_name),
             )
         )
@@ -4585,6 +4589,7 @@ class RebuildConfirmScreen(Screen[None]):
         crumb: str = "Rebuild",
         body: str = "",
         confirm_label: str = "",
+        decline_label: str = "Cancel",
     ) -> None:
         super().__init__()
         self._collection_name = collection_name
@@ -4592,6 +4597,7 @@ class RebuildConfirmScreen(Screen[None]):
         self._crumb = crumb
         self._body = body
         self._confirm_label = confirm_label
+        self._decline_label = decline_label
 
     def compose(self) -> ComposeResult:
         name = self._collection_name
@@ -4609,16 +4615,22 @@ class RebuildConfirmScreen(Screen[None]):
             yield Static(body, classes="warning")
             yield OptionList(
                 Option(Text(self._confirm_label or f"Yes, rebuild {name}", style="bold"), id="yes"),
-                Option("Cancel", id="no"),
+                Option(self._decline_label, id="no"),
                 id="confirm_list",
             )
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        # The SAFE option, not the destructive one. Every other irreversible
+        # dialog in the app lands the cursor on "Yes, delete…", and only the
+        # unsaved-changes gate gets this right.
+        options = self.query_one("#confirm_list", OptionList)
+        with contextlib.suppress(Exception):
+            options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "no")
+        options.focus()
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
-            _hint_bar(app, (("⏎", "Confirm"), ("Esc", "Cancel")))
+            _hint_bar(app, (("⏎", "Confirm"), ("Esc", self._decline_label)))
         )
 
     def action_cursor(self, direction: int) -> None:

@@ -145,15 +145,21 @@ def _hint_clusters(
             out.append_text(Text.from_markup(f"[reverse] {key} [/] {label}"))
         return out
 
+    from rich.text import Text as _Text
+
     joined = _cluster(anchors)
+    # Anchors are dropped off the LEFT, so their marker goes there. Appending
+    # it pointed at a tail that was complete: at 120 columns the bar lost
+    # `/ Search`, `: Menu`, `? Keys` and `q Quit` — every way to search, get
+    # help or quit — and put the … after `Discard`, which was still on screen.
+    if elided and _ELISION not in contextual:
+        head = _Text("…  ", style="dim")
+        head.append_text(joined)
+        joined = head
     if contextual:
         if anchors:
             joined.append_text(Text("      ", style=""))
         joined.append_text(_cluster(contextual))
-    # An `elided` flag with nothing marking WHERE only reaches here when the
-    # anchors were dropped, which does happen off the right.
-    if elided and _ELISION not in contextual:
-        joined.append_text(Text(" …", style="dim"))
     return joined
 
 
