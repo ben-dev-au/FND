@@ -83,9 +83,13 @@ class ClearFiltersBar(Static):
             self._clear()
             # Clearing hid the bar; move focus back to the tree.
             self._focus_tree()
-        elif event.key in ("down", "up"):
+        elif event.key == "down":
             event.stop()
             self._focus_tree()
+        # `up` is deliberately NOT handled: the tree below sends Up here when
+        # its cursor is on the top row, so answering Up by focusing the tree
+        # again bounced between the two forever. This row is the top of the
+        # pane; Up from it has nowhere to go.
 
     def _clear(self) -> None:
         if self._on_clear is not None:
@@ -94,5 +98,12 @@ class ClearFiltersBar(Static):
         self.app._scope.clear_filters()  # type: ignore[attr-defined]
 
     def _focus_tree(self) -> None:
+        """Scoped to this bar's OWN screen.
+
+        `app.query_one` searches the default screen, so on a pushed settings
+        screen this found nothing and the suppression hid it: Down and the
+        post-clear hand-back both did nothing at all. The same mistake in the
+        other direction is why `focus_clear_bar` queries `tree.screen`.
+        """
         with contextlib.suppress(Exception):
-            self.app.query_one(f"#{self._focus_id}").focus()
+            self.screen.query_one(f"#{self._focus_id}").focus()
