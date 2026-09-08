@@ -2151,12 +2151,33 @@ class FNDApp(App[None]):
             return
         open_settings(self)
 
-    def _close_settings_stack(self) -> None:
+    def _close_settings_stack(self, *, ask: bool = True) -> None:
         """Pop every nested SettingsScreen so the user returns to the
         main app. Used by the Esc cascade and by re-pressing ``:`` while
-        the menu is open."""
-        from fnd.tui.settings_screen import SettingsScreen
+        the menu is open.
 
+        ``ask`` routes through the unsaved-changes gate, because this is an
+        exit like any other: Esc, ←, `q` and the menu all prompted, and `:` —
+        which the screen's own footer advertises — discarded in silence.
+        """
+        from fnd.tui.settings_screen import (
+            SettingsScreen,
+            UnsavedChangesScreen,
+            unsaved_on_stack,
+        )
+
+        pending = unsaved_on_stack(self.screen_stack) if ask else None
+        if pending is not None:
+            what, save = pending
+            self.push_screen(
+                UnsavedChangesScreen(
+                    what=what,
+                    on_save=save,
+                    on_leave=lambda: self._close_settings_stack(ask=False),
+                    leave_label="Discard and close",
+                )
+            )
+            return
         while isinstance(self.screen, SettingsScreen):
             self.pop_screen()
 

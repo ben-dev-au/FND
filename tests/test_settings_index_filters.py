@@ -15,6 +15,11 @@ from fnd.tui.widgets import COMMIT_KEY
 from tests._pilot_wait import settings_ready
 
 
+def _walk_nodes(node: Any) -> list[Any]:
+    """Every node under this one, at any depth."""
+    return [n for child in node.children for n in (child, *_walk_nodes(child))]
+
+
 def _summary_text(screen: Any) -> str:
     """The summary box as painted. It refits itself to the width it renders
     at, so its stored renderable is not what the user sees."""
@@ -399,10 +404,17 @@ async def test_clearing_the_default_tags_does_not_reinstate_them(
     built_index: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Deleting the key lets ``DefaultFilters``' own default resurrect, so
-    "clear all" handed back an exclusion the user had just removed."""
+    removing an exclusion handed it straight back on save.
+
+    Driven by unticking the row rather than by the clear gesture: the global
+    set inherits from nothing, so it no longer offers one — emptying it there
+    dropped a protection no row on that screen could put back. The contract
+    under test is the SAVE path, which is unchanged.
+    """
     from fnd.config import load, starter_config
     from fnd.tui.menu import _open_filter_browser
-    from fnd.tui.settings_screen import _CLEAR_FILTERS_KEY, FilterBrowserScreen
+    from fnd.tui.settings_screen import FilterBrowserScreen
+    from fnd.tui.widgets.toggle_tree import ToggleTree
 
     cfg_path = tmp_path / "config.toml"
     cfg_path.write_text(starter_config(), encoding="utf-8")
@@ -418,7 +430,16 @@ async def test_clearing_the_default_tags_does_not_reinstate_them(
         assert isinstance(browser, FilterBrowserScreen)
         while browser._scanning:
             await pilot.pause()
-        await pilot.press(_CLEAR_FILTERS_KEY)
+        tree = browser.query_one("#filter_tree", ToggleTree)
+        excluded = sorted(tree.excluded)
+        assert excluded, "the premise: the starter config ships an exclusion"
+        for item in excluded:
+            node = next(n for n in _walk_nodes(tree.root) if (n.data or {}).get("id") == item)
+            while item in tree.excluded:
+                tree._toggle(node)
+                await pilot.pause()
+        for _ in range(6):
+            await pilot.pause()
         await pilot.press("ctrl+s")
         for _ in range(20):
             await pilot.pause()
@@ -1349,6 +1370,8 @@ class TestClearSaysWhatItTook:
 
     @pytest.mark.asyncio
     async def test_clearing_raises_it(self, built_index: Path) -> None:
+        """On a SOURCE, which is the only place the act exists now: the global
+        set inherits from nothing, so there is nothing to return to there."""
         from fnd.filters import FilterSpec
         from fnd.tui.settings_screen import _CLEAR_FILTERS_KEY, FilterBrowserScreen
 
@@ -1361,6 +1384,7 @@ class TestClearSaysWhatItTook:
                     spec=FilterSpec(kinds=("md",), exclude_tags={"os": ("no_index",)}),
                     gitignore=True,
                     fndignore=True,
+                    inherited=(FilterSpec(), True, True),
                     on_save=lambda *_a: None,
                 )
             )

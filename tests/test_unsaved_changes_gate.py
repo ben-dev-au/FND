@@ -285,3 +285,80 @@ class _DirtyScreen(Screen[None]):
 
     def unsaved_work(self) -> tuple[str, Callable[[], None]] | None:
         return "This form", lambda: None
+
+
+class TestEveryAdvertisedExitAsks:
+    """The gate covered Esc, ←, `q` and the menu. `:` — the key the screen's
+    own footer names — closed the whole settings stack in silence.
+
+    A hunter found it by pressing what the footer told it to press, which is
+    the only way this class of hole is ever found: I tested the exits I had
+    thought of.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_colon_key_asks_before_discarding(self, tmp_index_dir: Path) -> None:
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(_DirtyScreen())
+            for _ in range(6):
+                await pilot.pause()
+            app._close_settings_stack()
+            for _ in range(8):
+                await pilot.pause()
+            asked = app.screen.__class__ is UnsavedChangesScreen
+
+        assert asked, "`:` closed the stack without asking"
+
+    @pytest.mark.asyncio
+    async def test_a_clean_stack_still_closes_at_once(self, tmp_index_dir: Path) -> None:
+        """The control: the gate must not put a prompt in front of a user who
+        has nothing to lose."""
+        from fnd.tui.settings_screen import SettingsScreen, open_settings
+
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            open_settings(app)
+            for _ in range(15):
+                await pilot.pause()
+            assert isinstance(app.screen, SettingsScreen), "the premise"
+            app._close_settings_stack()
+            for _ in range(8):
+                await pilot.pause()
+            closed = not isinstance(app.screen, SettingsScreen)
+            prompted = app.screen.__class__ is UnsavedChangesScreen
+
+        assert closed, "a clean settings stack did not close"
+        assert not prompted
+
+    @pytest.mark.asyncio
+    async def test_discarding_from_the_gate_does_close_it(self, tmp_index_dir: Path) -> None:
+        """And the prompt must not become a second thing to escape from —
+        driven through the option list, which is what the user presses."""
+        from textual.widgets import OptionList
+
+        app = FNDApp(index_dir=tmp_index_dir)
+        async with app.run_test(size=(110, 30)) as pilot:
+            await pilot.pause()
+            app.push_screen(_DirtyScreen())
+            for _ in range(6):
+                await pilot.pause()
+            app._close_settings_stack()
+            for _ in range(8):
+                await pilot.pause()
+            assert app.screen.__class__ is UnsavedChangesScreen, "the premise"
+            options = app.screen.query_one("#confirm_list", OptionList)
+            options.highlighted = next(
+                i for i, o in enumerate(options._options) if o.id == "discard"
+            )
+            await pilot.pause()
+            options.action_select()
+            for _ in range(10):
+                await pilot.pause()
+            gone = app.screen.__class__ is not UnsavedChangesScreen
+            running = app.is_running
+
+        assert gone, "the gate stayed up after discard"
+        assert running, "discard should close the stack, not the app"
