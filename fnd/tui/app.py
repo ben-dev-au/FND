@@ -1001,13 +1001,14 @@ class FNDApp(App[None]):
         if pending is None:
             self.exit()
             return
-        what, save = pending
+        what, save, blocked = pending
         self.push_screen(
             UnsavedChangesScreen(
                 what=what,
                 on_save=save,
                 on_leave=self.exit,
                 leave_label="Discard and quit",
+                blocked=blocked,
             )
         )
 
@@ -2207,13 +2208,14 @@ class FNDApp(App[None]):
         # first holding stale values that its own `^s` then wrote back.
         pending = unsaved_on_stack(self.screen_stack)
         if pending is not None:
-            what, save = pending
+            what, save, blocked = pending
             self.push_screen(
                 UnsavedChangesScreen(
                     what=what,
                     on_save=save,
                     on_leave=lambda: open_settings(self),
                     leave_label="Discard and open the menu",
+                    blocked=blocked,
                 )
             )
             return
@@ -2236,13 +2238,14 @@ class FNDApp(App[None]):
 
         pending = unsaved_on_stack(self.screen_stack) if ask else None
         if pending is not None:
-            what, save = pending
+            what, save, blocked = pending
             self.push_screen(
                 UnsavedChangesScreen(
                     what=what,
                     on_save=save,
                     on_leave=lambda: self._close_settings_stack(ask=False),
                     leave_label="Discard and close",
+                    blocked=blocked,
                 )
             )
             return

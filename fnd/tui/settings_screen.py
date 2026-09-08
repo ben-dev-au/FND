@@ -2923,11 +2923,8 @@ class SourceFormScreen(Screen[None]):
         self._clear_error()
 
         path = str(self._fields["path"] or "").strip().strip("'\"")
-        if not path:
-            self._show_error("Path is required.")
-            return
-        if not Path(path).expanduser().exists():
-            self._show_error(f"Path does not exist: {path}")
+        if blocked := self.save_blocked():
+            self._show_error(blocked)
             return
         # Type globs the absorber declined to move stay exactly as they were:
         # this form has no control for them, so rebuilding without them was a
@@ -3029,6 +3026,19 @@ class SourceFormScreen(Screen[None]):
         if self._snapshot == self._fields:
             return None
         return "this source", self.action_save_close
+
+    def save_blocked(self) -> str:
+        """Why ``^s`` would be refused, or "". The save and the leaving prompt
+        read this same answer, so the prompt cannot offer a save that is
+        certain to fail."""
+        from pathlib import Path
+
+        path = str(self._fields["path"] or "").strip().strip("'\"")
+        if not path:
+            return "Path is required."
+        if not Path(path).expanduser().exists():
+            return f"Path does not exist: {path}"
+        return ""
 
     def action_back(self) -> None:
         # The filter browser saves into `_fields`, not to disk, so leaving the
@@ -3437,6 +3447,31 @@ class AddCollectionWizard(Screen[None]):
             return None
         return "this collection", self.action_save_close
 
+    def save_blocked(self) -> str:
+        """As on the source form: the one answer both the save and the leaving
+        prompt read."""
+        from pathlib import Path
+
+        from fnd.config import InvalidCollectionNameError, validate_collection_name
+
+        name = str(self._fields["name"]).strip()
+        if not name:
+            return "Name is required."
+        try:
+            validate_collection_name(name)
+        except InvalidCollectionNameError as e:
+            return str(e)
+        cfg = self.app._config  # type: ignore[attr-defined]
+        if cfg is not None and name in cfg.collections:
+            return f"Collection {name!r} already exists."
+        path = str(self._fields["path"]).strip().strip("'\"")
+        if not path:
+            return "Source path is required."
+        expanded = Path(path).expanduser()
+        if not expanded.exists():
+            return f"Path does not exist: {expanded}"
+        return ""
+
     def action_back(self) -> None:
         _leave_or_confirm(
             self,
@@ -3459,7 +3494,6 @@ class AddCollectionWizard(Screen[None]):
             SourceConfig,
             default_config_path,
             load,
-            validate_collection_name,
             write_collection,
         )
 
@@ -3467,25 +3501,14 @@ class AddCollectionWizard(Screen[None]):
 
         name = str(self._fields["name"]).strip()
         path = str(self._fields["path"]).strip().strip("'\"")
-        if not name:
-            self._show_error("Name is required.")
-            return
-        # Validate up-front so the user sees a focused error instead of a
+        # Validated up-front so the user sees a focused error instead of a
         # crash from deep inside write_collection if they typed something
         # the persistence layer would reject (path separators, quotes,
         # control chars, …). Spaces ARE allowed — see validate_collection_name.
-        try:
-            validate_collection_name(name)
-        except InvalidCollectionNameError as e:
-            self._show_error(str(e))
-            return
-        if not path:
-            self._show_error("Source path is required.")
+        if blocked := self.save_blocked():
+            self._show_error(blocked)
             return
         p = Path(path).expanduser()
-        if not p.exists():
-            self._show_error(f"Path does not exist: {p}")
-            return
 
         includes_globs: list[str] = _kinds_to_include_globs(list(self._fields["includes"]))
         includes_custom = str(self._fields.get("includes_custom") or "")
@@ -3504,10 +3527,6 @@ class AddCollectionWizard(Screen[None]):
                 excludes_globs.append(g)
 
         app: FNDApp = self.app  # type: ignore[assignment]
-        cfg = app._config  # type: ignore[attr-defined]
-        if cfg is not None and name in cfg.collections:
-            self._show_error(f"Collection {name!r} already exists.")
-            return
 
         # The row shows a live ✗ col N but nothing stopped a save, and the
         # model validates the rule, so an invalid one reached the user as an
@@ -4452,10 +4471,14 @@ class UnsavedChangesScreen(Screen[None]):
         on_save: Callable[[], None] | None,
         on_leave: Callable[[], None] | None = None,
         leave_label: str = "Discard changes",
+        blocked: str = "",
     ) -> None:
         super().__init__()
         self._what = what
-        self._on_save = on_save
+        # A save the screen below has already refused loops: it repaints
+        # nothing, so pressing the default again looks like a dead key.
+        self._blocked = blocked
+        self._on_save = None if blocked else on_save
         self._leave_action = on_leave
         self._leave_label = leave_label
 
@@ -4466,6 +4489,8 @@ class UnsavedChangesScreen(Screen[None]):
             # ("this source", "these filters"), and a sentence carrying its own
             # verb read "These filters has changes that are not saved."
             yield Static(f"Unsaved changes to {self._what}.", classes="warning")
+            if self._blocked:
+                yield Static(f"Cannot save yet — {self._blocked}", classes="warning")
             # Save is offered only where the work is on the screen below this
             # one. A form buried under another editor cannot be saved from
             # here — its own save pops whatever is on top, which is not it.
@@ -4477,7 +4502,12 @@ class UnsavedChangesScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        self.query_one("#confirm_list", OptionList).focus()
+        options = self.query_one("#confirm_list", OptionList)
+        options.focus()
+        # With no save on offer the first row is the destructive one, and Enter
+        # is one keypress away.
+        if self._on_save is None:
+            options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "stay")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("↑↓", "Choose"), ("⏎", "Select"), ("Esc", "Keep editing")))
@@ -4518,13 +4548,30 @@ def _leave_or_confirm(
     if not dirty:
         screen.app.pop_screen()
         return
-    screen.app.push_screen(UnsavedChangesScreen(what=what, on_save=on_save))
+    screen.app.push_screen(
+        UnsavedChangesScreen(what=what, on_save=on_save, blocked=save_blocked_on(screen))
+    )
+
+
+def save_blocked_on(screen: object) -> str:
+    """Why the screen cannot save what it is holding, or "".
+
+    A screen answers by exposing ``save_blocked``; anything else can save.
+    """
+    ask = getattr(screen, "save_blocked", None)
+    if not callable(ask):
+        return ""
+    try:
+        return str(ask() or "")
+    except Exception:
+        return ""
 
 
 def unsaved_on_stack(
     screens: Sequence[object],
-) -> tuple[str, Callable[[], None] | None] | None:
-    """What the SCREEN STACK would lose, topmost holder first.
+) -> tuple[str, Callable[[], None] | None, str] | None:
+    """What the SCREEN STACK would lose, topmost holder first, and why saving
+    it here is not on offer.
 
     Asking only the top screen missed the common shape: the filter browser is
     only ever pushed on top of the source form, so a dirty form under a clean
@@ -4536,7 +4583,9 @@ def unsaved_on_stack(
         answer = unsaved_on(screen)
         if answer is not None:
             what, save = answer
-            return what, (save if depth == 0 else None)
+            if depth:
+                return what, None, "the screen holding it is behind this one"
+            return what, save, save_blocked_on(screen)
     return None
 
 
