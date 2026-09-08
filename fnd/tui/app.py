@@ -352,6 +352,32 @@ class FNDApp(App[None]):
     }
     #filters_pane #clear_filters_bar:hover { color: $accent; text-style: bold; }
     #filters_pane #clear_filters_bar:focus { color: $accent; text-style: bold; background: $accent 15%; }
+    /* Notices wear the app's chrome, not Textual's. The stock toast is a
+       filled $panel-lighten-1 slab with a thick outer bar down one side,
+       padded 1 1 and fixed at 60 columns — dropped over panes that are all
+       thin round outlines on $surface, it reads as something else's widget.
+       Same border grammar as every pane here: round, severity-coloured, and
+       sized to what it says. */
+    /* Top right, not bottom: the bottom rows carry the hint bar and the
+       progress strip, and a notice landing there covered the line that says
+       what is running. */
+    ToastRack {
+        dock: top; align: right top; margin-bottom: 0; margin-top: 1;
+    }
+    Toast {
+        width: auto; max-width: 60%; height: auto;
+        padding: 0 1; margin: 0 1 1 0;
+        background: $surface; color: $text;
+        border: round $primary 50%;
+    }
+    Toast.-information { border: round $primary 50%; }
+    /* The two that matter carry the colour the confirm screens already use. */
+    Toast.-warning { border: round $warning; }
+    Toast.-error { border: round $error; }
+    Toast .toast--title { text-style: bold; color: $text; }
+    Toast.-information .toast--title { color: $text-muted; }
+    Toast.-warning .toast--title { color: $warning; }
+    Toast.-error .toast--title { color: $error; }
     /* Section collapse-to-header: Left at the panel root shrinks the
        whole panel down to its border-title strip. ``overflow: hidden``
        suppresses any rogue scrollbar that would otherwise sneak past
