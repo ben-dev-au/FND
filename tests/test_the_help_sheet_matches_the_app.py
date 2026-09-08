@@ -152,7 +152,13 @@ def test_the_filter_browser_has_a_section() -> None:
     from fnd.tui.widgets import COMMIT_KEY
 
     listed = _key_cells("Index filters") | _key_cells("Global")
-    pretty = {"escape": "Esc", "slash": "/", "ctrl+s": COMMIT_KEY, "question_mark": "?"}
+    pretty = {
+        "escape": "Esc",
+        "slash": "/",
+        "ctrl+s": COMMIT_KEY,
+        "question_mark": "?",
+        "down": "↓",
+    }
     for binding in FilterBrowserScreen.BINDINGS:
         assert isinstance(binding, Binding)
         first = binding.key.split(",")[0]

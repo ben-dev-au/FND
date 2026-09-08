@@ -485,6 +485,13 @@ def _keys_filter_browser() -> tuple[tuple[str, str, str, str], ...]:
             "rows, so this is how you reach one without arrowing to it.",
         ),
         (
+            "↓",
+            "Box → rows",
+            "",
+            "From the filter box, step into the rows it narrowed. ↑ at the "
+            "top row goes back to the box.",
+        ),
+        (
             "t",
             "Edit as text",
             "",
