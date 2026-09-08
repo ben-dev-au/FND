@@ -367,6 +367,13 @@ class MatchAwareScroll(VerticalScroll):
     # paging horizontally into empty space.
     BINDINGS = [  # noqa: RUF012 — Textual widget BINDINGS expects a class-level list
         Binding("left", "bridge_left", "Focus results", show=False),
+        # The footer has advertised `j/k Scroll` in the preview and in Reading
+        # View since before this widget existed, and Textual's scroll view
+        # binds only the arrows. The rest of the app speaks vi keys — the
+        # settings list binds `up,k` / `down,j` — so the keys are what was
+        # missing, not the promise.
+        Binding("j", "scroll_down", "Scroll down", show=False),
+        Binding("k", "scroll_up", "Scroll up", show=False),
     ]
 
     # Lines advanced per scroll-key press in Reading View. Reading View turns
