@@ -108,6 +108,9 @@ class ProgressEvent:
     # Texturising lines from these.
     indexed_newly_total: int = 0
     indexed_already_total: int = 0
+    removed_total: int = 0
+    """Files this run dropped from the collection. Known only at the end, so
+    it is carried on the terminal event."""
     textured_newly_total: int = 0
     textured_already_total: int = 0
     still_flat_total: int = 0
@@ -1129,11 +1132,12 @@ async def run_indexer(
         # so only files that genuinely left the collection get pruned.
         # Skipped on cancel, where the partial walk would read as mass
         # deletion, and on a missing root (offline volume, same trap).
+        removed = 0
         if not rebuild and not (cancel is not None and cancel.is_set()):
             live_parent_ids = {_path_parent_id(p) for p, _src in paths}
             live_parent_ids.update(_path_parent_id(p) for p, _reason in scan_blocked)
             if sources_are_enumerable(Path(s.path).expanduser() for s in config.sources):
-                prune_removed_files(
+                removed = prune_removed_files(
                     index, writer, collection=collection, live_parent_ids=live_parent_ids
                 )
         await commit_async(writer)
@@ -1170,7 +1174,7 @@ async def run_indexer(
     if cancel is not None and cancel.is_set():
         yield _emit("cancelled")
         return
-    yield _emit("done", chunks_written=written)
+    yield _emit("done", chunks_written=written, removed_total=removed)
 
 
 def run_sync(

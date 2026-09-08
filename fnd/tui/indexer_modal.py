@@ -637,6 +637,7 @@ class IndexerScreen(ModalScreen[None]):
             textured_already=ev.textured_already_total,
             still_flat=ev.still_flat_total,
             failed=ev.failed_total,
+            removed=ev.removed_total,
         )
         self._sync_action_options(self._fnd_app())
 
@@ -650,13 +651,14 @@ class IndexerScreen(ModalScreen[None]):
         textured_already: int,
         still_flat: int,
         failed: int,
+        removed: int = 0,
     ) -> None:
         try:
             indexed_line = self.query_one("#indexer_indexed_line", Static)
             texture_line = self.query_one("#indexer_texture_line", Static)
         except Exception:
             return
-        indexed_line.update(_format_indexed_line(indexed_newly, indexed_already, failed))
+        indexed_line.update(_format_indexed_line(indexed_newly, indexed_already, failed, removed))
         if pdfs_total > 0:
             texture_line.remove_class("hidden")
             texture_line.update(
@@ -703,7 +705,9 @@ class IndexerScreen(ModalScreen[None]):
         for snap in history:
             collection_node = tree.root.add(snap.collection, data=snap.collection)
             collection_node.add_leaf(
-                _format_indexed_line(snap.indexed_newly, snap.indexed_already, snap.failed)
+                _format_indexed_line(
+                    snap.indexed_newly, snap.indexed_already, snap.failed, snap.removed
+                )
             )
             if snap.pdfs_total > 0:
                 collection_node.add_leaf(
@@ -907,6 +911,7 @@ class ChainStepSummary:
     textured_already: int
     still_flat: int
     failed: int
+    removed: int
     elapsed_s: float
 
 
@@ -917,11 +922,14 @@ def _short_name(path: str) -> str:
     return name if len(name) <= 68 else name[:65] + "…"
 
 
-def _format_indexed_line(newly: int, already: int, failed: int) -> str:
+def _format_indexed_line(newly: int, already: int, failed: int, removed: int = 0) -> str:
     parts = [
         f"{newly} newly indexed",
         f"{already} already indexed",
     ]
+    # A run that adds nothing and removes three read as "nothing happened".
+    if removed > 0:
+        parts.append(f"{removed} removed")
     if failed > 0:
         parts.append(f"[yellow]⚠ {failed} failed[/]")
     return "[dim]Indexed:[/]     " + "    ".join(parts)
@@ -1011,6 +1019,7 @@ async def drive_indexer(
                 textured_already=final_event.textured_already_total,
                 still_flat=final_event.still_flat_total,
                 failed=final_event.failed_total,
+                removed=final_event.removed_total,
                 elapsed_s=final_event.elapsed_s,
             )
         )
