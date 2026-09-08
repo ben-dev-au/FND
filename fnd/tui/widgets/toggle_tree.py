@@ -29,7 +29,7 @@ from textual.message import Message
 from textual.widgets import Tree
 from textual.widgets.tree import TreeNode
 
-from fnd.tui.results_labels import _styled_state_row
+from fnd.tui.results_labels import _styled_state_row, state_colour
 
 _FULL = "●"
 _PARTIAL = "◐"
@@ -278,7 +278,12 @@ class ToggleTree(Tree[dict[str, Any]]):
             parts.append(f"{n_on} of {len(seen)} {_plural(g.noun, len(seen))}")
         return f"  ({', '.join(parts)})" if parts else ""
 
-    def _group_label(self, g: ToggleGroup) -> str:
+    def _group_label(self, g: ToggleGroup) -> Any:
+        """A branch row. Its marker is a state too, so it carries the colour.
+
+        Every marker on a collapsed screen is one of these: colouring only the
+        leaves meant a user saw no colour at all until they expanded a branch.
+        """
         mode = self._mode(g)
         leaves = g.leaves
         if mode == "actions":
@@ -290,7 +295,9 @@ class ToggleTree(Tree[dict[str, Any]]):
             # ⊘ only when the whole branch is excluded; a single excluded
             # tag among many is a partial state, not a blanket exclusion.
             marker = _EXCLUDED if n_ex == len(leaves) else _PARTIAL
-            return f"{marker}{_MARKER_GAP}{g.label}{summary}"
+            return _styled_state_row(
+                marker, f"{_MARKER_GAP}{g.label}{summary}", self._state_colour(marker)
+            )
         if not n and g.empty_label:
             return f"{_EMPTY}{_MARKER_GAP}{g.label}  ({g.empty_label})"
         if mode == "radio":
@@ -300,33 +307,38 @@ class ToggleTree(Tree[dict[str, Any]]):
             active = chosen is not None and not chosen.id.endswith(":any")
             marker = _FULL if active else _EMPTY
             suffix = f"  ({chosen.label})" if chosen else "  (any)"
-            return f"{marker}{_MARKER_GAP}{g.label}{suffix}"
+            return _styled_state_row(
+                marker, f"{_MARKER_GAP}{g.label}{suffix}", self._state_colour(marker)
+            )
         if not leaves:
             return f"{_EMPTY}{_MARKER_GAP}{g.label}"
         if n == len(leaves) and g.full_label:
             summary = f"  ({g.full_label})"
-        return f"{tri_state_marker(n, len(leaves))}{_MARKER_GAP}{g.label}{summary}"
+        rolled = tri_state_marker(n, len(leaves))
+        return _styled_state_row(
+            rolled, f"{_MARKER_GAP}{g.label}{summary}", self._state_colour(rolled)
+        )
 
     def _item_label(self, item_id: str) -> Any:
         if item_id in self._action_items:
             return f"⏎{_MARKER_GAP}{self._item_labels.get(item_id, item_id)}"
         if item_id in self._excluded:
-            marker, style = _EXCLUDED, self._state_colour("error")
+            marker, style = _EXCLUDED, self._state_colour(_EXCLUDED)
         elif item_id in self._selected:
-            marker, style = _FULL, self._state_colour("success")
+            marker, style = _FULL, self._state_colour(_FULL)
         else:
             marker, style = _EMPTY, ""
         label = f"{_MARKER_GAP}{self._item_labels.get(item_id, item_id)}"
         return _styled_state_row(marker, label, style)
 
-    def _state_colour(self, variable: str) -> str:
-        """A theme colour for a state marker, or none if the theme has no say."""
+    def _state_colour(self, marker: str) -> str:
+        """The colour this state marker carries, or none for a neutral one."""
         try:
-            return self.app.get_css_variables().get(variable, "") or ""
+            variables = self.app.get_css_variables()
         except Exception:
-            return ""
+            variables = {}
+        return state_colour(marker, variables)
 
-    # ── Toggle ───────────────────────────────────────────────────────────
     def action_toggle_selection(self) -> None:
         node = self.cursor_node
         if node is not None:

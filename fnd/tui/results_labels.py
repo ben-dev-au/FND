@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,7 @@ __all__ = [
     "_styled_parent_label",
     "_styled_state_row",
     "_trim_redundant_heading",
+    "state_colour",
 ]
 
 _PASS_GLYPHS = {0: "●", 1: "~", 2: "⊕", 3: "❝"}
@@ -82,6 +84,24 @@ def _score_style(score: float, max_score: float) -> str:
 #: change what is indexed get a hue; ``○`` stays neutral so it does not
 #: compete with them, and ``◐`` is a roll-up rather than a state of its own.
 STATE_COLOUR_VARIABLE = {"●": "success", "⊘": "error"}
+
+#: Used when the theme names no such variable. Without a fallback the colour
+#: was dropped in silence, which is indistinguishable from the feature being
+#: absent — and a theme is not required to define every semantic colour.
+STATE_COLOUR_FALLBACK = {"●": "green", "⊘": "red"}
+
+
+def state_colour(marker: str, variables: Mapping[str, str]) -> str:
+    """The colour a state marker carries, given a theme's variables.
+
+    Falls back where the theme names no such colour: dropping the signal in
+    silence is indistinguishable from the feature being absent, and a theme is
+    not required to define every semantic colour.
+    """
+    variable = STATE_COLOUR_VARIABLE.get(marker)
+    if not variable:
+        return ""
+    return variables.get(variable, "") or STATE_COLOUR_FALLBACK.get(marker, "")
 
 
 def _styled_state_row(marker: str, rest: str, colour: str) -> Any:

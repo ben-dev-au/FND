@@ -18,10 +18,10 @@ from fnd.config import is_all_collections
 from fnd.kinds import CATEGORIES, CATEGORY_BY_ID, KIND_BY_ID, KINDS_IN_CATEGORY
 from fnd.launch_command import LaunchScope, SearchSnapshot
 from fnd.tui.results_labels import (
-    STATE_COLOUR_VARIABLE,
     _styled_action_label,
     _styled_parent_label,
     _styled_state_row,
+    state_colour,
 )
 
 if TYPE_CHECKING:
@@ -725,19 +725,12 @@ class ScopeController:
     # ── Clear all filters ─────────────────────────────────────────
 
     def _state_colour(self, marker: str) -> str:
-        """The theme colour a tri-state marker carries, or none.
-
-        Same mapping the Index filters browser uses: the sidebar hand-rolls
-        its markers rather than using ToggleTree, so without this the same
-        state reads differently in the two panes called Filters.
-        """
-        variable = STATE_COLOUR_VARIABLE.get(marker)
-        if not variable:
-            return ""
+        """The colour this state marker carries, or none for a neutral one."""
         try:
-            return self._app.get_css_variables().get(variable, "") or ""
+            variables = self._app.get_css_variables()
         except Exception:
-            return ""
+            variables = {}
+        return state_colour(marker, variables)
 
     def _action_colour(self) -> str:
         """Control rows take the *inactive pane border* colour so they read as

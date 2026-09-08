@@ -197,3 +197,70 @@ async def test_the_sidebar_paints_the_same_states_the_same_way(
     assert "recipe" in on_screen, "the sidebar rows never reached the screen"
     assert any(success.lower() in c.lower() for c in painted["●"]), painted
     assert any(error.lower() in c.lower() for c in painted["⊘"]), painted
+
+
+def test_a_theme_without_the_variable_still_colours() -> None:
+    """A theme is not required to define every semantic colour, and dropping
+    the signal in silence is indistinguishable from the feature being absent."""
+    from fnd.tui.results_labels import (
+        STATE_COLOUR_FALLBACK,
+        STATE_COLOUR_VARIABLE,
+        state_colour,
+    )
+
+    assert state_colour("●", {}) == STATE_COLOUR_FALLBACK["●"]
+    assert state_colour("⊘", {}) == STATE_COLOUR_FALLBACK["⊘"]
+    assert state_colour("○", {}) == "", "the neutral state stays neutral"
+    assert set(STATE_COLOUR_VARIABLE) == set(STATE_COLOUR_FALLBACK)
+
+
+def test_the_theme_wins_when_it_names_one() -> None:
+    """The control: the fallback is a floor, not a replacement."""
+    from fnd.tui.results_labels import state_colour
+
+    assert state_colour("●", {"success": "#123456"}) == "#123456"
+
+
+@pytest.mark.asyncio
+async def test_a_collapsed_screen_shows_colour(tmp_index_dir: Path) -> None:
+    """The case the earlier tests missed. Every marker on a collapsed screen
+    is a BRANCH roll-up, and colouring only the leaves meant a user saw no
+    colour at all until they expanded something — which is how it shipped."""
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        app.push_screen(
+            FilterBrowserScreen(
+                title="Index filters",
+                spec=FilterSpec(exclude_tags={"frontmatter": ("no_index",)}),
+                gitignore=True,
+                fndignore=True,
+                # One tag, wholly excluded, so the branch rolls up to ⊘
+                # rather than the ◐ that a partial one earns.
+                sample_provider=lambda: SourceSample(
+                    kinds={"md": 3}, tags={"frontmatter": {"no_index": 1}}
+                ),
+                on_save=lambda *_a: None,
+            )
+        )
+        for _ in range(25):
+            await pilot.pause()
+        # No expansion at all: this is the screen as it opens.
+        rows = [
+            (
+                "".join(s.text for s in strip),
+                [
+                    str(s.style.color)
+                    for s in strip
+                    if s.text.strip() in ("●", "⊘") and s.style and s.style.color
+                ],
+            )
+            for strip in app.screen._compositor.render_strips()
+        ]
+        success = app.get_css_variables().get("success", "")
+        error = app.get_css_variables().get("error", "")
+
+    branch_colours = [c for line, cols in rows if "▶" in line for c in cols]
+    assert branch_colours, "no branch marker carried a colour on the opening screen"
+    assert any(success.lower() in c.lower() for c in branch_colours), branch_colours
+    assert any(error.lower() in c.lower() for c in branch_colours), branch_colours
