@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fnd import os_labels
-from fnd.config import ALL_COLLECTIONS, is_all_collections
+from fnd.config import ALL_COLLECTIONS, DEFAULT_RANKING_PROFILE, is_all_collections
 from fnd.tui.widgets import COMMIT_KEY
 
 if TYPE_CHECKING:
@@ -824,10 +824,16 @@ def _choices_collections(app: FNDApp) -> list[ChoiceOption]:
 
 
 def _choices_ranking(app: FNDApp) -> list[ChoiceOption]:
+    """Every configured profile, and always the one a collection starts on.
+
+    `ranking` is empty until someone writes a `[ranking.*]` block, so the
+    picker for a row reading "default" opened on nothing at all.
+    """
     cfg = app._config  # type: ignore[attr-defined]
-    if cfg is None:
-        return []
-    return [ChoiceOption(value=n, label=n) for n in sorted(cfg.ranking)]
+    names = sorted(cfg.ranking) if cfg else []
+    if DEFAULT_RANKING_PROFILE not in names:
+        names.insert(0, DEFAULT_RANKING_PROFILE)
+    return [ChoiceOption(value=n, label=n) for n in names]
 
 
 def _set_highlights(app: FNDApp, value: bool) -> None:
@@ -1240,7 +1246,7 @@ def _collection_summary(app: FNDApp, name: str) -> str:
     coll = cfg.collections[name]
     n = len(coll.sources)
     active = "●" if name in (app._scope.collections or []) else "○"  # type: ignore[attr-defined]
-    profile = getattr(coll, "ranking_profile", None) or "default"
+    profile = getattr(coll, "ranking_profile", None) or DEFAULT_RANKING_PROFILE
     summary = f"{active} {n} source{'s' if n != 1 else ''} · ranking:{profile}"
     part = interrupted_index(name)
     if part is not None:

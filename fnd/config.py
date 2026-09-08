@@ -528,6 +528,11 @@ class SourceConfig(_ConfigModel):
         return v
 
 
+DEFAULT_RANKING_PROFILE = "default"
+"""The profile a collection scores with until one is named. Not every config
+defines a `[ranking.*]` block, so the picker has to offer this one itself."""
+
+
 class CollectionConfig(_ConfigModel):
     """One named set of sources + collection-wide options.
 
@@ -558,7 +563,7 @@ class CollectionConfig(_ConfigModel):
     """Follow symlinks in this source, and allow the root to be one. Off by
     default."""
 
-    ranking_profile: str = "default"
+    ranking_profile: str = DEFAULT_RANKING_PROFILE
     """Name of the `[ranking.*]` profile this collection scores with."""
 
     @field_validator("roots", mode="before")

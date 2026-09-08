@@ -259,6 +259,10 @@ class IndexerScreen(ModalScreen[None]):
                     Option("Cancel", id="cancel"),
                     id="indexer_actions",
                 )
+        # A modal screen is see-through, so the app's own footer showed under
+        # it — `/`, `:`, `?` and `q`, none of which work while this is up,
+        # and none of this screen's keys.
+        yield Static("", id="footer_hints")
 
     def _title_text(self) -> str:
         if self._chain_total > 1:
@@ -481,6 +485,24 @@ class IndexerScreen(ModalScreen[None]):
                 with contextlib.suppress(Exception):
                     opts.remove_option(opt_id)
                     self._removed_options.add(opt_id)
+        self._sync_footer(done=want_done, todo=want_todo)
+
+    def _sync_footer(self, *, done: bool, todo: bool) -> None:
+        """The keys this screen answers, in the state it is in. Read from the
+        same call that decides the action rows, so the two cannot disagree."""
+        from fnd.tui.app import render_hint_bar
+
+        hints: tuple[tuple[str, str], ...] = (("↑↓", "Choose"), ("⏎", "Select"))
+        if done:
+            hints = (*hints, ("Esc", "Close"))
+        else:
+            # `p` is Cancel under another name (see `action_pause`), so naming
+            # it would advertise two keys for one act.
+            hints = (*hints, ("Esc/b", "Background"), ("c", "Cancel"))
+        if todo:
+            hints = (*hints, ("f", "Flat PDFs"))
+        with contextlib.suppress(Exception):
+            self.query_one("#footer_hints", Static).update(render_hint_bar((), hints))
 
     def _todo_scope(self) -> str | None:
         """Collection scope for the flat-PDF badge + drill-in: the active

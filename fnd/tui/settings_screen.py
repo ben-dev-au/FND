@@ -151,12 +151,22 @@ def _editor_hint_bar(contextual: tuple[tuple[str, str], ...]) -> Any:
     return render_hint_bar((), contextual)
 
 
-def _hint_bar(app: FNDApp, contextual: tuple[tuple[str, str], ...]) -> Any:
+def _hint_bar(app: FNDApp, contextual: tuple[tuple[str, str], ...], *, screen: Any = None) -> Any:
     """Build the shared hint-bar Text for a Settings screen. Anchors
-    come from the main app (single source of truth)."""
+    come from the main app (single source of truth).
+
+    ``/`` focuses a row filter, and the screens without one — the source form,
+    the wizard, every confirm dialog — were advertising a key that does
+    nothing. ``screen`` defaults to the active one; pass it explicitly from a
+    screen that refreshes its footer while another sits on top of it.
+    """
     from fnd.tui.app import render_hint_bar
 
-    return render_hint_bar(app._FOOTER_ANCHORS, contextual)  # type: ignore[attr-defined]
+    anchors: tuple[tuple[str, str], ...] = app._FOOTER_ANCHORS  # type: ignore[attr-defined]
+    owner = screen if screen is not None else getattr(app, "screen", None)
+    if owner is not None and not owner.query("#settings_search"):
+        anchors = tuple(a for a in anchors if a[0] != "/")
+    return render_hint_bar(anchors, contextual)
 
 
 _SETTINGS_HINTS: tuple[tuple[str, str], ...] = (
@@ -1898,7 +1908,7 @@ class PickerScreen(Screen[None]):
             if self._item.multi
             else (("⏎", "Select"), ("Esc", "Cancel"))
         )
-        bar = _editor_hint_bar(hints) if _typing_in(self) else _hint_bar(app, hints)
+        bar = _editor_hint_bar(hints) if _typing_in(self) else _hint_bar(app, hints, screen=self)
         self.query_one("#footer_hints", Static).update(bar)
 
     def _render_options(self) -> None:
@@ -2901,7 +2911,7 @@ class SourceFormScreen(Screen[None]):
         )
         if self._source_index is not None:
             hints = (*hints, ("Ctrl+D", "Delete source"))
-        bar = _editor_hint_bar(hints) if _typing_in(self) else _hint_bar(app, hints)
+        bar = _editor_hint_bar(hints) if _typing_in(self) else _hint_bar(app, hints, screen=self)
         self.query_one("#footer_hints", Static).update(bar)
 
     # ── Save / cancel ────────────────────────────────────────
