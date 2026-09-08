@@ -673,3 +673,32 @@ def test_glob_free_arm_exempts_a_plain_member():
         "responsive": True,
         "mobile": False,
     }
+
+
+def test_free_arm_synonym_exempts_both_surface_forms():
+    """A free arm's synonyms are asserted as unconditionally as the arm, so
+    ``{2}kubernetes mobile OR k8s`` must not dim a lone ``kubernetes``."""
+    from fnd.synonyms import SynonymTable
+
+    table = SynonymTable.from_groups([["k8s", "kubernetes"]])
+    gap = " " + ("filler " * 30)
+    text = "kubernetes" + gap + "mobile"
+    for query in ("{2}kubernetes mobile OR k8s", "{2}k8s mobile OR kubernetes"):
+        spec = MatchSpec.from_query(query, synonyms=table, auto_fuzzy=False)
+        assert spec.unconstrained_terms == frozenset({"k8s", "kubernet"}), query
+        assert _painted(text, spec)["kubernetes"] is True, query
+
+
+def test_a_groups_own_synonyms_do_not_exempt_it():
+    """Only the FREE run is synonym-expanded into the exemption set — expanding
+    the whole query would let every group exempt itself."""
+    from fnd.synonyms import SynonymTable
+
+    table = SynonymTable.from_groups([["k8s", "kubernetes"]])
+    spec = MatchSpec.from_query("{2}kubernetes mobile", synonyms=table, auto_fuzzy=False)
+    assert spec.unconstrained_terms == frozenset()
+    gap = " " + ("filler " * 30)
+    assert _painted("kubernetes" + gap + "mobile", spec) == {
+        "kubernetes": False,
+        "mobile": False,
+    }

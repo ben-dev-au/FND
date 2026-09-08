@@ -401,6 +401,7 @@ class MatchSpec:
         plain_tokens: list[str] = []
         ordered_tokens: list[tuple[str, str]] = []  # (kind, key) in query order
         free_keys: set[str] = set()
+        free_words: list[str] = []
         negate_next = False
         skip_depth = 0  # >0 while inside a skipped NOT-/-/field-scoped group
         for tok_index, tok in enumerate(loose_query.split()):
@@ -446,10 +447,9 @@ class MatchSpec:
                 plain_tokens.append(cleaned)
                 ordered_tokens.append(("plain", key))
                 if is_free:
-                    free_keys.update(
-                        _stem(w) for w in DOC_WORD_RE.findall(_MODIFIER_RE.sub(" ", key))
-                    )
+                    free_words.extend(DOC_WORD_RE.findall(_MODIFIER_RE.sub(" ", key)))
         loose_query = " ".join(plain_tokens)
+        free_keys.update(_stem(w) for w in free_words)
         # Modifier-free view for plain terms / colour slots / synonyms; the raw
         # ``loose_query`` (with ``~N``) is reserved for explicit-fuzzy extraction.
         bare_query = _MODIFIER_RE.sub(" ", loose_query)
@@ -485,6 +485,12 @@ class MatchSpec:
                     if t:
                         raw.add(t.lower())
                         exact.add(_stem(t))
+            # A free arm's synonyms are asserted just as unconditionally as the
+            # arm itself, so they exempt too — expanded apart from the group's
+            # own words, which must keep obeying the window.
+            if free_words:
+                free_expanded = expand(" ".join(free_words), synonyms)
+                free_keys.update(_stem(t) for t in _terms_from_query(free_expanded) if t)
         # Explicit per-term ~N — always honoured (user opt-in).
         explicit_pairs: dict[str, int] = {}
         for term, dist in _terms_with_fuzzy(loose_query):
