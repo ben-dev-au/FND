@@ -66,9 +66,13 @@ async def test_a_form_with_no_row_filter_does_not_offer_one(
 
 
 @pytest.mark.asyncio
-async def test_a_screen_with_a_row_filter_keeps_it(config: Config, tmp_index_dir: Path) -> None:
-    """The control: the anchor is dropped where the filter is missing, not
-    everywhere."""
+async def test_a_screen_with_a_row_filter_names_it_once(
+    config: Config, tmp_index_dir: Path
+) -> None:
+    """One key, one label. The anchor means "focus the query bar", which `/`
+    never does in Settings — on a screen with a row filter it focuses THAT, so
+    the screen's own cluster is where the key is named. Keeping the anchor
+    where the filter existed showed `/ Search` and `/ Filter` together."""
     from fnd.tui.settings_screen import open_settings
 
     app = FNDApp(index_dir=tmp_index_dir, config=config)
@@ -87,7 +91,8 @@ async def test_a_screen_with_a_row_filter_keeps_it(config: Config, tmp_index_dir
             await pilot.pause()
         footer = _footer(app)
 
-    assert "Search" in footer, footer
+    assert "Filter" in footer, "the screen that owns the key must still name it"
+    assert "Search" not in footer, f"one key, two labels: {footer}"
 
 
 @pytest.mark.asyncio

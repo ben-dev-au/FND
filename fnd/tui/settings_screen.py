@@ -153,20 +153,21 @@ def _editor_hint_bar(contextual: tuple[tuple[str, str], ...]) -> Any:
 
 def _hint_bar(app: FNDApp, contextual: tuple[tuple[str, str], ...], *, screen: Any = None) -> Any:
     """Build the shared hint-bar Text for a Settings screen. Anchors
-    come from the main app (single source of truth).
+    come from the main app (single source of truth), minus ``/``.
 
-    ``/`` focuses a row filter, and the screens without one — the source form,
-    the wizard, every confirm dialog — were advertising a key that does
-    nothing. ``screen`` defaults to the active one; pass it explicitly from a
-    screen that refreshes its footer while another sits on top of it.
+    The anchor means "focus the app's query bar", and nowhere in Settings does
+    ``/`` do that: on a screen with a row filter it focuses THAT, and on one
+    without it does nothing at all. Dropping it only where the filter was
+    missing left the Collections screen showing ``/ Search`` and ``/ Filter``
+    in the same footer, one key with two labels. The screens that own the key
+    name it themselves, in their contextual cluster.
+
+    ``screen`` is accepted for callers that pass it and is no longer read.
     """
     from fnd.tui.app import render_hint_bar
 
     anchors: tuple[tuple[str, str], ...] = app._FOOTER_ANCHORS  # type: ignore[attr-defined]
-    owner = screen if screen is not None else getattr(app, "screen", None)
-    if owner is not None and not owner.query("#settings_search"):
-        anchors = tuple(a for a in anchors if a[0] != "/")
-    return render_hint_bar(anchors, contextual)
+    return render_hint_bar(tuple(a for a in anchors if a[0] != "/"), contextual)
 
 
 _SETTINGS_HINTS: tuple[tuple[str, str], ...] = (
