@@ -75,6 +75,29 @@ class ChoiceOption:
     description: str = ""
 
 
+def drill_summary(app: FNDApp, summary: str) -> str:
+    """A drill row's trailing text under ``defaults.drill_summary_mode``.
+
+    One implementation for both the renderer and :meth:`MenuItem.trailing_value`
+    — the mode lived only on the latter, which nothing in the app calls, so the
+    setting saved and did nothing.
+    """
+    cfg = getattr(app, "_config", None)
+    if cfg is None:
+        from fnd.config import load as _load_cfg
+
+        try:
+            cfg = _load_cfg()
+        except Exception:
+            cfg = None
+    mode = getattr(getattr(cfg, "defaults", None), "drill_summary_mode", "always_show")
+    if mode == "always_ellipsis":
+        return "…"
+    if mode == "smart":
+        return summary or "…"
+    return summary
+
+
 @dataclass(frozen=True)
 class MenuItem:
     """One row in the Settings menu.
@@ -165,27 +188,8 @@ class MenuItem:
         """Right-aligned trailing column. Setting kinds carry the live
         value; drill rows obey ``drill_summary_mode`` from config."""
         try:
-            cfg = getattr(app, "_config", None)
-            if cfg is None:
-                from fnd.config import load as _load_cfg
-
-                try:
-                    cfg = _load_cfg()
-                except Exception:
-                    cfg = None
-            mode: str = (
-                cfg.defaults.drill_summary_mode
-                if cfg and hasattr(cfg.defaults, "drill_summary_mode")
-                else "always_show"
-            )
-            # Drill rows (KIND_EXTERNAL with a value_getter) obey the mode.
-            if self.kind == KIND_EXTERNAL and self.value_getter is not None:
-                if mode == "always_ellipsis":
-                    return "…"
-                if mode == "smart":
-                    v = self.value_getter(app)
-                    return v if v else "…"
-                return self.value_getter(app)
+            if self.kind in (KIND_SUBMENU, KIND_EXTERNAL) and self.value_getter is not None:
+                return drill_summary(app, self.value_getter(app))
             # Non-drill rows: setting values / toggle states always shown.
             if self.value_getter is not None:
                 return self.value_getter(app)
@@ -1012,7 +1016,10 @@ def _provider_preferences(_app: FNDApp) -> tuple[MenuItem, ...]:
         MenuItem(
             id="pref.highlights",
             label="Highlights",
-            description="Search-term highlights in the preview pane.",
+            description=(
+                "Search-term highlights in the preview pane. This session only: "
+                "h toggles it too, and it is on again next launch."
+            ),
             kind=KIND_TOGGLE,
             toggle_getter=lambda app: app._search.highlights_enabled,  # type: ignore[attr-defined]
             toggle_setter=_set_highlights,

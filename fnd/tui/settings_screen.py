@@ -59,6 +59,7 @@ from fnd.tui.menu import (
     ChoiceOption,
     MenuItem,
     build_root_items,
+    drill_summary,
     header,
     section_items,
     section_label,
@@ -634,7 +635,7 @@ def _trailing_segments(item: MenuItem, app: FNDApp | None) -> list[tuple[str, st
         summary = ""
         if item.value_getter is not None:
             try:
-                summary = item.value_getter(app) or ""
+                summary = drill_summary(app, item.value_getter(app) or "")
             except Exception:
                 summary = ""
         if summary:
@@ -645,7 +646,10 @@ def _trailing_segments(item: MenuItem, app: FNDApp | None) -> list[tuple[str, st
         summary = ""
         if item.value_getter is not None:
             try:
-                summary = item.value_getter(app) or ""
+                raw = item.value_getter(app) or ""
+                # An external-app row's summary is the path it opens, not a
+                # drill summary, so the mode does not govern it.
+                summary = raw if item.external_app else drill_summary(app, raw)
             except Exception:
                 summary = ""
         if item.external_app:
