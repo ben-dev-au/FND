@@ -226,6 +226,30 @@ def build_confirm_body(
     return text
 
 
+class ConfirmList(OptionList):
+    """A confirm dialog's Yes/Cancel list, which does not wrap.
+
+    The safe row is the default AND the last one, and a wrapping two-item list
+    puts the irreversible row one `Down` away — the reflex that reads a list.
+    Both rows stay reachable; only the wrap-around goes.
+    """
+
+    def _step(self, direction: int) -> None:
+        from textual import _widget_navigation
+
+        landing = _widget_navigation.find_next_enabled_no_wrap(
+            self.options, anchor=self.highlighted, direction=direction
+        )
+        if landing is not None:
+            self.highlighted = landing
+
+    def action_cursor_up(self) -> None:
+        self._step(-1)
+
+    def action_cursor_down(self) -> None:
+        self._step(1)
+
+
 def open_confirm_list(screen: Screen[Any], *, land_on: str = "") -> tuple[str, str]:
     """Focus a screen's ``#confirm_list``, and say what Enter does from there.
 
@@ -3790,8 +3814,10 @@ class RenameCollectionScreen(Screen[None]):
                     "does. Until it finishes, this collection holds less than "
                     "it does now.\n\n"
                     "The config is already saved either way, and the files on "
-                    "disk are untouched. Skipping leaves the index under the "
-                    "old name until you run Update index."
+                    "disk are untouched. Skipping leaves the old name's "
+                    "documents in the index: nothing can reach them once the "
+                    "config no longer names that collection, and no later run "
+                    "removes them. Reindexing now is what clears them."
                 ),
                 confirm_label=f"Yes, reindex {new_name}",
                 # NOT "Cancel": the rename is already written, and only the
@@ -3890,7 +3916,7 @@ class DeleteCollectionScreen(Screen[None]):
                 ),
                 id="confirm_summary",
             )
-            yield OptionList(
+            yield ConfirmList(
                 confirm_yes_option(f"Yes, delete {self._name}", severity="destructive"),
                 Option("Cancel", id="no"),
                 id="confirm_list",
@@ -4088,7 +4114,7 @@ class CacheMaintenanceConfirm(Screen[None]):
             yield Static(self._summary, id="confirm_summary")
             if self._irreversible:
                 yield Static("⚠  Cannot be undone.", id="confirm_irreversible")
-            yield OptionList(
+            yield ConfirmList(
                 Option(Text(self._confirm_label, style="bold"), id="yes"),
                 Option("Cancel", id="no"),
                 id="confirm_list",
@@ -4234,7 +4260,7 @@ class UpdateAllConfirm(Screen[None]):
             yield Static(text, id="confirm_summary")
             n = len(self._names)
             confirm = "Yes, update it" if n == 1 else f"Yes, update all {n} collections"
-            yield OptionList(
+            yield ConfirmList(
                 Option(Text(confirm, style="bold green"), id="yes"),
                 Option("Cancel", id="no"),
                 id="confirm_list",
@@ -4385,7 +4411,7 @@ class StructuredPdfConfirmScreen(Screen[None]):
                 if self._installed
                 else "Yes, install the texturising engine"
             )
-            yield OptionList(
+            yield ConfirmList(
                 confirm_yes_option(confirm_label, severity=self._severity),
                 Option("Cancel", id="no"),
                 id="confirm_list",
@@ -4563,7 +4589,7 @@ class UnsavedChangesScreen(Screen[None]):
                 [Option(Text("Save changes", style="bold"), id="save")] if self._on_save else []
             )
             options += [Option(self._leave_label, id="discard"), Option("Keep editing", id="stay")]
-            yield OptionList(*options, id="confirm_list")
+            yield ConfirmList(*options, id="confirm_list")
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
@@ -4724,7 +4750,7 @@ class RebuildConfirmScreen(Screen[None]):
         with Vertical(id="settings_box") as box:
             box.border_title = f"Collections › {name} › {self._crumb}"
             yield Static(body, classes="warning")
-            yield OptionList(
+            yield ConfirmList(
                 Option(Text(self._confirm_label or f"Yes, rebuild {name}", style="bold"), id="yes"),
                 Option(self._decline_label, id="no"),
                 id="confirm_list",
@@ -4818,7 +4844,7 @@ class DeleteSourceScreen(Screen[None]):
                 f"this source reached. {shared}",
                 classes="warning",
             )
-            yield OptionList(
+            yield ConfirmList(
                 Option(Text("Yes, remove this source", style="bold"), id="yes"),
                 Option("Cancel", id="no"),
                 id="confirm_list",
