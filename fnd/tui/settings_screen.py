@@ -708,9 +708,12 @@ class EditBar(Horizontal):
     EditBar.-hidden { display: none; }
     /* The label was uncapped, so on a narrow terminal it pushed the field
        off-screen entirely: typing changed no painted row while the value
-       accumulated, and saving wrote it. */
+       accumulated, and saving wrote it. The width cap alone was not enough:
+       measured at 100 cols the Static wrapped to 4 rows inside a 2-row bar,
+       which clipped the field. `text-overflow` only elides an unwrapped line. */
     EditBar > Static.-edit-label {
-        color: $text-muted; width: auto; max-width: 40%; text-overflow: ellipsis;
+        color: $text-muted; width: auto; max-width: 40%;
+        text-wrap: nowrap; text-overflow: ellipsis;
     }
     EditBar > Input#editor_input {
         border: none; padding: 0 1; color: $primary; background: $surface;
