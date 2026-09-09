@@ -1477,26 +1477,13 @@ class SettingsScreen(Screen[None]):
         """
         import contextlib
 
-        from fnd.tui.lazy_trailing import invalidate
+        # Every cached trailing value, not a hand-maintained list of them: the
+        # list had drifted twice over — two keys nothing produces, and two
+        # rows nothing cleared. A screen resuming or a run finishing is
+        # exactly the moment none of them can be trusted.
+        from fnd.tui.lazy_trailing import invalidate_all
 
-        for key in (
-            "indexing.cache_size",
-            "indexing.pdf_status",
-            # Both describe what a run just changed, and both are cached for
-            # 30s — so the row that says it "refreshes when an Update index
-            # run finishes" held the pre-run count instead.
-            "indexing.files_in_index",
-            "indexing.cache_update.missing",
-            # The cache-size chip's real key (the old "indexing.summary.
-            # cache_short" was renamed but left dead here, so the chip
-            # showed a stale size after cache actions).
-            "pdf_texture.summary.cache_short",
-            "cache.stale_count",
-            "cache.retexturise_outdated",
-            "pdf_texture.summary.stale_short",
-            "pdf_texture.summary.engine",
-        ):
-            invalidate(key)
+        invalidate_all()
 
         if self._provider is None:
             with contextlib.suppress(Exception):

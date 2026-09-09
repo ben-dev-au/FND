@@ -41,18 +41,39 @@ async def test_the_row_is_recomputed_when_a_run_finishes(tmp_index_dir: Path) ->
     assert held is None or held[0] != "PRERUN-COUNT", "the run's own count outlived the run"
 
 
-def test_every_lazy_row_on_the_screen_is_invalidated() -> None:
-    """The guard: a row whose value is cached must be in the list that clears
-    it, or its description cannot promise a refresh."""
-    import inspect
+@pytest.mark.asyncio
+async def test_no_cached_row_survives_a_repaint(tmp_index_dir: Path) -> None:
+    """Behavioural, not a source scrape: seed every cached key and repaint.
+
+    The previous form read string literals out of `refresh_items` and was
+    scoped to `indexing.`, which exempted the two keys it existed to protect.
+    Asking the cache what survived cannot be scoped wrong, and it keeps working
+    however the invalidation is written.
+    """
     import re
 
-    from fnd.tui.settings_screen import SettingsScreen
+    from fnd.tui import lazy_trailing
 
-    body = inspect.getsource(SettingsScreen.refresh_items)
-    cleared = set(re.findall(r'"([a-z_.]+)"', body))
     menu_src = Path("fnd/tui/menu.py").read_text(encoding="utf-8")
-    scheduled = set(re.findall(r'get_or_schedule\(app, "([a-z_.]+)"', menu_src))
+    scheduled = sorted(set(re.findall(r'get_or_schedule\(app, "([a-z_.]+)"', menu_src)))
+    assert scheduled, "no cached rows to speak for"
 
-    missing = sorted(k for k in scheduled if k.startswith("indexing.") and k not in cleared)
-    assert not missing, f"cached rows nothing invalidates: {missing}"
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        open_settings_section(app, SECTION_INDEXING)
+        await settings_ready(pilot, app)
+        screen = app.screen
+        assert isinstance(screen, SettingsScreen)
+        for key in scheduled:
+            lazy_trailing._CACHE[key] = ("STALE", 1e18)  # type: ignore[attr-defined]
+        screen.refresh_items()
+        for _ in range(6):
+            await pilot.pause()
+        survived = sorted(
+            k
+            for k in scheduled
+            if (lazy_trailing._CACHE.get(k) or ("", 0))[0] == "STALE"  # type: ignore[attr-defined]
+        )
+
+    assert not survived, f"cached rows a repaint did not clear: {survived}"
