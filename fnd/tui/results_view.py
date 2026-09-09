@@ -37,7 +37,7 @@ class ResultsView:
         n_sections = sum(len(g.hits) for g in self._app._search.groups)
         if not self._app._search.groups:
             return "Results"
-        return f"Results — {n_files} files / {n_sections} sections"
+        return f"Results: {n_files} files / {n_sections} sections"
 
     def refresh(self) -> None:
         """Rebuild the results tree from the current result groups.

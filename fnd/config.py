@@ -672,7 +672,7 @@ def validate_collection_name(name: str) -> str:
     # blocked at write time, so an older config that already has one loads.
     if name.casefold() == ALL_COLLECTIONS:
         raise InvalidCollectionNameError(
-            f"collection name {name!r} is reserved — it means 'every collection' in "
+            f"collection name {name!r} is reserved; it means 'every collection' in "
             "`--collection` and `defaults.collection`"
         )
     return name
@@ -959,7 +959,7 @@ preview_decode_workers   = 4      # 1-16
 # alone and leaves the gaps to scroll-driven lazy mount.
 preview_warm_margin      = 2      # 0-20
 # Glide the preview to a match inside the file already on screen, instead of
-# cutting to it. Off makes every landing an instant jump — also the way to tell
+# cutting to it. Off makes every landing an instant jump, also the way to tell
 # a mislanding from the glide passing over the match.
 preview_scroll_animation = true
 # Idle delay before a results-tree cursor move triggers a preview load.
@@ -972,7 +972,7 @@ preview_load_debounce_ms = 150    # ms, 0-1000
 preview_prefetch_count   = 4      # 0-20
 # Auto-fuzzy in the cascade fallback. Toggle from the TUI with the
 # `toggle_fuzzy` action (default ctrl+f). Per-term `~1` / `~2` in the
-# query overrides this — works even when auto-fuzzy is off.
+# query overrides this; works even when auto-fuzzy is off.
 fuzzy_enabled            = true
 # Minimum post-stem length for auto-fuzzy. Stems shorter than this
 # are exact-only. Default 3 matches the built-in AUTO heuristic;
@@ -980,7 +980,7 @@ fuzzy_enabled            = true
 fuzzy_min_term_chars     = 3      # 0-10
 # Which sources feed the Tags filter. "frontmatter" reads a note's YAML
 # `tags:`; "os" reads file tags set in the file manager (macOS Finder).
-# Removing one takes effect immediately — no re-index needed.
+# Removing one takes effect immediately; no re-index needed.
 tag_sources              = ["frontmatter", "os"]
 # Extra frontmatter fields to treat as tags, beyond `tags:`. Useful when
 # a vault keeps its taxonomy in named fields rather than free tags.
@@ -997,9 +997,9 @@ path = "~/Documents"
 # includes = ["**/*.md", "**/*.pdf", "**/*.docx", "**/*.pptx", "**/*.txt"]
 excludes = ["**/.git/**", "**/.DS_Store", "**/__pycache__/**"]
 # follow_symlinks = false
-# frontmatter_filter = "type == 'note'"  # md sources only — DSL described in docs.
+# frontmatter_filter = "type == 'note'"  # md sources only; DSL described in docs.
 
-# Example second collection — uncomment to use:
+# Example second collection (uncomment to use):
 # [[collections.notes.sources]]
 # path = "~/Documents/Notes"
 # includes = ["*.md", "*.txt"]
@@ -1019,18 +1019,18 @@ excludes = ["**/.git/**", "**/.DS_Store", "**/__pycache__/**"]
 #   2. per-source `app`                     (same place; sugar)
 #   3. `[app_defaults][kind]`               (this section)
 #   4. AUTO-DEFAULT for that kind           (see below)
-#   5. `system` — `open <path>`             (LaunchServices, no page-jump)
+#   5. `system`: `open <path>`              (LaunchServices, no page-jump)
 #
 # Auto-defaults only fire when nothing above sets a value:
-#   pdf:  Skim if installed                 — silent skim:// URL, no permissions
+#   pdf:  Skim if installed                 : silent skim:// URL, no permissions
 #         else Preview if Accessibility
-#         is granted to the launching app   — keystrokes Cmd-Opt-G in Preview;
+#         is granted to the launching app   : keystrokes Cmd-Opt-G in Preview;
 #                                             dialog briefly flashes; needs
 #                                             System Settings → Privacy &
 #                                             Security → Accessibility for
 #                                             your terminal / IDE
-#         else system                       — opens at page 1
-#   md, txt, docx, pptx: system             — no smart pick today
+#         else system                       : opens at page 1
+#   md, txt, docx, pptx: system             : no smart pick today
 #
 # Built-in app ids: system, preview, skim, pdf_expert, obsidian, vscode.
 # Add your own under [apps.<id>] below.

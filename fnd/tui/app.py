@@ -770,9 +770,9 @@ class FNDApp(App[None]):
             if g.parent_id == self._preview.parent_id:
                 name = Path(g.path).name
                 if edge_width > 0:
-                    prefix = "Preview — "
+                    prefix = "Preview: "
                     name = _elide_middle_keep_suffix(name, edge_width - 6 - len(prefix))
-                return f"Preview — {name}"
+                return f"Preview: {name}"
         return "Preview"
 
     def _refresh_status(self) -> None:
@@ -1332,7 +1332,7 @@ class FNDApp(App[None]):
         if self._search.query_signature() != asked_under:
             return
         if not count:
-            self.notify("This file previews as plain text — nothing to warm.", timeout=4)
+            self.notify("This file previews as plain text; nothing to warm.", timeout=4)
             return
 
         def _go(confirmed: bool | None) -> None:
@@ -1791,7 +1791,7 @@ class FNDApp(App[None]):
             self._scope.snapshot(self._search.current_query)
         ).serialize()
         if result.is_empty:
-            self.notify("Nothing to copy — type a query or set a filter first.", severity="warning")
+            self.notify("Nothing to copy: type a query or set a filter first.", severity="warning")
             return
         try:
             copy_text(result.command)
@@ -1996,7 +1996,7 @@ class FNDApp(App[None]):
             return
         if self._search.latest_trace is None:
             self.notify(
-                "no search yet — type a query first",
+                "no search yet: type a query first",
                 severity="warning",
                 title="Explain",
             )
@@ -2007,7 +2007,7 @@ class FNDApp(App[None]):
 
         body = json.dumps(self._search.latest_trace.to_json(), indent=2)
         md = (
-            f"# Explain — `{self._search.latest_trace.query}`\n\n"
+            f"# Explain: `{self._search.latest_trace.query}`\n\n"
             f"Regime: **{self._search.latest_trace.regime}**\n\n"
             f"```json\n{body}\n```\n"
         )

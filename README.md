@@ -10,7 +10,7 @@ Fast, free, keyboard-driven document search for macOS. Indexes PDF, DOCX, PPTX,
 MD and 60 different file types, with strong BM25 ranking, in-file navigation, an
 "Open with…" launcher, and a lazygit-style TUI.
 
-> **Linux and Windows are alpha — barely tested.** The code paths exist and
+> **Linux and Windows are alpha: barely tested.** The code paths exist and
 > the automated suite runs against all three OSes in CI, but fnd is developed and
 > used daily on macOS only. Nobody has put real day-to-day use on the Linux
 > build, and the Windows build has had essentially none at all. Expect rough
@@ -22,12 +22,12 @@ MD and 60 different file types, with strong BM25 ranking, in-file navigation, an
 
 On macOS, core features are complete and stable; the project is in a refinement
 period of finding, fixing, and polishing. On Linux and Windows, treat everything
-as unproven — see the note above.
+as unproven; see the note above.
 
 ## Requirements
 
-- **macOS** (Apple Silicon or Intel) — the supported, tested platform.
-- **Linux** or **Windows** — alpha, largely untested. See
+- **macOS** (Apple Silicon or Intel): the supported, tested platform.
+- **Linux** or **Windows**: alpha, largely untested. See
   [Platform support](#platform-support).
 - Nothing else to set up. Each install option below brings Python 3.13 with it.
 - A modern terminal is recommended (see [Terminal compatibility](#terminal-compatibility)).
@@ -92,8 +92,8 @@ Releases carry build provenance; see [`SECURITY.md`](SECURITY.md) to verify a do
 where every feature has been exercised by hand against a real corpus.
 
 **Linux and Windows are alpha.** Platform-specific behaviour is isolated
-behind four seams — where files live, how to open and reveal them, what the OS
-calls things, and how cloud-backed files behave — and each has a Linux and
+behind four seams (where files live, how to open and reveal them, what the OS
+calls things, and how cloud-backed files behave), and each has a Linux and
 Windows implementation. The automated suite runs on `macos-14`, `ubuntu-latest`
 and `windows-latest` in CI. That establishes the code runs; it does not establish
 that the app is pleasant, correct, or even usable in daily work on those OSes,
@@ -112,10 +112,10 @@ So read the table below as **what is implemented**, not as what is verified:
 | Structured PDF extra (docling)    | ✓              | ✓                                | ✓                  |
 | Created-date filter               | ✓ (birth time) | best-effort (statx)              | ✓ (creation time)  |
 | Cloud-only file handling          | iCloud Drive   | not detectable                   | OneDrive & co.     |
-| Finder tag filtering              | ✓              | —                                | —                  |
+| Finder tag filtering              | ✓              | not available                    | not available      |
 
 Where an OS has no equivalent for something, fnd degrades rather than erroring.
-Built-in PDF viewers are auto-detected — the "Open with…" picker lists only the
+Built-in PDF viewers are auto-detected: the "Open with…" picker lists only the
 ones actually installed. On Linux/Windows, point `[app_defaults].pdf` at your
 preferred viewer, or add any app with a small `[apps.<id>]` block (see
 [`docs/apps.md`](docs/apps.md)); the bundled Linux and Windows handlers are
@@ -124,7 +124,7 @@ live install. **Frontmatter tags** (`tags:` in YAML) work on every OS; **Finder
 tags** are macOS-only. Install with `uv`/`pipx` on any OS; Homebrew is
 macOS-only.
 
-If you run fnd on Linux or Windows, reports are genuinely valuable — including
+If you run fnd on Linux or Windows, reports are genuinely valuable, including
 "it worked fine", which is the datapoint the table is currently missing.
 
 ## Quick start
@@ -151,7 +151,7 @@ and the [query language](#search-how-to) works exactly as it does from the CLI.
 | Key            | What it does                                                                                                                                                                                                                                       |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `↑` / `↓`      | Move the cursor up/down through results (vim's `k` / `j` also work).                                                                                                                                                                               |
-| `⌥↑` / `⌥↓`    | **Skim**: hold Option (Alt) and arrow to move through results _without_ loading each preview — browse fast with no per-row mount/lag. The preview loads again on a normal `↑`/`↓` (the row you land on) or `Enter` (the exact row you skimmed to). |
+| `⌥↑` / `⌥↓`    | **Skim**: hold Option (Alt) and arrow to move through results _without_ loading each preview: browse fast with no per-row mount/lag. The preview loads again on a normal `↑`/`↓` (the row you land on) or `Enter` (the exact row you skimmed to).  |
 | `Enter`        | Load the highlighted result into the preview (handy right after an Option-skim).                                                                                                                                                                   |
 | `→`            | Expand the focused file to its matching sections; press again to drill into the first.                                                                                                                                                             |
 | `←`            | Collapse the focused node, or back out to its parent (lazygit-style).                                                                                                                                                                              |
@@ -165,10 +165,10 @@ and the [query language](#search-how-to) works exactly as it does from the CLI.
 > _Settings → Profiles → Keys → Left Option key → Esc+_. iTerm2 and most modern
 > terminals work without any change.
 >
-> **Expand/collapse-all — Ctrl or Option?** These are bound to _both_ `Ctrl` and
+> **Expand/collapse-all: Ctrl or Option?** These are bound to _both_ `Ctrl` and
 > `Alt`+arrow, because a single physical combo reaches the app under different
 > names per terminal. On macOS, `⌃←`/`⌃→` are usually captured by Mission
-> Control ("Move a space"), so use **`⌥←`/`⌥→`** — your terminal forwards it as
+> Control ("Move a space"), so use **`⌥←`/`⌥→`**; your terminal forwards it as
 > whichever of the two the app has bound. On Windows/Linux, `Ctrl`+arrow works
 > directly.
 
@@ -178,7 +178,7 @@ and the [query language](#search-how-to) works exactly as it does from the CLI.
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `o`            | Open the hit in its resolved app, jumping to the matching page / slide / line / heading.                                                                                           |
 | `O`            | **Open with…**: a picker of every app that handles this file type. Use `↑↓` then `Enter`, or press the letter shown next to an app; `Esc` cancels.                                 |
-| `R`            | **Reveal**: show the file in your file manager (Finder on macOS, File Explorer on Windows) with it selected, without opening it — also on the last row of the `O` picker. |
+| `R`            | **Reveal**: show the file in your file manager (Finder on macOS, File Explorer on Windows) with it selected, without opening it, also on the last row of the `O` picker.  |
 | `Space`        | Quick Look the file.                                                                                                                                                               |
 | `:`            | Open the **Settings & Commands** menu: every setting and action in one searchable, full-screen list.                                                                               |
 | `?`            | Keybindings cheat sheet (press again to dismiss).                                                                                                                                  |
@@ -199,7 +199,7 @@ A modern terminal is required for optimal formatting. For example:
   formatting varies by font (Menlo is a reasonable default); a modern terminal
   is strongly suggested.
 - **Linux**: Kitty, WezTerm, Alacritty, GNOME Terminal, or Konsole should all be
-  fine — expected to work, not yet confirmed.
+  fine: expected to work, not yet confirmed.
 - **Windows**: **Windows Terminal** (bundled with Windows 11) or WezTerm. The
   legacy `conhost.exe` console renders box-drawing and colours poorly. Untested;
   if the TUI looks wrong, the terminal is the first thing to change.
@@ -246,12 +246,12 @@ fnd search "risotto" --tag recipe --not-tag draft --created month
 ```
 
 Tags come from Obsidian-style YAML frontmatter (`tags:`) and, on macOS, from
-Finder tags. Nested tags work as a hierarchy — `--tag project` also matches
+Finder tags. Nested tags work as a hierarchy, so `--tag project` also matches
 `project/alpha`. Tag matching is case-insensitive, and a leading `#` is
 optional. Which sources are read is set by `defaults.tag_sources` in the config
 TOML; disabling one takes effect immediately, with no re-index.
 
-Created dates come from the filesystem's creation time — macOS birth time,
+Created dates come from the filesystem's creation time: macOS birth time,
 Windows creation time, and statx-capable Linux filesystems (e.g. ext4). Files
 without one match only the default (unfiltered) window. Only the macOS path has
 been exercised against a real corpus.
@@ -259,9 +259,9 @@ been exercised against a real corpus.
 ## Open with… apps
 
 In the TUI, `o` opens a hit in its resolved app and `O` opens the **Open with…**
-picker. Built-in handlers ship per OS — **Skim, Preview, PDF Expert** (macOS),
+picker. Built-in handlers ship per OS: **Skim, Preview, PDF Expert** (macOS),
 **Zathura, Okular** (Linux, alpha), **SumatraPDF** (Windows, alpha), plus
-cross-platform **Obsidian, VS Code, System Default** — and each is offered only
+cross-platform **Obsidian, VS Code, System Default**. Each is offered only
 where it's installed. The non-macOS handlers are written from each app's
 documented command line and have not been confirmed against a live install. Where the app and file type allow it, fnd jumps to the matching page,
 slide, line, or heading. Set a per-file-type default with `[app_defaults]`, or a
@@ -397,7 +397,7 @@ automatically.
 
 Two packages: `pymupdf4llm` (which pulls `pymupdf-layout`, Polyform
 Noncommercial 1.0) and `docling-slim[standard]` (Apache-2.0). fnd redistributes
-neither — the install fetches them onto your machine, so Polyform's
+neither; the install fetches them onto your machine, so Polyform's
 non-commercial restriction binds your use of `pymupdf-layout` directly. Check it
 before installing this extra in a commercial setting. ML weights (~400 MB)
 download on first use. Uninstall removes the packages; indexed structured chunks
@@ -411,7 +411,7 @@ reindexes only re-process changed files.
 
 ### Cache
 
-Extracted chunks are content-addressed in fnd's cache directory —
+Extracted chunks are content-addressed in fnd's cache directory:
 `~/Library/Caches/fnd/pdf-structure/` on macOS, the platform cache dir elsewhere
 (`fnd cache info` prints it). Shared across collections: the same file in two
 collections is extracted once.
@@ -455,7 +455,7 @@ markdown frontmatter filters. They compose freely.
 
 ### Phrases
 
-Quoting is the biggest precision win — quote any common phrase:
+Quoting is the biggest precision win. Quote any common phrase:
 
 | You type              | Matches                                                              |
 | --------------------- | -------------------------------------------------------------------- |
@@ -464,7 +464,7 @@ Quoting is the biggest precision win — quote any common phrase:
 
 ### Proximity
 
-Find terms near each other, in any order — `{N}` and `NEAR/N` are equivalent:
+Find terms near each other, in any order. `{N}` and `NEAR/N` are equivalent:
 
 | You type                           | Means                                        |
 | ---------------------------------- | -------------------------------------------- |
@@ -475,7 +475,7 @@ Find terms near each other, in any order — `{N}` and `NEAR/N` are equivalent:
 | `{500} race condition mitigations` | Within ~one page.                            |
 
 - **Scale:** `5` ≈ very near, `20` ≈ a line, `60` ≈ a few lines, `500` ≈ a page.
-- **Order doesn't matter** — quote (`"cross entropy"`) when it does.
+- **Order doesn't matter.** Quote (`"cross entropy"`) when it does.
 - `{N}` covers the words right after it, up to the first operator, `(`, or
   filter, so `{10} buffer overflow kind:pdf` slops only `buffer overflow`.
 - Can't cross a chunk boundary; if terms are far apart, drop the `{N}`.
@@ -483,7 +483,7 @@ Find terms near each other, in any order — `{N}` and `NEAR/N` are equivalent:
 
 ### Fuzzy matching for typos and variants
 
-Suffix `~1` or `~2` to allow that many edits per term — an adjacent transposition
+Suffix `~1` or `~2` to allow that many edits per term; an adjacent transposition
 (`ir` ↔ `ri`) counts as one edit:
 
 | You type         | Matches                               |
@@ -509,7 +509,7 @@ boost), so you can combine it with search terms to constrain them.
 | `title:(rust OR golang)`   | Group alternatives within one field.                   |
 | `has:author`               | Only documents that have a non-empty `author` field.   |
 
-Combine with terms to constrain them — `kind:pdf "diffusion model"` finds the
+Combine with terms to constrain them: `kind:pdf "diffusion model"` finds the
 phrase in **PDFs only**.
 
 ### Collections
@@ -548,7 +548,7 @@ Numeric ranges use `[low TO high]`. Shorthand for one-sided comparisons:
 | `/cryp.*/` | A regular expression over indexed words.     |
 
 > **`*` only works at the end of a word.** Leading or infix wildcards (`*tion`,
-> `de*ce`) match almost nothing — search strips word endings before matching.
+> `de*ce`) match almost nothing; search strips word endings before matching.
 > Use a trailing `crypto*` or a `/regex/` instead.
 
 You rarely need `*`: search already matches word variants (`entropy` finds
@@ -565,7 +565,7 @@ spaces (`"Due Date"`):
 | You type                                                | What it does                                          |
 | ------------------------------------------------------- | ----------------------------------------------------- |
 | `mitm [Course == 'Security Foundations']`               | Notes where the `Course` field equals that value.     |
-| `[Notes_Type == 'Lecture' OR Notes_Type == 'Tutorial']` | Either value (there are no list literals — use `OR`). |
+| `[Notes_Type == 'Lecture' OR Notes_Type == 'Tutorial']` | Either value (there are no list literals; use `OR`).  |
 | `entropy [Course == 'ML' AND Year >= 2024]`             | Compound predicate.                                   |
 | `['urgent' in tags]`                                    | `urgent` is an element of the `tags` list.            |
 | `[NOT ('private' in tags)]`                             | Exclude a tag, **keeping notes that have no `tags:`**. |
@@ -606,13 +606,13 @@ crypto* AND wallet                                 # a wildcard required inside 
   `entropy`. Quotes only help for multi-word phrases.
 - **`OR` and `AND` are case-sensitive.** Lowercase `or` / `and` are treated
   as ordinary terms. Always uppercase boolean operators.
-- **Standalone stopwords are dropped.** `the man` searches just `man` — common
+- **Standalone stopwords are dropped.** `the man` searches just `man`; common
   words (`the`, `in`, `of`, …) are removed from unquoted queries. To match a
   phrase that includes them, quote it: `"man in the middle"`.
 - **Proximity is per-chunk.** A phrase or `{N}` query can't span a chunk
   boundary. If the terms are paragraphs apart, drop to a loose multi-term query.
 - **`*` only works at the end of a word.** Leading/infix wildcards (`*tion`,
-  `de*ce`) match almost nothing — use `crypto*` or `/regex/`.
+  `de*ce`) match almost nothing; use `crypto*` or `/regex/`.
 
 ## Contributing
 
@@ -635,7 +635,7 @@ Much gratitude if you do, but I hope you find the tool useful either way.
 
 [GNU AGPL-3.0-or-later](LICENSE) © 2026 Ben Davidson
 
-Use it, read it, modify it, run it — privately, for any purpose, with no
+Use it, read it, modify it, run it: privately, for any purpose, with no
 obligations at all. If you distribute it, or run a modified version as a network
 service, that version has to ship its source under this same licence. Put
 plainly: your use is either private, or it is open source.

@@ -50,7 +50,7 @@ the four seams, not in `sys.platform` checks scattered through feature code:
 ## Licence and sign-off
 
 fnd is [AGPL-3.0-or-later](LICENSE), and contributions are accepted under that
-same licence — inbound matches outbound, and nothing is reassigned to me.
+same licence: inbound matches outbound, and nothing is reassigned to me.
 
 Sign off each commit with `git commit -s`, which appends a `Signed-off-by:`
 line. That line is the [Developer Certificate of
