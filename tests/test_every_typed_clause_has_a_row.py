@@ -96,7 +96,27 @@ async def test_enter_on_a_typed_rule_opens_the_text_form() -> None:
         for _ in range(25):
             await pilot.pause()
         tree = screen.query_one("#filter_tree", ToggleTree)
-        screen.post_message(ToggleTree.ActionSelected(tree, "rule:raw:0"))
+
+        # Pressing the key, not posting the message: `ActionSelected` only
+        # fires when the group's mode is "actions", so a hand-posted message
+        # passes even if the branch stops being one.
+        def _line_for(row_id: str) -> int:
+            for line in range(len(tree._tree_lines)):
+                node = tree.get_node_at_line(line)
+                data = getattr(node, "data", None) or {}
+                if isinstance(data, dict) and data.get("id") == row_id:
+                    return line
+            raise AssertionError(f"{row_id!r} is not on the tree")
+
+        tree.focus()
+        tree.cursor_line = _line_for("rules")
+        await pilot.pause()
+        await pilot.press("right")
+        for _ in range(5):
+            await pilot.pause()
+        tree.cursor_line = _line_for("rule:raw:0")
+        await pilot.pause()
+        await pilot.press("enter")
         for _ in range(10):
             await pilot.pause()
         landed = app.screen

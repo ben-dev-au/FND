@@ -52,6 +52,10 @@ async def test_a_panel_with_no_run_shows_neither(tmp_index_dir: Path) -> None:
         screen = app.screen
         assert isinstance(screen, IndexerScreen)
         screen._render_timing(1.0)
+        # The current-file line is written by the pages-progress render, which
+        # a headless run never reaches — so this asserted on the empty string
+        # the widget was composed with and passed against the reverted fix.
+        screen._render_pages_progress(app)
         await pilot.pause()
         current = str(screen.query_one("#indexer_current_file", Static).content)
         timing = str(screen.query_one("#indexer_timing", Static).content)
