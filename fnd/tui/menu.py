@@ -2059,10 +2059,10 @@ def _provider_indexing(_app: FNDApp) -> tuple[MenuItem, ...]:
             id="indexing.files_in_index",
             label="Files in index",
             description=(
-                "Distinct files (md, pptx, docx, txt, PDFs) that have at "
+                "Distinct files of every type fnd indexes that have at "
                 "least one chunk in the search index, totalled across "
-                "every collection. Updates the next time you open this "
-                "screen after an Update index run."
+                "every collection. Refreshes when an Update index run "
+                "finishes."
             ),
             kind=KIND_DISPLAY,
             value_getter=_summary_files_in_index,
@@ -2074,7 +2074,7 @@ def _provider_indexing(_app: FNDApp) -> tuple[MenuItem, ...]:
             label="Process new files (index only, no texturising)",
             description=(
                 "Run Update index for every collection in sequence, "
-                "indexing new and changed files (md, pptx, docx, txt, PDFs) "
+                "indexing new and changed files of every type it handles "
                 "but SKIPPING texturising for this run regardless of the "
                 "Texturise-while-indexing toggle. Incremental: unchanged "
                 "files are skipped, so this is a fast catch-up; texturise later."
@@ -2135,8 +2135,8 @@ def _provider_pdf_texture(_app: FNDApp) -> tuple[MenuItem, ...]:
             description=(
                 "Whether the texturising engine is installed. When installed, "
                 "the next Update index texturises any PDF that isn't already "
-                "textured. When not installed, every PDF stays flat in the "
-                "preview pane (search still works either way)."
+                "textured. When not installed, no new texturising happens; "
+                "PDFs already textured stay so, and search works either way."
             ),
             kind=KIND_DISPLAY,
             value_getter=_summary_pdf_status,
@@ -2187,11 +2187,9 @@ def _provider_pdf_texture(_app: FNDApp) -> tuple[MenuItem, ...]:
             id="pdf_texture.textured_count",
             label="PDFs textured",
             description=(
-                "Distinct PDFs in your collections whose chunks have a "
-                "non-empty body_md (rendered structurally in the preview "
-                "pane). The Y total is every PDF the indexer can see on "
-                "disk under your collection sources; ⚠ Z still flat = "
-                "Y - X. Enter to drill into the list of still-flat PDFs "
+                "Textured PDFs against every PDF the indexer can see under "
+                "your collection sources. The row shows the second number "
+                "only while some are still flat. Enter to drill into those, "
                 "with the reason per file and a Retry-per-file action."
             ),
             kind=KIND_EXTERNAL,
