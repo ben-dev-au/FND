@@ -64,6 +64,18 @@ SourceScope = Mapping[str, Sequence[str]]
 _DEFAULT_LIMIT: Final = 10
 
 
+def scope_or(arms: list[Query]) -> Query:
+    """The arms as one OR. Callers test emptiness themselves, because an empty
+    scope means NOTHING and a single query cannot say that."""
+    import tantivy
+
+    return (
+        arms[0]
+        if len(arms) == 1
+        else tantivy.Query.boolean_query([(tantivy.Occur.Should, a) for a in arms])
+    )
+
+
 def scope_arms(
     schema: Schema,
     collection: str | list[str] | None,
@@ -484,11 +496,7 @@ class Searcher:
         if arms is not None:
             if not arms:
                 return []
-            filters.append(
-                arms[0]
-                if len(arms) == 1
-                else tantivy.Query.boolean_query([(tantivy.Occur.Should, a) for a in arms])
-            )
+            filters.append(scope_or(arms))
         # tantivy-py's QueryParser doesn't honour ``term~N`` syntax for
         # tokenized fields, but it accepts a ``fuzzy_fields`` mapping
         # that auto-fuzzes every parsed term against the listed field.

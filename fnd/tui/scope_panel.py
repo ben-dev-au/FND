@@ -12,6 +12,7 @@ import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from rich.cells import cell_len
 from textual.widgets import Tree
 
 from fnd.config import is_all_collections
@@ -81,24 +82,36 @@ def _branch_row(
     and has no column to line up with.
     """
     padded = f"{label:<{column}}({value})" if column > 0 else f"{label} ({value})"
-    if budget <= 0 or len(padded) <= budget:
+    # Painted cells, not code points: a collection name can hold wide or
+    # combining characters, and the budget is a column count.
+    if budget <= 0 or cell_len(padded) <= budget:
         return padded
     for text in (f"{label} ({value})", f"{label} ({compact})"):
-        if len(text) <= budget:
+        if cell_len(text) <= budget:
             return text
-    keep = budget - len(compact) - 4
+    keep = budget - cell_len(compact) - 4
     if keep >= 1:
         return f"{label[:keep]}\u2026 ({compact})"
     # Neither half fits whole. Elide the value rather than drop it, and never
     # drop the label: it is what the row is found by, and a row that silently
     # loses its value paints identically to a different state.
-    room = budget - len(label) - 4
+    room = budget - cell_len(label) - 4
     if room >= 1:
         return f"{label} ({compact[:room]}\u2026)"
     # Nothing fits. A fixed label is short and known, so it stays whole and
     # the row clips; a name is user data and must never read as a DIFFERENT
     # name, so it keeps an ellipsis instead.
     return f"{label} ({compact})" if column > 0 else f"{label[:1]}\u2026 ({compact})"
+
+
+def _absent(searching: bool) -> str:
+    """Where a selected tag has gone.
+
+    The catalogue is scoped to the active query, so under one a missing tag is
+    absent from the RESULTS. Saying "index" there tells a user checking whether
+    their private tags disappeared the opposite of the truth.
+    """
+    return "not in these results" if searching else "not in the index"
 
 
 def _tags_summary(
@@ -108,6 +121,7 @@ def _tags_summary(
     sources_on: bool,
     n_missing: int = 0,
     compact: bool = False,
+    searching: bool = False,
 ) -> str:
     """What the Tags branch is doing, without claiming more than it knows.
 
@@ -124,7 +138,7 @@ def _tags_summary(
                 else f"{n_selected}/{n_available}"
             )
         if n_missing:
-            return f"{n_selected} of {n_available}, {n_missing} not in the index"
+            return f"{n_selected} of {n_available}, {n_missing} {_absent(searching)}"
         return f"{n_selected} of {n_available}"
     if n_selected:
         return (
@@ -153,12 +167,16 @@ class ScopeController:
         # Kind ids present in scope (for pruning the file-type filter). None =
         # not yet computed / unknown → show all. Recomputed on each panel refresh.
         self._present_kinds: set[str] | None = None
+        # Whether the last tag catalogue was narrowed by a parseable query.
+        # Decides whether a selected tag it lacks is absent from the RESULTS or
+        # from the index.
+        self._catalogue_narrowed: bool = False
         # Cache of the present-kinds aggregation, keyed by the full active scope
         # (full collections, active sources), so it runs once per scope change
         # instead of on every search.
         self._present_kinds_cache: (
             tuple[
-                tuple[frozenset[str], frozenset[tuple[str, tuple[str, ...]]]],
+                tuple[frozenset[str] | None, frozenset[tuple[str, tuple[str, ...]]]],
                 set[str] | None,
             ]
             | None
@@ -370,6 +388,23 @@ class ScopeController:
         return out
 
     @property
+    def scope_collections(self) -> list[str] | None:
+        """Fully ticked collections, or ``None`` when nothing can be scoped by.
+
+        The same rule the search request uses: an empty list means the user
+        unticked everything and the answer is NOTHING, while an app with no
+        collections to tick simply has no scope. Only this class can tell the
+        two apart, so it decides and the aggregations are told.
+        """
+        cfg = self._app._config
+        if not (cfg and cfg.collections):
+            return None
+        full = self.collections
+        if full or self.source_scope:
+            return list(full)
+        return []
+
+    @property
     def source_scope(self) -> dict[str, list[str]]:
         """Ticked sources per PARTIALLY selected collection, in config order.
 
@@ -551,14 +586,15 @@ class ScopeController:
         # the filter never reveals kinds from unselected sources of the same
         # collection.
         scope = self.source_scope
+        cols = self.scope_collections
         key = (
-            frozenset(self.collections),
+            frozenset(cols) if cols is not None else None,
             frozenset((name, tuple(sids)) for name, sids in scope.items()),
         )
         cached = self._present_kinds_cache
         if cached is not None and cached[0] == key:
             return cached[1]
-        result = present_kinds(index, collections=self.collections, source_scope=scope)
+        result = present_kinds(index, collections=cols, source_scope=scope)
         self._present_kinds_cache = (key, result)
         return result
 
@@ -951,12 +987,18 @@ class ScopeController:
             return {}
         cfg = self._app._config
         sources = list(cfg.defaults.tag_sources) if cfg else None
+        facet_query = self._facet_query(index)
+        # What NARROWED the catalogue, not what the user typed. `_facet_query`
+        # returns None for a query it cannot parse, and an unnarrowed catalogue
+        # speaks for the whole scope.
+        self._catalogue_narrowed = facet_query is not None
         try:
             return tag_catalogue(
                 index,
-                collections=self.collections,
+                collections=self.scope_collections,
+                source_scope=self.source_scope,
                 sources=sources,
-                query=self._facet_query(index),
+                query=facet_query,
             )
         except Exception:
             return {}
@@ -1124,11 +1166,21 @@ class ScopeController:
         n_available = sum(len(v) for v in catalogue.values())
         ghosts = self._ghost_tag_values(catalogue) if n_available else []
         sources_on = bool(self._tag_source_ids())
+        searching = self._catalogue_narrowed
         summary = _tags_summary(
-            n_selected, n_available, sources_on=sources_on, n_missing=len(ghosts)
+            n_selected,
+            n_available,
+            sources_on=sources_on,
+            n_missing=len(ghosts),
+            searching=searching,
         )
         compact = _tags_summary(
-            n_selected, n_available, sources_on=sources_on, n_missing=len(ghosts), compact=True
+            n_selected,
+            n_available,
+            sources_on=sources_on,
+            n_missing=len(ghosts),
+            compact=True,
+            searching=searching,
         )
         tags_node = tree.root.add(
             _styled_parent_label(_branch_row("Tags", summary, compact, self._branch_budget(tree))),
@@ -1165,7 +1217,7 @@ class ScopeController:
         if not ghosts:
             return
         branch = tags_node.add(
-            _styled_parent_label("No longer in the index"),
+            _styled_parent_label(_absent(self._catalogue_narrowed).capitalize()),
             data={"kind": "filter_category", "category": "tags:missing"},
             expand=True,
         )

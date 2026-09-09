@@ -24,26 +24,32 @@ _MAX_KINDS = 256
 
 def _scope_query(
     index: tantivy.Index,
-    collections: Sequence[str],
+    collections: Sequence[str] | None,
     source_scope: Mapping[str, Sequence[str]] | None,
 ) -> tantivy.Query:
     """Restrict the aggregation to the active scope, built by the same
     :func:`fnd.query.scope_arms` the search uses so the facets cannot offer a
-    kind the results exclude. Empty scope aggregates the whole index."""
-    from fnd.query import scope_arms
+    kind the results exclude.
 
-    arms = scope_arms(index.schema, list(collections), source_scope)
-    if not arms:
+    ``collections=None`` means unscoped; an empty list means the user unticked
+    everything, which matches NOTHING. Collapsing those two listed every kind
+    in the index beside a `nothing matched` header."""
+    from fnd.query import scope_arms, scope_or
+
+    arms = scope_arms(
+        index.schema, None if collections is None else list(collections), source_scope
+    )
+    if arms is None:
         return tantivy.Query.all_query()
-    if len(arms) == 1:
-        return arms[0]
-    return tantivy.Query.boolean_query([(tantivy.Occur.Should, a) for a in arms])
+    if not arms:
+        return tantivy.Query.empty_query()
+    return scope_or(arms)
 
 
 def present_kinds(
     index: tantivy.Index,
     *,
-    collections: Sequence[str],
+    collections: Sequence[str] | None,
     source_scope: Mapping[str, Sequence[str]] | None = None,
 ) -> set[str] | None:
     """Kind ids present in the active scope (whole index if scope is empty).

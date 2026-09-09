@@ -45,6 +45,15 @@ def test_present_kinds_by_source_excludes_unselected_sources() -> None:
     assert present_kinds(idx, collections=[], source_scope={"A": ["/a", "/b"]}) == {"pdf", "cpp"}
 
 
-def test_present_kinds_empty_scope_sees_everything() -> None:
+def test_no_scope_sees_everything() -> None:
+    """`None` is "there is nothing to scope by"."""
     idx = _index([("A", "/a", "pdf"), ("B", "/c", "json")])
-    assert present_kinds(idx, collections=[], source_scope={}) == {"pdf", "json"}
+    assert present_kinds(idx, collections=None, source_scope={}) == {"pdf", "json"}
+
+
+def test_an_explicitly_empty_scope_sees_nothing() -> None:
+    """`[]` is "the user unticked everything", and the search returns nothing
+    for it. A branch listing every kind beside a `nothing matched` header is
+    the disagreement this closes."""
+    idx = _index([("A", "/a", "pdf"), ("B", "/c", "json")])
+    assert present_kinds(idx, collections=[], source_scope={}) == set()

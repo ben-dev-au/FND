@@ -31,7 +31,7 @@ import tantivy
 
 from fnd.explain import CascadePassTrace, CascadeTrace
 from fnd.matching import auto_fuzzy_distance
-from fnd.query import Hit, Searcher, SourceScope, scope_arms
+from fnd.query import Hit, Searcher, SourceScope, scope_arms, scope_or
 
 if TYPE_CHECKING:
     from fnd.tag_query import TagFilter
@@ -212,11 +212,7 @@ def _fuzzy_pass(
         # cannot express: `None` would mean unscoped.
         if not arms:
             return []
-        scope = (
-            arms[0]
-            if len(arms) == 1
-            else tantivy.Query.boolean_query([(tantivy.Occur.Should, a) for a in arms])
-        )
+        scope = scope_or(arms)
         # Const-scored: collection and source-path IDF must not perturb the
         # fuzzy pass's ranking.
         subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(scope, 0.0)))

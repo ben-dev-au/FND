@@ -537,7 +537,7 @@ class TestATagThatOutlivedItsCollection:
             )
             tags.expand()
             await pilot.pause()
-            missing = _descend(tags, "No longer in the index")
+            missing = _descend(tags, "Not in the index")
             row = _descend(missing, "gamma")
             assert "●" in str(row.label), str(row.label)
 
@@ -545,7 +545,7 @@ class TestATagThatOutlivedItsCollection:
             await pilot.pause()
             assert "gamma" not in app._scope.tag_include.get("frontmatter", set())
             assert "gamma" in app._scope.tag_exclude.get("frontmatter", set())
-            tree.select_node(_descend(_descend(_branch(tree, "Tags"), "No longer"), "gamma"))
+            tree.select_node(_descend(_descend(_branch(tree, "Tags"), "Not in"), "gamma"))
             await pilot.pause()
             assert "gamma" not in app._scope.tag_exclude.get("frontmatter", set())
 
@@ -577,4 +577,4 @@ class TestATagThatOutlivedItsCollection:
             assert "missing" not in str(tags.label), str(tags.label)
             assert "not in the index" not in str(tags.label), str(tags.label)
             assert "filtering" in str(tags.label), str(tags.label)
-            assert "No longer in the index" not in " ".join(_all_labels(tags))
+            assert "Not in the index" not in " ".join(_all_labels(tags))

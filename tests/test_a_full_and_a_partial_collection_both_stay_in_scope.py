@@ -23,10 +23,15 @@ def two_collections(tmp_path: Path, tmp_index_dir: Path, monkeypatch: pytest.Mon
     vault = tmp_path / "Vault"
     workdocs = tmp_path / "WorkDocs"
     personaldocs = tmp_path / "PersonalDocs"
+    # Personal's second source, deliberately never ticked: without something
+    # the scope EXCLUDES, a scoped search and an unscoped one return the same
+    # set and no assertion on them can discriminate.
+    archive = tmp_path / "Archive"
     for d, marker in (
         (vault, "markervault"),
         (workdocs, "markerwork"),
         (personaldocs, "markerpersonal"),
+        (archive, "markerarchive"),
     ):
         d.mkdir()
         (d / "note.md").write_text(f"# Note\n\nhaystack {marker} here.\n", encoding="utf-8")
@@ -41,6 +46,8 @@ def two_collections(tmp_path: Path, tmp_index_dir: Path, monkeypatch: pytest.Mon
             path = "{vault.as_posix()}"
             [[collections.Personal.sources]]
             path = "{personaldocs.as_posix()}"
+            [[collections.Personal.sources]]
+            path = "{archive.as_posix()}"
         """),
         encoding="utf-8",
     )
@@ -74,6 +81,7 @@ def test_a_full_collection_survives_beside_a_partial_one(
     )
 
     assert found == {"Vault", "WorkDocs", "PersonalDocs"}, found
+    assert "Archive" not in found, "Personal's unticked source must stay out"
 
 
 def test_a_partial_selection_does_not_reach_the_other_collections_copy(
@@ -127,14 +135,16 @@ def test_the_fuzzy_cascade_honours_a_partial_scope(
         source_scope={"Personal": [personaldocs]},
     )
 
+    # `Archive` is the discriminator: it belongs to Personal, is NOT ticked,
+    # and appears the moment the scope filter stops running.
     assert {Path(h.path).parent.name for h in hits} == {"Vault", "WorkDocs", "PersonalDocs"}
 
 
 def test_an_explicitly_empty_scope_still_finds_nothing_in_the_cascade(
     two_collections: Config, tmp_index_dir: Path
 ) -> None:
-    """The control: `scope_query` returns None for both "unscoped" and "empty",
-    so the cascade must read the arms itself or it would search everything."""
+    """The control: an empty scope and no scope are different, and a single
+    query cannot say so, which is why the cascade reads the arms itself."""
     from fnd.cascade import cascade_search
 
     hits = cascade_search(
