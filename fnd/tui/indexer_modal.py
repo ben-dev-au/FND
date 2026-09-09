@@ -175,6 +175,9 @@ class IndexerScreen(ModalScreen[None]):
     #indexer_history_tree {
         height: auto;
         max-height: 10;
+        /* Measured at 80 cols: a horizontal scrollbar paints a row of dashes
+           inside the tree that reads as a broken row, not as a control. */
+        overflow-x: hidden;
         margin: 0 0 1 0;
         border: none;
         background: $surface;
@@ -239,6 +242,9 @@ class IndexerScreen(ModalScreen[None]):
             # search Results pane.
             history_tree: Tree[str] = Tree("Completed", id="indexer_history_tree")
             history_tree.show_root = True
+            # Two, as the sidebar and results trees use: the default four put
+            # the texturising line past the panel edge, cut mid-word.
+            history_tree.guide_depth = 2
             # Start collapsed so it doesn't eat vertical space on a
             # fresh chain start, and so the modal's initial focus
             # (the Actions OptionList) stays the primary interaction.
