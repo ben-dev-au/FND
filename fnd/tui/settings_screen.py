@@ -914,12 +914,16 @@ class EditBar(Horizontal):
             for _ in p.iterdir():
                 n += 1
                 if n >= self._PATH_ENTRY_CAP:
-                    self._set_status(f"✓ {self._PATH_ENTRY_CAP}+ entries", tone="ok")
+                    self._set_status(f"✓ folder: {self._PATH_ENTRY_CAP}+ items", tone="ok")
                     return
         except OSError:
             self._set_status("⚠ unreadable", tone="warn")
             return
-        self._set_status(f"✓ {n} entries", tone="ok")
+        # `✓ 4 entries` beside a green tick read as "4 will be indexed". It is
+        # a non-recursive `iterdir` including subfolders, and a `no_index` file
+        # pushes it UP. Naming the folder first survives a clip; a gated walk
+        # on every keystroke does not survive the debounce.
+        self._set_status(f"✓ folder: {n} items", tone="ok")
 
     @on(Input.Submitted, "#editor_input")
     def _on_submit(self, ev: Input.Submitted) -> None:
