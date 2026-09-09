@@ -1450,6 +1450,22 @@ class FNDApp(App[None]):
         else:
             tree.focus()
 
+    def _refuse_if_missing(self, path: Path) -> bool:
+        """Say so when the file behind a row is not there any more.
+
+        The index keeps serving a deleted file's stored body, so the row and
+        the preview look ordinary. A keypress that cannot work must not look
+        like one that worked.
+        """
+        if path.exists():
+            return False
+        self.notify(
+            f"{path.name} is no longer on disk. Update the index to drop it.",
+            severity="warning",
+            timeout=6,
+        )
+        return True
+
     def action_open_at_locator(self) -> None:
         """Open the focused result at its page/section.
 
@@ -1467,6 +1483,8 @@ class FNDApp(App[None]):
         if target is None:
             return
         _, hit = target
+        if self._refuse_if_missing(Path(hit.path)):
+            return
         opener.open_smart(
             path=Path(hit.path),
             kind=hit.kind,
@@ -1488,6 +1506,8 @@ class FNDApp(App[None]):
         if target is None:
             return
         _, hit = target
+        if self._refuse_if_missing(Path(hit.path)):
+            return
         opener.open_default(Path(hit.path))
 
     def action_warm_whole_file(self) -> None:
@@ -1554,6 +1574,8 @@ class FNDApp(App[None]):
         if target is None:
             return
         _, hit = target
+        if self._refuse_if_missing(Path(hit.path)):
+            return
         opener.reveal(Path(hit.path))
 
     def action_open_with_menu(self) -> None:
@@ -1572,6 +1594,8 @@ class FNDApp(App[None]):
         if target is None:
             return
         _, hit = target
+        if self._refuse_if_missing(Path(hit.path)):
+            return
 
         from fnd import apps as apps_mod
         from fnd.config import load as load_config
