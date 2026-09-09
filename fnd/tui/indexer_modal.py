@@ -186,8 +186,15 @@ class IndexerScreen(ModalScreen[None]):
     #indexer_history_tree:focus-within { color: $text; }
     #indexer_history_tree.hidden { display: none; }
     #indexer_status, #indexer_pages_label, #indexer_current_file,
-    #indexer_timing, #indexer_indexed_line, #indexer_texture_line {
+    #indexer_timing {
         height: 1;
+        padding: 0;
+    }
+    /* These two carry counts, and a clipped count is a different number: at 80
+       columns `2 removed` painted as a bare `2`, on a run that had emptied the
+       index. They wrap rather than losing a word. */
+    #indexer_indexed_line, #indexer_texture_line {
+        height: auto;
         padding: 0;
     }
     #indexer_progress, #indexer_pages_progress {
@@ -952,10 +959,13 @@ def _short_name(path: str) -> str:
 
 
 def _format_indexed_line(newly: int, already: int, failed: int, removed: int = 0) -> str:
-    parts = [
-        f"{newly} newly indexed",
-        f"{already} already indexed",
-    ]
+    """Short enough to survive a 75%-wide modal at 80 columns.
+
+    `12 newly indexed    340 already indexed    2 removed` overflowed and
+    painted the last count as a bare `2` — on a run that had emptied the
+    index. A non-breaking space does not help: Rich wraps on it too.
+    """
+    parts = [f"{newly} new", f"{already} already"]
     # A run that adds nothing and removes three read as "nothing happened".
     if removed > 0:
         parts.append(f"{removed} removed")
