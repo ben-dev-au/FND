@@ -164,7 +164,10 @@ class TestTheElisionMarksWhereTheCutIs:
         assert "…" in trimmed, trimmed
         assert not trimmed.rstrip().endswith("…"), "it still points off the right"
         assert trimmed.index("…") < trimmed.index("Save"), trimmed
-        assert trimmed.index("…") > trimmed.index("Toggle"), trimmed
+        # Any surviving contextual key, not `Toggle` specifically: hints are
+        # now kept by how guessable they are, and `⏎ Toggle` is a key the
+        # user tries unprompted, so it is among the first to go.
+        assert trimmed.index("…") > trimmed.index("Clear"), trimmed
 
     def test_a_bar_that_fits_carries_no_marker(self) -> None:
         """The control: nothing was dropped, so nothing is claimed missing."""

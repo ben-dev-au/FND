@@ -175,6 +175,15 @@ def _is_leave(key: str) -> bool:
     return "esc" in key.lower()
 
 
+# Keys a user tries without being told. They go first when the bar must shrink,
+# because the hint that is worth its cells is the one nobody would guess.
+_GUESSABLE = frozenset({"↑↓", "↑", "↓", "←", "→", "←→", "⏎", "space"})
+
+
+def _is_guessable(key: str) -> bool:
+    return key.strip().lower() in _GUESSABLE
+
+
 class _HintBar:
     """The hint bar, refitted to the width it is painted at.
 
@@ -215,8 +224,17 @@ class _HintBar:
         """
         must = [h for h in self._contextual if _is_commit(h[0]) or _is_leave(h[0])]
         room = max(0, n - len(must))
-        kept = [h for h in self._contextual[:n] if h not in must][:room]
-        dropped = len(self._contextual) - len(kept) - len(must)
+        # Ranked, not sliced: `Tab Completed` sat third and was the first to
+        # go at 62 columns, leaving the three keys anyone would have tried and
+        # dropping the only route to the run history.
+        rest = [h for h in self._contextual if h not in must]
+        ranked = [h for h in rest if not _is_guessable(h[0])] + [
+            h for h in rest if _is_guessable(h[0])
+        ]
+        kept = ranked[:room]
+        # Back into bar order, so the keys do not reshuffle as the pane resizes.
+        kept = [h for h in rest if h in kept]
+        dropped = len(rest) - len(kept)
         # The cut is in the MIDDLE — the keys that save and leave are held back
         # to the end — so a trailing ellipsis pointed at a tail that is still
         # there. Mark the join instead.
