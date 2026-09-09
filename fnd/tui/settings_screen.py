@@ -2999,6 +2999,18 @@ class SourceFormScreen(Screen[None]):
 
     # ── Footer ────────────────────────────────────────────────
 
+    def _still_the_same_source(self, col: Any) -> bool:
+        """Whether this form's row index still names the source it opened on.
+
+        `_snapshot` holds the fields as loaded, so its path is the one the user
+        started editing whatever they have since typed into the field.
+        """
+        index = self._source_index
+        if index is None or index >= len(col.sources):
+            return False
+        opened = str(self._snapshot.get("path") or "")
+        return not opened or str(col.sources[index].path) == opened
+
     def _render_footer(self) -> None:
         app: FNDApp = self.app  # type: ignore[assignment]
         # Ctrl+D only meaningful when editing an existing source.
@@ -3068,11 +3080,26 @@ class SourceFormScreen(Screen[None]):
             if g:
                 excludes_globs.append(g)
         app: FNDApp = self.app  # type: ignore[assignment]
-        cfg = app._config  # type: ignore[attr-defined]
+        # Read the file, not the snapshot taken at launch. `write_collection`
+        # replaces the collection table wholesale, so writing from a stale
+        # model deleted any source added to it by hand in the meantime.
+        try:
+            cfg = load()
+        except Exception:
+            cfg = app._config  # type: ignore[attr-defined]
         if cfg is None or self._collection_name not in cfg.collections:
             self._show_error("Collection vanished. Please reopen the menu.")
             return
         col: CollectionConfig = cfg.collections[self._collection_name]
+        # A fresh read makes the row index mean whatever now sits there, so an
+        # edit could land on a different source. Refuse rather than guess.
+        if self._source_index is not None and not self._still_the_same_source(col):
+            self._show_error(
+                "The config changed on disk since this form opened. "
+                "Press Esc and reopen it so the edit lands on the right source."
+            )
+            return
+        app._config = cfg  # type: ignore[attr-defined]
         # Start from the source as it stands and overwrite only the fields
         # this form owns. Rebuilding from the form's fields deleted every
         # field it has no control for — app_for, and app_params beyond vault.
