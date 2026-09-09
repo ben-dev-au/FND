@@ -1480,6 +1480,11 @@ class SettingsScreen(Screen[None]):
         for key in (
             "indexing.cache_size",
             "indexing.pdf_status",
+            # Both describe what a run just changed, and both are cached for
+            # 30s — so the row that says it "refreshes when an Update index
+            # run finishes" held the pre-run count instead.
+            "indexing.files_in_index",
+            "indexing.cache_update.missing",
             # The cache-size chip's real key (the old "indexing.summary.
             # cache_short" was renamed but left dead here, so the chip
             # showed a stale size after cache actions).
