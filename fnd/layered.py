@@ -30,7 +30,7 @@ from fnd.fusion import (
     fusion_search,
     normalise_bm25,
 )
-from fnd.query import FileGroup, Hit, Searcher, group_by_file
+from fnd.query import FileGroup, Hit, Searcher, SourceScope, group_by_file
 
 if TYPE_CHECKING:
     from fnd.tag_query import TagFilter
@@ -48,7 +48,7 @@ def search_layered(
     collection: str | list[str] | None = ...,
     synonyms: SynonymTable | None = ...,
     metadata_filter: str | None = ...,
-    active_sources: list[str] | None = ...,
+    source_scope: SourceScope | None = ...,
     intent: str | None = ...,
     profile: object | None = ...,
     auto_fuzzy_enabled: bool = ...,
@@ -69,7 +69,7 @@ def search_layered(
     collection: str | list[str] | None = ...,
     synonyms: SynonymTable | None = ...,
     metadata_filter: str | None = ...,
-    active_sources: list[str] | None = ...,
+    source_scope: SourceScope | None = ...,
     intent: str | None = ...,
     profile: object | None = ...,
     auto_fuzzy_enabled: bool = ...,
@@ -89,7 +89,7 @@ def search_layered(
     collection: str | list[str] | None = None,
     synonyms: SynonymTable | None = None,
     metadata_filter: str | None = None,
-    active_sources: list[str] | None = None,
+    source_scope: SourceScope | None = None,
     intent: str | None = None,
     profile: object | None = None,
     auto_fuzzy_enabled: bool = True,
@@ -117,7 +117,7 @@ def search_layered(
         target=chunk_pool,
         collection=collection,
         metadata_filter=metadata_filter,
-        active_sources=active_sources,
+        source_scope=source_scope,
         intent=intent,
         tag_filter=tag_filter,
     )
@@ -141,7 +141,7 @@ def search_layered(
                 collection=collection,
                 synonyms=synonyms,
                 metadata_filter=metadata_filter,
-                active_sources=active_sources,
+                source_scope=source_scope,
                 precomputed_lex_ranking=probe,
                 intent=intent,
                 tag_filter=tag_filter,
@@ -155,7 +155,7 @@ def search_layered(
                 collection=collection,
                 synonyms=synonyms,
                 metadata_filter=metadata_filter,
-                active_sources=active_sources,
+                source_scope=source_scope,
                 precomputed_lex_ranking=probe,
                 intent=intent,
                 tag_filter=tag_filter,
@@ -173,7 +173,7 @@ def search_layered(
                     collection=collection,
                     synonyms=synonyms,
                     metadata_filter=metadata_filter,
-                    active_sources=active_sources,
+                    source_scope=source_scope,
                     tag_filter=tag_filter,
                     intent=intent,
                     auto_fuzzy_enabled=auto_fuzzy_enabled,
@@ -189,7 +189,7 @@ def search_layered(
                     collection=collection,
                     synonyms=synonyms,
                     metadata_filter=metadata_filter,
-                    active_sources=active_sources,
+                    source_scope=source_scope,
                     tag_filter=tag_filter,
                     intent=intent,
                     auto_fuzzy_enabled=auto_fuzzy_enabled,

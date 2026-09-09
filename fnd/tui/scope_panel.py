@@ -356,6 +356,25 @@ class ScopeController:
                     out.append(sid)
         return out
 
+    @property
+    def source_scope(self) -> dict[str, list[str]]:
+        """Ticked sources per PARTIALLY selected collection, in config order.
+
+        `collections` and `active_sources` are disjoint channels and the query
+        ANDs them, so one FULL collection beside one PARTIAL one intersected a
+        collection name with another collection's source path and matched
+        nothing. The selection map knows which collection each source came
+        from; this is that provenance, kept.
+        """
+        out: dict[str, list[str]] = {}
+        for name, sel in self.selection.items():
+            if not isinstance(sel, set):
+                continue
+            ticked = [sid for sid in self.collection_source_ids(name) if sid in sel]
+            if ticked:
+                out[name] = ticked
+        return out
+
     def snapshot(self, query: str) -> SearchSnapshot:
         """Project the live scope into the read-only value object the command
         serializer consumes — the one seam between scope state and

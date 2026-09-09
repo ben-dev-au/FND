@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, overload
 
 from fnd.explain import FusionTrace, HitContribution, SubQueryTrace
-from fnd.query import Hit, Searcher
+from fnd.query import Hit, Searcher, SourceScope
 from fnd.query_errors import QuerySyntaxError
 from fnd.synonyms import SynonymTable, expand
 
@@ -315,7 +315,7 @@ def fusion_search(
     synonyms: SynonymTable | None = ...,
     subqueries: list[SubQuery] | None = ...,
     metadata_filter: str | None = ...,
-    active_sources: list[str] | None = ...,
+    source_scope: SourceScope | None = ...,
     precomputed_lex_ranking: list[Hit] | None = ...,
     intent: str | None = ...,
     tag_filter: TagFilter | None = ...,
@@ -333,7 +333,7 @@ def fusion_search(
     synonyms: SynonymTable | None = ...,
     subqueries: list[SubQuery] | None = ...,
     metadata_filter: str | None = ...,
-    active_sources: list[str] | None = ...,
+    source_scope: SourceScope | None = ...,
     precomputed_lex_ranking: list[Hit] | None = ...,
     intent: str | None = ...,
     tag_filter: TagFilter | None = ...,
@@ -350,7 +350,7 @@ def fusion_search(
     synonyms: SynonymTable | None = None,
     subqueries: list[SubQuery] | None = None,
     metadata_filter: str | None = None,
-    active_sources: list[str] | None = None,
+    source_scope: SourceScope | None = None,
     precomputed_lex_ranking: list[Hit] | None = None,
     intent: str | None = None,
     tag_filter: TagFilter | None = None,
@@ -403,7 +403,7 @@ def fusion_search(
             target=limit * 10,
             collection=collection,
             metadata_filter=metadata_filter,
-            active_sources=active_sources,
+            source_scope=source_scope,
             intent=intent,
             tag_filter=tag_filter,
         )

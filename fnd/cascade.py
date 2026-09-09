@@ -31,7 +31,7 @@ import tantivy
 
 from fnd.explain import CascadePassTrace, CascadeTrace
 from fnd.matching import auto_fuzzy_distance
-from fnd.query import Hit, Searcher
+from fnd.query import Hit, Searcher, SourceScope
 
 if TYPE_CHECKING:
     from fnd.tag_query import TagFilter
@@ -173,7 +173,7 @@ def _fuzzy_pass(
     query: str,
     limit: int,
     collection: str | list[str] | None,
-    active_sources: list[str] | None = None,
+    source_scope: SourceScope | None = None,
     intent: str | None = None,
     auto_fuzzy_enabled: bool = True,
     min_term_chars: int = 0,
@@ -192,7 +192,7 @@ def _fuzzy_pass(
     Stems shorter than this skip auto-fuzzy regardless of the AUTO
     heuristic. Per-term ``~N`` overrides the floor.
 
-    ``active_sources`` further narrows the fuzzy pass to chunks indexed
+    ``source_scope`` further narrows the fuzzy pass to chunks indexed
     from a subset of the active collection's sources, so the cascade
     fallback honours the same source-scope as the literal pass.
     """
@@ -228,13 +228,13 @@ def _fuzzy_pass(
             else tantivy.Query.boolean_query([(tantivy.Occur.Should, t) for t in col_terms])
         )
         subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(col_q, 0.0)))
-    if active_sources:
+    if source_scope:
         # Active source-set filter, ANDed within the collection scope above
         # (not unioned). Const-scored for the same reason as the collection
         # filter: source-path IDF must not perturb ranking.
         from fnd.schema import F_SOURCE_PATH
 
-        src_terms = [tantivy.Query.term_query(schema, F_SOURCE_PATH, src) for src in active_sources]
+        src_terms = [tantivy.Query.term_query(schema, F_SOURCE_PATH, src) for src in source_scope]
         src_q = (
             src_terms[0]
             if len(src_terms) == 1
@@ -331,7 +331,7 @@ def cascade_search(
     collection: str | list[str] | None = ...,
     synonyms: SynonymTable | None = ...,
     metadata_filter: str | None = ...,
-    active_sources: list[str] | None = ...,
+    source_scope: SourceScope | None = ...,
     intent: str | None = ...,
     auto_fuzzy_enabled: bool = ...,
     min_term_chars: int = ...,
@@ -350,7 +350,7 @@ def cascade_search(
     collection: str | list[str] | None = ...,
     synonyms: SynonymTable | None = ...,
     metadata_filter: str | None = ...,
-    active_sources: list[str] | None = ...,
+    source_scope: SourceScope | None = ...,
     intent: str | None = ...,
     auto_fuzzy_enabled: bool = ...,
     min_term_chars: int = ...,
@@ -368,7 +368,7 @@ def cascade_search(
     collection: str | list[str] | None = None,
     synonyms: SynonymTable | None = None,
     metadata_filter: str | None = None,
-    active_sources: list[str] | None = None,
+    source_scope: SourceScope | None = None,
     intent: str | None = None,
     auto_fuzzy_enabled: bool = True,
     min_term_chars: int = 0,
@@ -382,7 +382,7 @@ def cascade_search(
     in original score order, then pass-1, then pass-2 — so the TUI shows
     exact matches above looser matches.
 
-    ``metadata_filter`` and ``active_sources`` apply to every pass so
+    ``metadata_filter`` and ``source_scope`` apply to every pass so
     cascade preserves the same scope a single-pass search would, even
     when widening to fuzzy / synonym. Literal + synonym passes go through
     :meth:`Searcher._filtered_raw_hits` (which honours the metadata
@@ -432,7 +432,7 @@ def cascade_search(
         target=pass_target,
         collection=collection,
         metadata_filter=metadata_filter,
-        active_sources=active_sources,
+        source_scope=source_scope,
         intent=intent,
         tag_filter=tag_filter,
     )
@@ -464,7 +464,7 @@ def cascade_search(
             query=query,
             limit=pass_target,
             collection=collection,
-            active_sources=active_sources,
+            source_scope=source_scope,
             intent=intent,
             auto_fuzzy_enabled=auto_fuzzy_enabled,
             min_term_chars=min_term_chars,
@@ -499,7 +499,7 @@ def cascade_search(
                 target=pass_target,
                 collection=collection,
                 metadata_filter=metadata_filter,
-                active_sources=active_sources,
+                source_scope=source_scope,
                 intent=intent,
                 tag_filter=tag_filter,
             )

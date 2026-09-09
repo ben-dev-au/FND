@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, Any
 from textual.widgets import Static
 
 from fnd.matching import MatchSpec
-from fnd.query import FileGroup, Hit, Searcher
+from fnd.query import FileGroup, Hit, Searcher, SourceScope
 from fnd.rerank import RankingProfile, profile_from_config
 from fnd.tui.progress.facility import ProgressSession
 from fnd.tui.progress.operations import SEARCH
@@ -63,7 +63,7 @@ class _SearchRequest:
     filter_prefix: str
     metadata_filter: str | None
     collection: str | list[str] | None
-    active_sources: list[str] | None
+    source_scope: SourceScope | None
     tag_filter: TagFilter | None
     limit: int
     sections_per_file: int
@@ -374,7 +374,9 @@ class SearchController:
         # collection names on spaces, so a multi-collection scope leaked
         # other collections and dropped spaced names like ``SSD Exam``.
         cols = self._app._scope.collections
-        scoped_sources = list(self._app._scope.active_sources)
+        # A fresh dict of fresh lists, so the worker cannot read a scope the
+        # panel is mutating on the event loop.
+        scoped = self._app._scope.source_scope
         # Whether there is anything to scope BY. An empty selection map means
         # "the user unticked everything" only where collections exist to tick;
         # with no config it is simply an app that cannot be scoped, and both
@@ -400,13 +402,12 @@ class SearchController:
             # inside one clause, `kind:(md pdf)`, stay a deliberate OR.
             filter_prefix=" AND ".join(filter_clauses),
             metadata_filter=plan.metadata_filter,
-            # Copied, not referenced: the scope panel mutates these lists on
-            # the event loop while the worker is reading them.
             # A partly-ticked collection contributes no name and is scoped by
-            # source, so the channel stays open. An empty list means the user
-            # unticked everything; an app with nothing to scope by means all.
-            collection=list(cols) if cols else (None if (scoped_sources or not scopeable) else []),
-            active_sources=scoped_sources or None,
+            # its own sources, so the channel stays open. An empty list means
+            # the user unticked everything; an app with nothing to scope by
+            # means all.
+            collection=list(cols) if cols else (None if (scoped or not scopeable) else []),
+            source_scope=scoped or None,
             tag_filter=tag_filter,
             limit=cfg_defaults.result_limit if cfg_defaults else DEFAULT_RESULT_LIMIT,
             sections_per_file=cfg_defaults.sections_per_file_max if cfg_defaults else 200,
@@ -488,7 +489,7 @@ class SearchController:
             collection=request.collection,
             synonyms=self.synonyms,
             metadata_filter=request.metadata_filter,
-            active_sources=request.active_sources,
+            source_scope=request.source_scope,
             tag_filter=request.tag_filter,
             intent=request.intent,
             profile=request.profile,

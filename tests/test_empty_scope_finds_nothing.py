@@ -57,7 +57,7 @@ def test_a_source_scope_without_a_collection_still_works(
     the empty list there would return nothing for every partial selection."""
     source = str((tmp_path / "alpha").resolve())
     hits = Searcher(index_dir=two_collections).search(
-        "zebrafish", collection=None, active_sources=[source]
+        "zebrafish", collection=None, source_scope={"alpha": [source]}
     )
     assert len(hits) == 1
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -53,6 +54,11 @@ from fnd.schema import (
 )
 
 _SNIPPET_CTX = 240
+#: Ticked sources per PARTLY selected collection. The collection key is the
+#: provenance a flat path list throws away: a folder listed under two
+#: collections is otherwise in scope for both.
+SourceScope = Mapping[str, Sequence[str]]
+
 _DEFAULT_LIMIT: Final = 10
 # Content tokens that parse_query can't handle on the body field and which we
 # resolve against the stemmed dictionary ourselves:
@@ -381,7 +387,7 @@ class Searcher:
         *,
         limit: int,
         collection: str | list[str] | None,
-        active_sources: list[str] | None = None,
+        source_scope: SourceScope | None = None,
         fuzzy_distance: int = 0,
         intent: str | None = None,
         tag_filter: TagFilter | None = None,
@@ -419,33 +425,55 @@ class Searcher:
             compiled_tags = compile_tag_filter(tag_filter, schema)
             if compiled_tags is not None:
                 filters.append(compiled_tags)
-        # Active collection (-c / settings) and source scope are hard filters.
-        # ``collection`` accepts a single name (CLI ``-c``) or a list (the
-        # TUI's multi-collection scope); a list becomes an OR over F_COLLECTION
-        # terms so multi-collection scope HARD-restricts instead of riding a
-        # re-parsed ``c:`` string that ranks softly and splits spaced names.
-        # ``active_sources`` stays a SEPARATE filter, ANDed in: it narrows
-        # WITHIN the collection (partial-source selection), not a union.
-        if collection is not None:
-            cols = [collection] if isinstance(collection, str) else list(collection)
-            if not cols:
+        # Scope is a hard filter and a UNION: whole collections (`-c`, or a
+        # fully ticked one) OR the ticked sources of a partly ticked one.
+        # These were two channels ANDed together, so one full collection
+        # beside one partial collection intersected a name with another
+        # collection's source path and matched nothing.
+        scoped = collection is not None or bool(source_scope)
+        if scoped:
+            arms: list[Query] = []
+            cols = (
+                []
+                if collection is None
+                else [collection]
+                if isinstance(collection, str)
+                else list(collection)
+            )
+            arms.extend(tantivy.Query.term_query(schema, F_COLLECTION, c) for c in cols)
+            for name, sids in (source_scope or {}).items():
+                srcs = [tantivy.Query.term_query(schema, F_SOURCE_PATH, s) for s in sids]
+                if not srcs:
+                    continue
+                src_arm = (
+                    srcs[0]
+                    if len(srcs) == 1
+                    else tantivy.Query.boolean_query([(tantivy.Occur.Should, s) for s in srcs])
+                )
+                # ANDed with its OWN collection, which is the provenance the
+                # flat source list threw away: a folder listed under two
+                # collections is otherwise in scope for both.
+                arms.append(
+                    tantivy.Query.boolean_query(
+                        [
+                            (
+                                tantivy.Occur.Must,
+                                tantivy.Query.term_query(schema, F_COLLECTION, name),
+                            ),
+                            (tantivy.Occur.Must, src_arm),
+                        ]
+                    )
+                )
+            if not arms:
                 # An explicit empty scope means NOTHING, not everything. The
                 # panel painting "0/5 active" while every collection answered
                 # is the same dishonesty the partial case was fixed for.
                 # Callers meaning "unscoped" pass None.
                 return []
-            col_terms = [tantivy.Query.term_query(schema, F_COLLECTION, c) for c in cols]
             filters.append(
-                col_terms[0]
-                if len(col_terms) == 1
-                else tantivy.Query.boolean_query([(tantivy.Occur.Should, t) for t in col_terms])
-            )
-        if active_sources:
-            src_terms = [tantivy.Query.term_query(schema, F_SOURCE_PATH, s) for s in active_sources]
-            filters.append(
-                src_terms[0]
-                if len(src_terms) == 1
-                else tantivy.Query.boolean_query([(tantivy.Occur.Should, t) for t in src_terms])
+                arms[0]
+                if len(arms) == 1
+                else tantivy.Query.boolean_query([(tantivy.Occur.Should, a) for a in arms])
             )
         # tantivy-py's QueryParser doesn't honour ``term~N`` syntax for
         # tokenized fields, but it accepts a ``fuzzy_fields`` mapping
@@ -547,7 +575,7 @@ class Searcher:
         target: int,
         collection: str | list[str] | None,
         metadata_filter: str | None,
-        active_sources: list[str] | None = None,
+        source_scope: SourceScope | None = None,
         fuzzy_distance: int = 0,
         intent: str | None = None,
         tag_filter: TagFilter | None = None,
@@ -559,7 +587,7 @@ class Searcher:
                 query,
                 limit=target,
                 collection=collection,
-                active_sources=active_sources,
+                source_scope=source_scope,
                 fuzzy_distance=fuzzy_distance,
                 intent=intent,
                 tag_filter=tag_filter,
@@ -574,7 +602,7 @@ class Searcher:
                 query,
                 limit=target * oversample,
                 collection=collection,
-                active_sources=active_sources,
+                source_scope=source_scope,
                 fuzzy_distance=fuzzy_distance,
                 intent=intent,
                 tag_filter=tag_filter,
@@ -597,7 +625,7 @@ class Searcher:
         profile: object | None = None,
         now: int | None = None,
         metadata_filter: str | None = None,
-        active_sources: list[str] | None = None,
+        source_scope: SourceScope | None = None,
         fuzzy_distance: int = 0,
         intent: str | None = None,
         tag_filter: TagFilter | None = None,
@@ -612,7 +640,7 @@ class Searcher:
         explicit cascade ``fuzzy_distance`` callers.
 
         Use :meth:`search_grouped` to keep all matched sections of each file.
-        ``active_sources`` further narrows scope to chunks indexed from the
+        ``source_scope`` further narrows scope to chunks indexed from the
         listed source paths.
         """
         if not query.strip():
@@ -626,7 +654,7 @@ class Searcher:
                 limit=limit * 5,  # oversample: per-file dedup below thins this
                 collection=collection,
                 metadata_filter=metadata_filter,
-                active_sources=active_sources,
+                source_scope=source_scope,
                 intent=intent,
                 tag_filter=tag_filter,
             )
@@ -636,7 +664,7 @@ class Searcher:
             target=limit * 5,
             collection=collection,
             metadata_filter=metadata_filter,
-            active_sources=active_sources,
+            source_scope=source_scope,
             fuzzy_distance=fuzzy_distance,
             intent=intent,
             tag_filter=tag_filter,
@@ -743,12 +771,12 @@ class Searcher:
         profile: object | None = None,
         now: int | None = None,
         metadata_filter: str | None = None,
-        active_sources: list[str] | None = None,
+        source_scope: SourceScope | None = None,
         fuzzy_distance: int = 0,
         intent: str | None = None,
     ) -> list[FileGroup]:
         """Return ranked FileGroups, each with up to ``sections_per_file`` ranked
-        section hits. ``active_sources`` narrows scope to chunks indexed
+        section hits. ``source_scope`` narrows scope to chunks indexed
         from a subset of the active collection's sources.
         """
         if not query.strip():
@@ -758,7 +786,7 @@ class Searcher:
             target=limit * 10,
             collection=collection,
             metadata_filter=metadata_filter,
-            active_sources=active_sources,
+            source_scope=source_scope,
             fuzzy_distance=fuzzy_distance,
             intent=intent,
         )
