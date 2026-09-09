@@ -95,10 +95,10 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
       1 / e   Open the file in ``$EDITOR``; re-validate on return.
       2 / r   Reset to defaults (current file is renamed to a timestamped
               backup; a fresh starter config is written in its place).
-      3 / q   Dismiss (back to caller). At TUI startup the standalone
-              :class:`ConfigRecoveryApp` exits the process; in-session
-              the main app stays open and the user lands back where they
-              were.
+      3 / q   Back out. In-session the main app stays open and the user
+              lands where they were; at startup the standalone
+              :class:`ConfigRecoveryApp` is all there is, so the row says
+              "Quit fnd" rather than "Dismiss".
 
     Returns ``"valid"`` if the recovery succeeded and ``"exit"`` if the
     user backed out without fixing the file.
@@ -132,10 +132,14 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
     #recovery_hints { padding-top: 1; color: $text-muted; }
     """
 
-    def __init__(self, *, error_text: str, config_path: Path) -> None:
+    def __init__(self, *, error_text: str, config_path: Path, standalone: bool = False) -> None:
         super().__init__()
         self._error_text = error_text
         self._config_path = config_path
+        # Backing out of the startup flow ends the process — there is no
+        # session behind it to return to — so the row cannot say "Dismiss"
+        # on both routes.
+        self._standalone = standalone
 
     def compose(self) -> ComposeResult:
         with Vertical(id="recovery_box"):
@@ -149,7 +153,10 @@ class ConfigRecoveryScreen(Screen["Literal['valid', 'exit']"]):
             yield Static(
                 "[2] Reset to defaults (current file backed up)", classes="recovery_choice"
             )
-            yield Static("[3] Dismiss", classes="recovery_choice")
+            yield Static(
+                "[3] Quit fnd" if self._standalone else "[3] Dismiss",
+                classes="recovery_choice",
+            )
             yield Static(
                 "Press 1, 2, or 3 — or e / r / q.",
                 id="recovery_hints",
@@ -230,7 +237,11 @@ class ConfigRecoveryApp(App[None]):
 
     def on_mount(self) -> None:
         self.push_screen(
-            ConfigRecoveryScreen(error_text=self._error_text, config_path=self._config_path),
+            ConfigRecoveryScreen(
+                error_text=self._error_text,
+                config_path=self._config_path,
+                standalone=True,
+            ),
             callback=self._on_done,
         )
 
