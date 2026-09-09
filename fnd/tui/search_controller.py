@@ -592,7 +592,7 @@ class SearchController:
         if isinstance(err, FilterError):
             text = f"filter: {err.message} (col {err.column})"
         elif isinstance(err, QuerySyntaxError):
-            text = err.message if not err.hint else f"{err.message} — {err.hint}"
+            text = err.message if not err.hint else f"{err.message} ({err.hint})"
         else:
             text = str(err)
         try:

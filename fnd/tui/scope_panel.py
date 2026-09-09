@@ -600,7 +600,7 @@ class ScopeController:
             active_bits.append(f"{n_inc} tag{'s' if n_inc != 1 else ''}")
         if n_exc:
             active_bits.append(f"−{n_exc} tag{'s' if n_exc != 1 else ''}")
-        title = "Filters" if not active_bits else f"Filters — {', '.join(active_bits)}"
+        title = "Filters" if not active_bits else f"Filters: {', '.join(active_bits)}"
         try:
             self._app.query_one("#filters_pane").border_title = title
         except Exception:
