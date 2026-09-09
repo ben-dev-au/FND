@@ -335,12 +335,13 @@ Index filters** edits the defaults; a source's **Index filters** row edits it.
 | `min_size` / `max_size` | Bytes. Keeps stubs, and multi-hundred-megabyte scans, out. |
 | `created_after` / `created_before` | ISO dates (`2024-01-01`). A fixed bound, not the Filters pane's rolling window: a window would change what the index holds as time passed. A file with no creation date (best-effort on Linux) is kept. |
 | `modified_after` / `modified_before` | ISO dates, same semantics. |
-| `frontmatter` | A frontmatter predicate, same syntax as a query: `type == 'note' AND status != 'draft'`. Applies to any file **with a frontmatter block**, whatever the extension. A file without one passes. A block that fails to parse fails the rule. |
+| `frontmatter` | A frontmatter predicate, same syntax as a query: `type == 'note' AND status != 'draft'`. Applies to the kinds that carry frontmatter — **`.md` and its variants, and `.txt`**. A note without a block, or with one that fails the rule, is kept out; a PDF is out of scope and passes. A block that fails to parse fails the rule. |
 | `expression` | A predicate over any file, using `file.kind`, `file.size`, `file.modified`, `file.tags.os`, `file.path` and the like. The rows above are written in terms of it. |
 
 The tree shows one branch per rule. Markers: `●` keep only these, `⊘` never
 these, `○` no rule. An empty branch says what that means, so the file types read
-`(every type)`.
+`(every type)`. `⊘` is reachable on the tag rows; file types are an include-only
+list, so excluding one is a typed rule (`t`) and that branch says so.
 
 Beneath the tree the set is shown as the expression it compiles to; `t` edits
 it. Rows and text are two views of one filter and update each other. Anything
