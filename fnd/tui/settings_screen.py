@@ -730,6 +730,21 @@ def _coercion_error(coerce: Any, hint: str, err: Exception) -> str:
     return f"needs {want}" + (f" ({hint})" if hint else "")
 
 
+def _out_of_bounds(item: MenuItem, value: Any) -> str:
+    """Why the row refuses ``value``, or "".
+
+    Nine rows printed a range in two places and enforced it in none, so
+    `result_limit = 99999` against `1-1000` was written without a word.
+    """
+    bounds = getattr(item, "bounds", None)
+    if bounds is None or not isinstance(value, int | float) or isinstance(value, bool):
+        return ""
+    low, high = bounds
+    if low <= value <= high:
+        return ""
+    return f"outside {item.hint or f'{low}-{high}'}"
+
+
 class EditBar(Horizontal):
     """One-line scalar editor that mounts above the hint bar.
 
@@ -911,6 +926,10 @@ class EditBar(Horizontal):
             value: Any = coerce(raw)
         except (TypeError, ValueError) as e:
             self.show_error(_coercion_error(coerce, self._item.hint, e))
+            return
+        out_of_range = _out_of_bounds(self._item, value)
+        if out_of_range:
+            self.show_error(out_of_range)
             return
         self.post_message(self.EditCommitted(self._item, value))
 
