@@ -7,6 +7,8 @@ could not answer it from the result list.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fnd.tui.results_labels import disambiguated_names
 
 
@@ -70,7 +72,7 @@ def test_it_does_not_grow_quadratically_with_the_result_count() -> None:
         ps = paths(n)
         return min(_timed(disambiguated_names, ps) for _ in range(5))
 
-    def _timed(fn, arg) -> float:
+    def _timed(fn: Callable[[list[str]], object], arg: list[str]) -> float:
         t0 = time.perf_counter()
         fn(arg)
         return time.perf_counter() - t0

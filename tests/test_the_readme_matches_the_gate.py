@@ -20,7 +20,7 @@ def _gate():
     return FileGate.of(
         [
             *build_gate(FilterSpec()).rules,
-            rule_from_text("type == 'note'", applies_to=note_kinds()),
+            rule_from_text("type == 'note'", applies_to=frozenset(note_kinds())),
         ]
     )
 

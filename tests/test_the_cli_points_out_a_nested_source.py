@@ -31,7 +31,12 @@ def test_it_still_finds_a_nested_folder(tmp_path: Path) -> None:
     parent = tmp_path / "vault"
     (parent / "notes").mkdir(parents=True)
 
-    assert overlapping_source([SourceConfig(path=parent)], SourceConfig(path=parent / "notes"))
+    # `2a2fc64` made this return `(path, relation)`; a non-empty tuple is
+    # always truthy, so the bare assert stopped testing anything.
+    found, _contains = overlapping_source(
+        [SourceConfig(path=parent)], SourceConfig(path=parent / "notes")
+    )
+    assert found
 
 
 @pytest.fixture

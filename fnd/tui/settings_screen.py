@@ -31,7 +31,7 @@ import copy
 import textwrap
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, cast
 
 from rich.text import Text
 from textual import events, on
@@ -235,7 +235,7 @@ class ConfirmList(OptionList):
     Both rows stay reachable; only the wrap-around goes.
     """
 
-    def _step(self, direction: int) -> None:
+    def _step(self, direction: Literal[-1, 1]) -> None:
         from textual import _widget_navigation
 
         landing = _widget_navigation.find_next_enabled_no_wrap(
@@ -3106,7 +3106,7 @@ class SourceFormScreen(Screen[None]):
                 f"{_summarise(e)}"
             )
             return
-        if cfg is None or self._collection_name not in cfg.collections:
+        if self._collection_name not in cfg.collections:
             self._show_error("Collection vanished. Please reopen the menu.")
             return
         col: CollectionConfig = cfg.collections[self._collection_name]

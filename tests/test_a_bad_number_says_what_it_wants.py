@@ -8,6 +8,7 @@ the coercion function instead.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from textual.widgets import Input, Static
@@ -23,7 +24,7 @@ from fnd.tui.settings_screen import (
 from tests._pilot_wait import settings_ready
 
 
-async def _reject(app: FNDApp, pilot, row_id: str, typed: str) -> str:
+async def _reject(app: FNDApp, pilot: Any, row_id: str, typed: str) -> str:
     open_settings_section(app, SECTION_PREFERENCES)
     await settings_ready(pilot, app)
     screen = app.screen

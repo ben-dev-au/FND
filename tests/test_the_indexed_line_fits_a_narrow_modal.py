@@ -8,6 +8,7 @@ a hunter measured Files in index going 9 → 0 → 9.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,7 @@ from fnd.tui import FNDApp
 from fnd.tui.indexer_modal import IndexerScreen
 
 
-async def _indexed_line(app: FNDApp, pilot, *, removed: int, failed: int = 0) -> str:
+async def _indexed_line(app: FNDApp, pilot: Any, *, removed: int, failed: int = 0) -> str:
     app.push_screen(IndexerScreen("notes"))
     for _ in range(15):
         await pilot.pause()
@@ -64,6 +65,7 @@ async def test_a_failure_chip_is_never_lost(tmp_index_dir: Path) -> None:
         for _ in range(15):
             await pilot.pause()
         screen = app.screen
+        assert isinstance(screen, IndexerScreen)
         screen._update_status_lines(
             pdfs_total=0,
             indexed_newly=12,
