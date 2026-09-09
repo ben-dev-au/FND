@@ -731,12 +731,13 @@ def collection_add(
     with contextlib.suppress(Exception):
         prior = _load(cfg_path).collections.get(name)
         existing = list(prior.sources) if prior else []
-    overlap = overlapping_source(existing, new_source)
+    overlap, overlap_contains = overlapping_source(existing, new_source)
     write_collection_source(config_path=cfg_path, collection_name=name, source=new_source)
     typer.echo(f"added source {source[0]} to collection {name} in {cfg_path}")
     if overlap:
+        relation = "already covers" if overlap_contains else "is already inside"
         typer.echo(
-            f"fnd: this folder is already inside {overlap} in {name}; files "
+            f"fnd: this folder {relation} {overlap} in {name}; files "
             f"reached by both are indexed once.",
             err=True,
         )

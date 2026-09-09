@@ -3162,7 +3162,7 @@ class SourceFormScreen(Screen[None]):
             self._show_error(_summarise(e))
             return
 
-        overlap = overlapping_source(col.sources, new_source, self._source_index)
+        overlap, overlap_contains = overlapping_source(col.sources, new_source, self._source_index)
         if self._source_index is None:
             col.sources.append(new_source)
         else:
@@ -3183,8 +3183,8 @@ class SourceFormScreen(Screen[None]):
             # stored once — but a source that indexes nothing new is worth
             # knowing about rather than discovering from a file count.
             app.notify(
-                f"This folder is already inside {overlap!r} in this collection; "
-                "files reached by both are indexed once.",
+                f"This folder {'already covers' if overlap_contains else 'is already inside'} "
+                f"{overlap!r} in this collection; files reached by both are indexed once.",
                 severity="warning",
             )
         # Trigger a reindex if the source set materially changed. Pop

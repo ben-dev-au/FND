@@ -528,13 +528,16 @@ class SourceConfig(_ConfigModel):
         return v
 
 
-def overlapping_source(sources: Sequence[Any], new: Any, editing: int | None = None) -> str:
-    """A sibling whose folder contains the new one, or is contained by it.
+def overlapping_source(
+    sources: Sequence[Any], new: Any, editing: int | None = None
+) -> tuple[str, bool]:
+    """``(sibling path, whether the NEW source contains it)``, or ``("", False)``.
 
-    Not a refusal: the index keys on the file, so a file two sources both reach
-    is stored once. It is silence that misleads — a source added inside another
-    indexes nothing new and reads like it did. ``editing`` is the index of the
-    row being replaced, which is still in ``sources`` and is not its own rival.
+    The relation comes back because the check runs both ways and the warning
+    has to name the one that matched: a caller told only the path said "already
+    inside" when the new folder was the parent. Not a refusal — the index keys
+    on the file, so a file two sources reach is stored once; it is silence that
+    misleads. ``editing`` is the row being replaced, not its own rival.
     """
     import contextlib
 
@@ -544,9 +547,11 @@ def overlapping_source(sources: Sequence[Any], new: Any, editing: int | None = N
             if i == editing or not other.path:
                 continue
             path = Path(other.path).expanduser().resolve()
-            if target == path or target.is_relative_to(path) or path.is_relative_to(target):
-                return str(other.path)
-    return ""
+            if target == path or target.is_relative_to(path):
+                return str(other.path), False
+            if path.is_relative_to(target):
+                return str(other.path), True
+    return "", False
 
 
 DEFAULT_RANKING_PROFILE = "default"
