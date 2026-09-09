@@ -985,7 +985,7 @@ def _provider_preferences(_app: FNDApp) -> tuple[MenuItem, ...]:
             label="Auto-fuzzy matching",
             description=(
                 "Widen the cascade fallback to match typo'd query terms. "
-                "Per-term ``~N`` in the query still works when this is off."
+                "Per-term ~N in the query still works when this is off."
             ),
             kind=KIND_TOGGLE,
             toggle_getter=lambda app: (  # type: ignore[arg-type]
@@ -1083,7 +1083,7 @@ def _provider_preferences(_app: FNDApp) -> tuple[MenuItem, ...]:
             id="pref.render_mermaid",
             label="Render mermaid diagrams (in development)",
             description=(
-                "Render ```mermaid code fences as terminal text-art diagrams "
+                "Render mermaid code fences as terminal text-art diagrams "
                 "instead of source. Unsupported or oversized diagrams fall back "
                 "to source. Applies on next preview load."
             ),
@@ -1162,8 +1162,9 @@ def _filetype_default_app_items() -> tuple[MenuItem, ...]:
                 label=f"Default {label} app",
                 description=(
                     f"App that opens {label} files when no per-source "
-                    "override is set. '(auto-resolve)' lets the resolver "
-                    "auto-pick (eg. Skim if installed → Preview-if-AX → system)."
+                    "override is set. '(auto-resolve)' walks the ladder for "
+                    "this type: a registered app that is installed, then the "
+                    "system handler."
                 ),
                 kind=KIND_PICKER,
                 choices_provider=lambda app, k=kind: _choices_apps_for_kind(app, k),

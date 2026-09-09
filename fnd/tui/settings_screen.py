@@ -2766,9 +2766,9 @@ class SourceFormScreen(Screen[None]):
                 label="App",
                 description=(
                     "Open files from this source with a specific app. "
-                    "Leave as '(default)' to use the global app_defaults "
-                    "+ auto-promote ladder. See ``[apps]`` in config.toml "
-                    "and docs/apps.md for the full list."
+                    "Leave it unset to use the global default and the "
+                    "auto-promote ladder, which [app_defaults] in config.toml "
+                    "sets. docs/apps.md lists every app and how to add one."
                 ),
                 kind=KIND_PICKER,
                 multi=False,
