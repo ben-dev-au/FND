@@ -515,7 +515,7 @@ def prune_removed_files(
     *,
     collection: str,
     live_parent_ids: set[str],
-) -> int:
+) -> set[str]:
     """Delete ``collection``'s chunks for files it no longer contains.
 
     A file leaves a collection by being deleted from disk, excluded by a new
@@ -526,14 +526,41 @@ def prune_removed_files(
 
     ``live_parent_ids`` must be every file the walk yielded, including ones
     skipped as unchanged and ones that failed to extract — anything missing
-    from it is treated as gone. Returns the number of files pruned. The
+    from it is treated as gone. Returns the pruned ``parent_id``s so the
+    caller can say which of them the rest of the index still holds. The
     caller commits.
     """
     index.reload()
     stale = indexed_parent_ids(index, collection) - live_parent_ids
     for parent_id in stale:
         writer.delete_documents_by_query(_scoped_delete_query(index.schema, collection, parent_id))
-    return len(stale)
+    return stale
+
+
+def collections_still_holding(
+    index: Index, parent_ids: set[str], *, excluding: str
+) -> tuple[str, ...]:
+    """Other collections that still index any of ``parent_ids``, sorted.
+
+    A file leaving one collection has not left the corpus: a folder listed
+    under two collections keeps it, so a run's `N removed` is true of the
+    collection and silently false of the index. Costly only in the size of
+    ``parent_ids``, which is the number of files that just left.
+    """
+    if not parent_ids:
+        return ()
+    import tantivy as _tantivy
+
+    schema = index.schema
+    terms = [
+        (_tantivy.Occur.Should, _tantivy.Query.term_query(schema, F_PARENT_ID, p))
+        for p in parent_ids
+    ]
+    agg: dict[str, object] = {
+        "cols": {"terms": {"field": F_COLLECTION, "size": _MAX_INDEXED_FILE_BUCKETS}}
+    }
+    raw = index.searcher().aggregate(_tantivy.Query.boolean_query(terms), agg)
+    return tuple(sorted({str(b["key"]) for b in raw["cols"]["buckets"]} - {excluding}))
 
 
 def _scoped_delete_query(schema: Schema, collection: str, parent_id: str) -> Query:

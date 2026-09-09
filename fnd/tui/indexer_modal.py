@@ -677,6 +677,7 @@ class IndexerScreen(ModalScreen[None]):
             still_flat=ev.still_flat_total,
             failed=ev.failed_total,
             removed=ev.removed_total,
+            still_in=ev.removed_still_in,
         )
         self._sync_action_options(self._fnd_app())
 
@@ -691,13 +692,16 @@ class IndexerScreen(ModalScreen[None]):
         still_flat: int,
         failed: int,
         removed: int = 0,
+        still_in: tuple[str, ...] = (),
     ) -> None:
         try:
             indexed_line = self.query_one("#indexer_indexed_line", Static)
             texture_line = self.query_one("#indexer_texture_line", Static)
         except Exception:
             return
-        indexed_line.update(_format_indexed_line(indexed_newly, indexed_already, failed, removed))
+        indexed_line.update(
+            _format_indexed_line(indexed_newly, indexed_already, failed, removed, still_in)
+        )
         if pdfs_total > 0:
             texture_line.remove_class("hidden")
             texture_line.update(
@@ -749,6 +753,7 @@ class IndexerScreen(ModalScreen[None]):
                     snap.indexed_already,
                     snap.failed,
                     snap.removed,
+                    snap.still_in,
                     compact=True,
                 )
             )
@@ -970,6 +975,7 @@ class ChainStepSummary:
     failed: int
     removed: int
     elapsed_s: float
+    still_in: tuple[str, ...] = ()
 
 
 def _short_name(path: str) -> str:
@@ -980,7 +986,13 @@ def _short_name(path: str) -> str:
 
 
 def _format_indexed_line(
-    newly: int, already: int, failed: int, removed: int = 0, *, compact: bool = False
+    newly: int,
+    already: int,
+    failed: int,
+    removed: int = 0,
+    still_in: tuple[str, ...] = (),
+    *,
+    compact: bool = False,
 ) -> str:
     """Short enough to survive a 75%-wide modal at 80 columns.
 
@@ -994,6 +1006,10 @@ def _format_indexed_line(
         parts.append(f"{removed} removed")
     if failed > 0:
         parts.append(f"[yellow]⚠ {failed} failed[/]")
+    # `N removed` is true of this collection and false of the corpus while a
+    # folder listed under two collections still holds the file.
+    if still_in:
+        parts.append(f"[yellow]⚠ still in {', '.join(still_in)}[/]")
     if compact:
         # The Completed tree indents its rows and CLIPS them, so the full form
         # lost `⚠ N failed` at 60 and 80 columns. Nested under the collection
@@ -1097,6 +1113,7 @@ async def drive_indexer(
                 still_flat=final_event.still_flat_total,
                 failed=final_event.failed_total,
                 removed=final_event.removed_total,
+                still_in=final_event.removed_still_in,
                 elapsed_s=final_event.elapsed_s,
             )
         )

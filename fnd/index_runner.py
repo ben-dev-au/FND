@@ -53,6 +53,7 @@ from fnd.index import (
     _doc_for_chunk,
     _ensure_index,
     _path_parent_id,
+    collections_still_holding,
     commit,
     commit_async,
     indexed_parent_ids,
@@ -110,6 +111,9 @@ class ProgressEvent:
     indexed_newly_total: int = 0
     indexed_already_total: int = 0
     removed_total: int = 0
+    # Collections that still index a file this run removed. `N removed` is
+    # true of the collection and false of the corpus without it.
+    removed_still_in: tuple[str, ...] = ()
     """Files this run dropped from the collection. Known only at the end, so
     it is carried on the terminal event."""
     textured_newly_total: int = 0
@@ -1142,17 +1146,24 @@ async def run_indexer(
         # Skipped on cancel, where the partial walk would read as mass
         # deletion, and on a missing root (offline volume, same trap).
         removed = 0
+        pruned: set[str] = set()
+        still_in: tuple[str, ...] = ()
         if not (cancel is not None and cancel.is_set()):
             live_parent_ids = {_path_parent_id(p) for p, _src in paths}
             live_parent_ids.update(_path_parent_id(p) for p, _reason in scan_blocked)
             if rebuild:
                 # The wipe already removed them; this is the count of the ones
                 # the walk did not bring back.
-                removed = len(held_before - live_parent_ids)
+                pruned = held_before - live_parent_ids
             elif sources_are_enumerable(Path(s.path).expanduser() for s in config.sources):
-                removed = prune_removed_files(
+                pruned = prune_removed_files(
                     index, writer, collection=collection, live_parent_ids=live_parent_ids
                 )
+            removed = len(pruned)
+            # A file leaving this collection has not left the corpus. Asked
+            # before the commit, while the other collections' chunks are still
+            # there to answer.
+            still_in = collections_still_holding(index, pruned, excluding=collection)
         await commit_async(writer)
         writer.wait_merging_threads()
     finally:
@@ -1187,7 +1198,7 @@ async def run_indexer(
     if cancel is not None and cancel.is_set():
         yield _emit("cancelled")
         return
-    yield _emit("done", chunks_written=written, removed_total=removed)
+    yield _emit("done", chunks_written=written, removed_total=removed, removed_still_in=still_in)
 
 
 def run_sync(
