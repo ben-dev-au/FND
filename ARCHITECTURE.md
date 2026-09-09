@@ -107,7 +107,7 @@ into a specific app is deliberately *not* a seam concern — that is
 per-app, owned by `fnd/apps.py` handlers and `fnd/opener.py` dispatch.
 
 macOS is the tested platform; the Linux and Windows arms of these seams
-are early beta (see the README).
+are alpha (see the README).
 
 ## TUI composition
 

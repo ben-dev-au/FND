@@ -3,14 +3,14 @@
 [![CI](https://github.com/ben-dev-au/fnd/actions/workflows/ci.yml/badge.svg)](https://github.com/ben-dev-au/fnd/actions/workflows/ci.yml)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
-[![Platform: macOS | Linux (beta) | Windows (beta)](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20(beta)%20%7C%20Windows%20(beta)-lightgrey.svg)](#platform-support)
+[![Platform: macOS | Linux (alpha) | Windows (alpha)](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20(alpha)%20%7C%20Windows%20(alpha)-lightgrey.svg)](#platform-support)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ben.dev.au)
 
 Fast, free, keyboard-driven document search for macOS. Indexes PDF, DOCX, PPTX,
 MD and 60 different file types, with strong BM25 ranking, in-file navigation, an
 "Open with…" launcher, and a lazygit-style TUI.
 
-> **Linux and Windows are early beta — barely tested.** The code paths exist and
+> **Linux and Windows are alpha — barely tested.** The code paths exist and
 > the automated suite runs against all three OSes in CI, but fnd is developed and
 > used daily on macOS only. Nobody has put real day-to-day use on the Linux
 > build, and the Windows build has had essentially none at all. Expect rough
@@ -27,7 +27,7 @@ as unproven — see the note above.
 ## Requirements
 
 - **macOS** (Apple Silicon or Intel) — the supported, tested platform.
-- **Linux** or **Windows** — early beta, largely untested. See
+- **Linux** or **Windows** — alpha, largely untested. See
   [Platform support](#platform-support).
 - Nothing else to set up. Each install option below brings Python 3.13 with it.
 - A modern terminal is recommended (see [Terminal compatibility](#terminal-compatibility)).
@@ -46,7 +46,7 @@ brew install ben-dev-au/tap/fnd
 once, then run the line above. Apple Silicon installs a prebuilt binary; Intel
 builds from source, which takes a few minutes.
 
-### Option 2: uv or pipx (macOS, or Linux / Windows in beta)
+### Option 2: uv or pipx (macOS, or Linux / Windows in alpha)
 
 ```sh
 uv tool install fndr        # or:  pipx install fndr
@@ -91,7 +91,7 @@ Releases carry build provenance; see [`SECURITY.md`](SECURITY.md) to verify a do
 **macOS is the supported platform.** It is where fnd is developed, run daily, and
 where every feature has been exercised by hand against a real corpus.
 
-**Linux and Windows are early beta.** Platform-specific behaviour is isolated
+**Linux and Windows are alpha.** Platform-specific behaviour is isolated
 behind four seams — where files live, how to open and reveal them, what the OS
 calls things, and how cloud-backed files behave — and each has a Linux and
 Windows implementation. The automated suite runs on `macos-14`, `ubuntu-latest`
@@ -102,7 +102,7 @@ hands-on use.
 
 So read the table below as **what is implemented**, not as what is verified:
 
-| Capability                        | macOS          | Linux (beta)                     | Windows (beta)     |
+| Capability                        | macOS          | Linux (alpha)                    | Windows (alpha)    |
 | --------------------------------- | -------------- | -------------------------------- | ------------------ |
 | Maturity                          | tested in use  | CI only                          | CI only            |
 | Search · indexing · TUI · preview | ✓              | ✓                                | ✓                  |
@@ -260,7 +260,7 @@ been exercised against a real corpus.
 
 In the TUI, `o` opens a hit in its resolved app and `O` opens the **Open with…**
 picker. Built-in handlers ship per OS — **Skim, Preview, PDF Expert** (macOS),
-**Zathura, Okular** (Linux, beta), **SumatraPDF** (Windows, beta), plus
+**Zathura, Okular** (Linux, alpha), **SumatraPDF** (Windows, alpha), plus
 cross-platform **Obsidian, VS Code, System Default** — and each is offered only
 where it's installed. The non-macOS handlers are written from each app's
 documented command line and have not been confirmed against a live install. Where the app and file type allow it, fnd jumps to the matching page,

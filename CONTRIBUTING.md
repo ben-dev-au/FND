@@ -1,7 +1,7 @@
 # Contributing to fnd
 
 fnd is a document-search CLI/TUI developed on macOS; the Linux and Windows
-builds are early beta with almost no real-world use. Bug reports, app-catalogue
+builds are alpha with almost no real-world use. Bug reports, app-catalogue
 entries and focused PRs are welcome, especially from Linux and Windows, where
 the coverage gap is.
 
