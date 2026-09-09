@@ -753,6 +753,13 @@ class EditBar(Horizontal):
        measured at 100 cols the Static wrapped to 4 rows inside a 2-row bar,
        which clipped the field. `text-overflow` only elides an unwrapped line. */
     EditBar > Static.-edit-label {
+        color: $text-muted; width: auto; max-width: 30%;
+        text-wrap: nowrap; text-overflow: ellipsis;
+    }
+    /* Its own field, and capped after the name: eliding one string cut the
+       range out of six rows of nine and rendered a seventh as `1…`, which
+       reads as a different range rather than as a truncated one. */
+    EditBar > Static.-edit-hint {
         color: $text-muted; width: auto; max-width: 40%;
         text-wrap: nowrap; text-overflow: ellipsis;
     }
@@ -783,15 +790,16 @@ class EditBar(Horizontal):
 
     def compose(self) -> ComposeResult:
         yield Static("", classes="-edit-label")
+        yield Static("", classes="-edit-hint")
         yield Input(id="editor_input", placeholder="")
         yield Static("", classes="-edit-error")
 
     def open(self, item: MenuItem, current_value: str) -> None:
         self._item = item
-        label_widget = self.query_one(Static)
         self.query_one(".-edit-error", Static).update("")
-        hint_suffix = f" · {item.hint}" if item.hint else ""
-        label_widget.update(Text(f"Edit {item.label}{hint_suffix} ", style="dim"))
+        self.query_one(".-edit-label", Static).update(Text(f"Edit {item.label}", style="dim"))
+        hint = f" · {item.hint} " if item.hint else " "
+        self.query_one(".-edit-hint", Static).update(Text(hint, style="dim"))
         editor = self.query_one("#editor_input", Input)
         editor.value = current_value
         self.remove_class("-hidden")
