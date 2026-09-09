@@ -131,6 +131,8 @@ async def test_a_tree_row_keeps_its_failed_chip(width: int, tmp_index_dir: Path)
         screen = await _open(app, pilot, ("notes", "papers"))
         rows = ["".join(s.text for s in strip) for strip in screen._compositor.render_strips()]
 
-    indexed = [r for r in rows if "340 already" in r]
+    # Found by its label, not by the tail: `340 already` is now deliberately
+    # the first thing the clip eats, so it cannot be the row's selector.
+    indexed = [r for r in rows if "Files" in r and "12 new" in r]
     assert indexed, "nothing painted"
     assert all("1 failed" in r for r in indexed), indexed

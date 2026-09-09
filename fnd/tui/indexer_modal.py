@@ -1000,22 +1000,24 @@ def _format_indexed_line(
     painted the last count as a bare `2` — on a run that had emptied the
     index. A non-breaking space does not help: Rich wraps on it too.
     """
-    parts = [f"{newly} new", f"{already} already"]
-    # A run that adds nothing and removes three read as "nothing happened".
-    if removed > 0:
-        parts.append(f"{removed} removed")
+    warnings = []
     if failed > 0:
-        parts.append(f"[yellow]⚠ {failed} failed[/]")
+        warnings.append(f"[yellow]⚠ {failed} failed[/]")
     # `N removed` is true of this collection and false of the corpus while a
     # folder listed under two collections still holds the file.
     if still_in:
-        parts.append(f"[yellow]⚠ still in {', '.join(still_in)}[/]")
+        warnings.append(f"[yellow]⚠ still in {', '.join(still_in)}[/]")
+    # A run that adds nothing and removes three read as "nothing happened".
+    changed = [f"{newly} new"] + ([f"{removed} removed"] if removed > 0 else [])
     if compact:
-        # The Completed tree indents its rows and CLIPS them, so the full form
-        # lost `⚠ N failed` at 60 and 80 columns. Nested under the collection
-        # it names, the row does not need the heading as well.
-        return " · ".join(parts)
-    return "[dim]Indexed:[/]     " + "    ".join(parts)
+        # The tree indents these rows and CLIPS them: measured, the body gets
+        # 54 columns at both 60 and 80. Ordered so the clip eats `already`,
+        # the least informative number, before a warning or the label — which
+        # is the only thing telling this row from the PDF one below it.
+        return "[dim]Files[/] " + " · ".join([*warnings, *changed, f"{already} already"])
+    return "[dim]Indexed:[/]     " + "    ".join(
+        [*changed[:1], f"{already} already", *changed[1:], *warnings]
+    )
 
 
 def _format_texturising_line(
@@ -1027,15 +1029,10 @@ def _format_texturising_line(
     CLIPS rather than wrapping — at 80 columns the row lost `⚠ 1 still flat`
     entirely, and hiding the tree's scrollbar had removed the only sign of it.
     """
-    parts = [
-        f"{newly} new",
-        f"{already} already",
-    ]
-    if still_flat > 0:
-        parts.append(f"[yellow]⚠ {still_flat} still flat[/]")
+    flat = [f"[yellow]⚠ {still_flat} still flat[/]"] if still_flat > 0 else []
     if compact:
-        return " · ".join(parts)
-    return "[dim]Texturising:[/] " + "    ".join(parts)
+        return "[dim]PDFs[/] " + " · ".join([*flat, f"{newly} new", f"{already} already"])
+    return "[dim]Texturising:[/] " + "    ".join([f"{newly} new", f"{already} already", *flat])
 
 
 # ---- App-side helpers ---------------------------------------------------
