@@ -38,6 +38,7 @@ from fnd.schema import (
     F_BODY_MD,
     F_BODY_STRUCT,
     F_CHUNK_SEQ,
+    F_COLLECTION,
     F_HEADING_PATH,
     F_KIND,
     F_LINE,
@@ -48,6 +49,7 @@ from fnd.schema import (
     F_PARENT_ID,
     F_PATH,
     F_SLIDE,
+    F_SOURCE_PATH,
     F_TITLE,
     SCHEMA_VERSION,
     build_schema,
@@ -60,6 +62,58 @@ _SNIPPET_CTX = 240
 SourceScope = Mapping[str, Sequence[str]]
 
 _DEFAULT_LIMIT: Final = 10
+
+
+def scope_arms(
+    schema: Schema,
+    collection: str | list[str] | None,
+    source_scope: SourceScope | None,
+) -> list[Query] | None:
+    """The scope as a UNION: whole collections OR a partial one's own sources.
+
+    ``None`` means unscoped. An empty list means an explicitly empty scope,
+    which matches NOTHING — the panel painting "0/5 active" while every
+    collection answered is the dishonesty the partial case was fixed for.
+
+    Every caller that filters by scope builds it here. Two of them once ANDed
+    the two channels instead, so one full collection beside one partial one
+    intersected a collection name with another collection's source path.
+    """
+    import tantivy
+
+    if collection is None and not source_scope:
+        return None
+    cols = (
+        []
+        if collection is None
+        else [collection]
+        if isinstance(collection, str)
+        else list(collection)
+    )
+    arms: list[Query] = [tantivy.Query.term_query(schema, F_COLLECTION, c) for c in cols]
+    for name, sids in (source_scope or {}).items():
+        srcs = [tantivy.Query.term_query(schema, F_SOURCE_PATH, s) for s in sids]
+        if not srcs:
+            continue
+        src_arm = (
+            srcs[0]
+            if len(srcs) == 1
+            else tantivy.Query.boolean_query([(tantivy.Occur.Should, s) for s in srcs])
+        )
+        # ANDed with its OWN collection: that provenance is what a flat source
+        # list threw away, so a folder listed under two collections was in
+        # scope for both.
+        arms.append(
+            tantivy.Query.boolean_query(
+                [
+                    (tantivy.Occur.Must, tantivy.Query.term_query(schema, F_COLLECTION, name)),
+                    (tantivy.Occur.Must, src_arm),
+                ]
+            )
+        )
+    return arms
+
+
 # Content tokens that parse_query can't handle on the body field and which we
 # resolve against the stemmed dictionary ourselves:
 #   _WILDCARD_RE  trailing prefix wildcard ``crypto*``  → BM25 prefix_variants
@@ -398,10 +452,8 @@ class Searcher:
         from fnd.query_filters import extract_filters
         from fnd.schema import (
             F_BODY,
-            F_COLLECTION,
             F_HEADING_PATH,
             F_PATH_TOKENS,
-            F_SOURCE_PATH,
             build_schema,
         )
         from fnd.stopwords import strip_query_stopwords
@@ -425,50 +477,12 @@ class Searcher:
             compiled_tags = compile_tag_filter(tag_filter, schema)
             if compiled_tags is not None:
                 filters.append(compiled_tags)
-        # Scope is a hard filter and a UNION: whole collections (`-c`, or a
-        # fully ticked one) OR the ticked sources of a partly ticked one.
-        # These were two channels ANDed together, so one full collection
-        # beside one partial collection intersected a name with another
-        # collection's source path and matched nothing.
-        scoped = collection is not None or bool(source_scope)
-        if scoped:
-            arms: list[Query] = []
-            cols = (
-                []
-                if collection is None
-                else [collection]
-                if isinstance(collection, str)
-                else list(collection)
-            )
-            arms.extend(tantivy.Query.term_query(schema, F_COLLECTION, c) for c in cols)
-            for name, sids in (source_scope or {}).items():
-                srcs = [tantivy.Query.term_query(schema, F_SOURCE_PATH, s) for s in sids]
-                if not srcs:
-                    continue
-                src_arm = (
-                    srcs[0]
-                    if len(srcs) == 1
-                    else tantivy.Query.boolean_query([(tantivy.Occur.Should, s) for s in srcs])
-                )
-                # ANDed with its OWN collection, which is the provenance the
-                # flat source list threw away: a folder listed under two
-                # collections is otherwise in scope for both.
-                arms.append(
-                    tantivy.Query.boolean_query(
-                        [
-                            (
-                                tantivy.Occur.Must,
-                                tantivy.Query.term_query(schema, F_COLLECTION, name),
-                            ),
-                            (tantivy.Occur.Must, src_arm),
-                        ]
-                    )
-                )
+        # Scope is a hard filter and a UNION; `scope_arms` is the one place
+        # that decides its shape, so the cascade and the facet aggregation
+        # cannot drift from it.
+        arms = scope_arms(schema, collection, source_scope)
+        if arms is not None:
             if not arms:
-                # An explicit empty scope means NOTHING, not everything. The
-                # panel painting "0/5 active" while every collection answered
-                # is the same dishonesty the partial case was fixed for.
-                # Callers meaning "unscoped" pass None.
                 return []
             filters.append(
                 arms[0]

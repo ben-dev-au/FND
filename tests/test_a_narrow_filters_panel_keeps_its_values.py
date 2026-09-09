@@ -86,3 +86,17 @@ def test_a_row_gives_up_its_label_before_its_value() -> None:
         _branch_row("Tags", "1 still filtering, no rows to show", "1 filtering, no rows", 22)
         == "Tags (1 filtering, n…)"
     )
+
+
+def test_a_name_is_elided_rather_than_silently_shortened() -> None:
+    """`research-notes` painted as `research-note` in the sidebar: a
+    collection that does not exist, and indistinguishable from one that could.
+    A label that is user data always carries the marker."""
+    assert _branch_row("research-notes", "2 sources", "2 src", 17, column=0) == "research… (2 src)"
+    assert _branch_row("research-notes", "2 sources", "2 src", 5, column=0) == "r… (2 src)"
+
+
+def test_a_fixed_label_stays_whole_at_the_last_rung() -> None:
+    """The control: `Tags` is four known characters, so it clips rather than
+    turning into `T…` and costing a cell to say nothing."""
+    assert _branch_row("Tags", "none indexed", "0 tags", 6) == "Tags (0 tags)"

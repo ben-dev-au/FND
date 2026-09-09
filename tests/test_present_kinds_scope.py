@@ -35,12 +35,16 @@ def test_present_kinds_by_collection_covers_all_its_sources() -> None:
 
 def test_present_kinds_by_source_excludes_unselected_sources() -> None:
     """A partial selection (only source /a of collection A) must NOT reveal the
-    cpp kind that only exists in the unselected source /b."""
+    cpp kind that only exists in the unselected source /b.
+
+    The scope carries the collection each source came from, so a path listed
+    under two collections stays scoped to the one that was ticked.
+    """
     idx = _index([("A", "/a", "pdf"), ("A", "/b", "cpp"), ("B", "/c", "json")])
-    assert present_kinds(idx, collections=[], source_paths=["/a"]) == {"pdf"}
-    assert present_kinds(idx, collections=[], source_paths=["/a", "/b"]) == {"pdf", "cpp"}
+    assert present_kinds(idx, collections=[], source_scope={"A": ["/a"]}) == {"pdf"}
+    assert present_kinds(idx, collections=[], source_scope={"A": ["/a", "/b"]}) == {"pdf", "cpp"}
 
 
 def test_present_kinds_empty_scope_sees_everything() -> None:
     idx = _index([("A", "/a", "pdf"), ("B", "/c", "json")])
-    assert present_kinds(idx, collections=[], source_paths=[]) == {"pdf", "json"}
+    assert present_kinds(idx, collections=[], source_scope={}) == {"pdf", "json"}

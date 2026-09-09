@@ -70,13 +70,17 @@ FULL = _FullScope()
 _FILTER_LABEL_COLUMN = 17
 
 
-def _branch_row(label: str, value: str, compact: str, budget: int) -> str:
-    """A filter branch row, collapsing toward the VALUE as room runs out.
+def _branch_row(
+    label: str, value: str, compact: str, budget: int, *, column: int = _FILTER_LABEL_COLUMN
+) -> str:
+    """A `label (value)` row, collapsing toward the VALUE as room runs out.
 
     At 62 columns the padded form does not fit and the pane dropped the value,
     so an inert `Tags (none indexed)` painted identically to a live filter.
+    ``column`` aligns a fixed set of rows; 0 suits a label that is user data
+    and has no column to line up with.
     """
-    padded = f"{label:<{_FILTER_LABEL_COLUMN}}({value})"
+    padded = f"{label:<{column}}({value})" if column > 0 else f"{label} ({value})"
     if budget <= 0 or len(padded) <= budget:
         return padded
     for text in (f"{label} ({value})", f"{label} ({compact})"):
@@ -89,7 +93,12 @@ def _branch_row(label: str, value: str, compact: str, budget: int) -> str:
     # drop the label: it is what the row is found by, and a row that silently
     # loses its value paints identically to a different state.
     room = budget - len(label) - 4
-    return f"{label} ({compact[:room]}\u2026)" if room >= 1 else f"{label} ({compact})"
+    if room >= 1:
+        return f"{label} ({compact[:room]}\u2026)"
+    # Nothing fits. A fixed label is short and known, so it stays whole and
+    # the row clips; a name is user data and must never read as a DIFFERENT
+    # name, so it keeps an ellipsis instead.
+    return f"{label} ({compact})" if column > 0 else f"{label[:1]}\u2026 ({compact})"
 
 
 def _tags_summary(
@@ -148,7 +157,11 @@ class ScopeController:
         # (full collections, active sources), so it runs once per scope change
         # instead of on every search.
         self._present_kinds_cache: (
-            tuple[tuple[frozenset[str], frozenset[str]], set[str] | None] | None
+            tuple[
+                tuple[frozenset[str], frozenset[tuple[str, tuple[str, ...]]]],
+                set[str] | None,
+            ]
+            | None
         ) = None
         # Debounce handle for the re-search after a filter toggle (see
         # _commit_filter_change) so a burst of multi-select toggles coalesces.
@@ -474,11 +487,24 @@ class ScopeController:
         self.expanded_collections &= set(names)
         tree.show_root = False
         tree.clear()
+        budget = self._branch_budget(tree)
         for name in names:
             col = cfg.collections[name] if cfg else None
             marker = self.collection_marker(name)
             n_sources = len(col.sources) if col else 0
-            label = f"{marker}  {name}  ({n_sources} source{'s' if n_sources != 1 else ''})"
+            plural = "s" if n_sources != 1 else ""
+            # The NAME was cut with no ellipsis, so `research-notes` painted as
+            # `research-note`: a collection that does not exist, and
+            # indistinguishable from one that could. The marker keeps its place
+            # at the front; the row elides from the name inwards.
+            prefix = f"{marker}  "
+            label = prefix + _branch_row(
+                name,
+                f"{n_sources} source{plural}",
+                f"{n_sources} src",
+                max(0, budget - len(prefix)),
+                column=0,
+            )
             node = tree.root.add(
                 _styled_parent_label(label),
                 data={"kind": "collection", "name": name},
@@ -524,13 +550,15 @@ class ScopeController:
         # of partially-selected collections — so a source toggle recomputes and
         # the filter never reveals kinds from unselected sources of the same
         # collection.
-        key = (frozenset(self.collections), frozenset(self.active_sources))
+        scope = self.source_scope
+        key = (
+            frozenset(self.collections),
+            frozenset((name, tuple(sids)) for name, sids in scope.items()),
+        )
         cached = self._present_kinds_cache
         if cached is not None and cached[0] == key:
             return cached[1]
-        result = present_kinds(
-            index, collections=self.collections, source_paths=self.active_sources
-        )
+        result = present_kinds(index, collections=self.collections, source_scope=scope)
         self._present_kinds_cache = (key, result)
         return result
 

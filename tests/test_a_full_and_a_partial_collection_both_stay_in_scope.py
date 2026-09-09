@@ -79,11 +79,71 @@ def test_a_full_collection_survives_beside_a_partial_one(
 def test_a_partial_selection_does_not_reach_the_other_collections_copy(
     two_collections: Config, tmp_path: Path, tmp_index_dir: Path
 ) -> None:
-    """The provenance a flat path list threw away: Vault is in both configs,
-    so ticking Personal's copy must not pull Work's chunks into scope."""
+    """The provenance a flat path list threw away: Vault is listed in BOTH
+    configs, so ticking Personal's copy must not pull Work's chunks in.
+
+    Asserted on raw chunks, not on files. `search` dedups per file, so the
+    shared note appears once either way and a file-level assertion holds with
+    the collection half of the fix deleted.
+    """
     searcher = Searcher(index_dir=tmp_index_dir)
     vault = str((tmp_path / "Vault").resolve())
 
-    found = _hits(searcher, "markerwork", source_scope={"Personal": [vault]})
+    one = searcher._filtered_raw_hits(
+        "markervault",
+        target=50,
+        collection=None,
+        metadata_filter=None,
+        source_scope={"Personal": [vault]},
+    )
+    both = searcher._filtered_raw_hits(
+        "markervault",
+        target=50,
+        collection=None,
+        metadata_filter=None,
+        source_scope={"Personal": [vault], "Work": [vault]},
+    )
 
-    assert found == set(), found
+    assert len(one) == 1, one
+    assert len(both) == 2, both
+
+
+def test_the_fuzzy_cascade_honours_a_partial_scope(
+    two_collections: Config, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """The cascade is where a mistyped query lands, and it had its own copy of
+    the scope filter that read collection names as source paths."""
+    from fnd.cascade import cascade_search
+
+    searcher = Searcher(index_dir=tmp_index_dir)
+    personaldocs = str((tmp_path / "PersonalDocs").resolve())
+
+    hits = cascade_search(
+        searcher,
+        query="haystakc",
+        threshold=50,
+        limit=50,
+        collection=["Work"],
+        source_scope={"Personal": [personaldocs]},
+    )
+
+    assert {Path(h.path).parent.name for h in hits} == {"Vault", "WorkDocs", "PersonalDocs"}
+
+
+def test_an_explicitly_empty_scope_still_finds_nothing_in_the_cascade(
+    two_collections: Config, tmp_index_dir: Path
+) -> None:
+    """The control: `scope_query` returns None for both "unscoped" and "empty",
+    so the cascade must read the arms itself or it would search everything."""
+    from fnd.cascade import cascade_search
+
+    hits = cascade_search(
+        Searcher(index_dir=tmp_index_dir),
+        query="haystakc",
+        threshold=50,
+        limit=50,
+        collection=[],
+        source_scope=None,
+    )
+
+    assert hits == [], hits

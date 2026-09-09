@@ -31,7 +31,7 @@ import tantivy
 
 from fnd.explain import CascadePassTrace, CascadeTrace
 from fnd.matching import auto_fuzzy_distance
-from fnd.query import Hit, Searcher, SourceScope
+from fnd.query import Hit, Searcher, SourceScope, scope_arms
 
 if TYPE_CHECKING:
     from fnd.tag_query import TagFilter
@@ -206,41 +206,20 @@ def _fuzzy_pass(
     if body is None:
         return []
     subqueries: list[tuple[tantivy.Occur, tantivy.Query]] = list(body)
-    if collection is not None:
-        # Restrict to a collection (or, for the TUI's multi-collection scope,
-        # ANY of a list) on the ``collection`` field. Const-scored to 0 so it's
-        # a pure hard filter — without it a multi-collection OR lets per-
-        # collection IDF skew BM25 between the selected collections (matches
-        # the unscored hard-filter handling in ``query.py::_raw_hits``).
-        #
-        # `is not None`, not truthiness: an empty list is an explicit empty
-        # scope and means NOTHING, which is what ``query.py`` returns for it.
-        # A falsy test skipped the filter entirely, so the pass that recovers
-        # a sparse query answered from every collection while the panel read
-        # "0/N active" — the literal pass was honest and this one was not.
-        cols = [collection] if isinstance(collection, str) else list(collection)
-        if not cols:
+    arms = scope_arms(schema, collection, source_scope)
+    if arms is not None:
+        # An explicitly empty scope matches nothing, which a single query
+        # cannot express: `None` would mean unscoped.
+        if not arms:
             return []
-        col_terms = [tantivy.Query.term_query(schema, "collection", c) for c in cols]
-        col_q = (
-            col_terms[0]
-            if len(col_terms) == 1
-            else tantivy.Query.boolean_query([(tantivy.Occur.Should, t) for t in col_terms])
+        scope = (
+            arms[0]
+            if len(arms) == 1
+            else tantivy.Query.boolean_query([(tantivy.Occur.Should, a) for a in arms])
         )
-        subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(col_q, 0.0)))
-    if source_scope:
-        # Active source-set filter, ANDed within the collection scope above
-        # (not unioned). Const-scored for the same reason as the collection
-        # filter: source-path IDF must not perturb ranking.
-        from fnd.schema import F_SOURCE_PATH
-
-        src_terms = [tantivy.Query.term_query(schema, F_SOURCE_PATH, src) for src in source_scope]
-        src_q = (
-            src_terms[0]
-            if len(src_terms) == 1
-            else tantivy.Query.boolean_query([(tantivy.Occur.Should, t) for t in src_terms])
-        )
-        subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(src_q, 0.0)))
+        # Const-scored: collection and source-path IDF must not perturb the
+        # fuzzy pass's ranking.
+        subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(scope, 0.0)))
     # Apply the same field/range/collection hard filters as the literal pass, so
     # widening to fuzzy can't leak docs the user's qualifiers excluded. The
     # prefix rides on the searcher; ``query`` is the bare lexical string.

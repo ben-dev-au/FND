@@ -111,11 +111,11 @@ class ProgressEvent:
     indexed_newly_total: int = 0
     indexed_already_total: int = 0
     removed_total: int = 0
+    """Files this run dropped from the collection. Known only at the end, so
+    it is carried on the terminal event."""
     # Collections that still index a file this run removed. `N removed` is
     # true of the collection and false of the corpus without it.
     removed_still_in: tuple[str, ...] = ()
-    """Files this run dropped from the collection. Known only at the end, so
-    it is carried on the terminal event."""
     textured_newly_total: int = 0
     textured_already_total: int = 0
     still_flat_total: int = 0

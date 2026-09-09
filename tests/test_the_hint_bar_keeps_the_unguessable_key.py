@@ -28,9 +28,22 @@ def test_the_way_out_is_never_dropped() -> None:
     assert "Esc" in tiny, tiny
 
 
-def test_a_wide_bar_keeps_bar_order() -> None:
-    """The control: ranking decides what is KEPT, never what order it reads
-    in, so keys do not reshuffle as the pane resizes."""
-    wide = render_hint_bar((), _HINTS).fitted(200).plain
+def test_the_survivors_keep_bar_order() -> None:
+    """Ranking decides what is KEPT, never what order it reads in.
 
-    assert wide.index("Choose") < wide.index("Select") < wide.index("Completed"), wide
+    Width 66 is where the two differ: three keys survive and one of them is
+    guessable, so a bar built in ranked order would read
+    `Tab │ y │ ↑↓` instead of `↑↓ │ Tab │ y`. A width that fits everything
+    never reaches the ranking at all and cannot see a reshuffle.
+    """
+    hints = (
+        ("↑↓", "Choose"),
+        ("⏎", "Select"),
+        ("Tab", "Completed"),
+        ("y", "Copy"),
+        ("Esc", "Close"),
+    )
+    bar = render_hint_bar((), hints).fitted(66).plain
+
+    assert "…" in bar, bar
+    assert bar.index("Choose") < bar.index("Completed") < bar.index("Copy"), bar

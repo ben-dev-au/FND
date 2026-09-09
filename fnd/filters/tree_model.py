@@ -132,8 +132,9 @@ def _kind_items(sample: SourceSample | None) -> list[tuple[str, str, str]]:
             # What the source's other rules admit, not the raw disk tally:
             # `Markdown · 3` sat four lines above `Tags (no_index excluded)`
             # and the index held 2.
-            kept = sample.kinds_kept if sample and sample.kinds_kept else None
-            counts = kept if kept is not None else (sample.kinds if sample else {})
+            counts = (
+                sample.kinds_kept if sample and sample.gated else (sample.kinds if sample else {})
+            )
             count = counts.get(kind, 0) or 0
             suffixes = "/".join(spec.suffixes)
             label = f"{spec.label} ({suffixes})"

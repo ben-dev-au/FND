@@ -35,7 +35,11 @@ class SourceSample:
     # Of those, the ones this source's OTHER rules admit. The picker offers
     # every kind present; the count beside a kind must agree with the rule
     # printed under it, which said `no_index excluded` beside a raw `3`.
+    # `gated` separates "no gate ran" from "the gate kept nothing", which an
+    # empty dict alone cannot: a source whose every file is excluded would
+    # otherwise fall back to the disk tally and reprint the lie.
     kinds_kept: dict[str, int] = field(default_factory=dict)
+    gated: bool = False
     tags: dict[str, dict[str, int]] = field(default_factory=dict)
     frontmatter_keys: dict[str, int] = field(default_factory=dict)
     files_seen: int = 0
@@ -84,7 +88,7 @@ def sample_source(
     from fnd.frontmatter import FrontmatterParseError, read_frontmatter_from_file
     from fnd.walk import walk as walk_files
 
-    sample = SourceSample()
+    sample = SourceSample(gated=gate is not None)
     notes = _note_kinds()
     providers = [p for p in TAG_PROVIDERS.values() if p.available_on(sys.platform)]
     deadline = time.monotonic() + budget_s
