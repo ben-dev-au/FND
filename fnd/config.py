@@ -202,6 +202,10 @@ EXCLUDES_PRESETS: dict[str, dict[str, Any]] = {
 # case-insensitively so ``-c All`` works as readily as ``-c all``.
 ALL_COLLECTIONS: Final = "all"
 
+# 200 cost 3-4x the latency of 50 on a 110k-document index (202ms -> 1032ms):
+# the chunk pool is `limit * 10`, so the display cap sizes the tantivy fetch.
+DEFAULT_RESULT_LIMIT: Final = 50
+
 
 def is_all_collections(value: str | None, *, known: Collection[str] = ()) -> bool:
     """Whether ``value`` is the all-collections pseudo-name.
@@ -733,7 +737,7 @@ class Defaults(_ConfigModel):
     under the key (course/algebra). Needs a Rebuild index; tags are read at
     index time."""
 
-    result_limit: int = 200
+    result_limit: int = DEFAULT_RESULT_LIMIT
     """How many result rows a search returns. Lower it to speed up a slow query."""
 
     preview_chunks: int = 5

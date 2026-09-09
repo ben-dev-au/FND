@@ -32,7 +32,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fnd import os_labels
-from fnd.config import ALL_COLLECTIONS, DEFAULT_RANKING_PROFILE, is_all_collections
+from fnd.config import (
+    ALL_COLLECTIONS,
+    DEFAULT_RANKING_PROFILE,
+    DEFAULT_RESULT_LIMIT,
+    is_all_collections,
+)
 from fnd.tui.widgets import COMMIT_KEY
 
 if TYPE_CHECKING:
@@ -872,7 +877,7 @@ def _provider_preferences(_app: FNDApp) -> tuple[MenuItem, ...]:
             hint="1-1000",
             bounds=(1, 1000),
             coerce=int,
-            value_getter=_get_int_default("result_limit", 200),
+            value_getter=_get_int_default("result_limit", DEFAULT_RESULT_LIMIT),
             keywords=("result", "limit"),
         ),
         MenuItem(

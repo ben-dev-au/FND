@@ -43,8 +43,10 @@ def _sample() -> conf.Config:
     return conf.Config(
         # Set explicitly rather than inherited: the autouse conftest rewrites
         # these two defaults, so a fixture reading them proves less.
+        # `result_limit` must differ from the model default or it renders
+        # commented out, which is the opposite of what two tests below assert.
         defaults=conf.Defaults(
-            result_limit=50,
+            result_limit=137,
             fuzzy_enabled=False,
             preview_load_debounce_ms=150,
             preview_prefetch_count=4,
@@ -275,7 +277,7 @@ class TestRoundTrip:
         assert "# preview_chunks = 5" in rendered
 
     def test_a_set_field_renders_live(self) -> None:
-        assert "\nresult_limit = 50" in render_config(_sample())
+        assert "\nresult_limit = 137" in render_config(_sample())
 
     def test_large_numbers_get_digit_separators(self) -> None:
         assert "max_size = 50_000_000" in render_config(_sample())
@@ -444,7 +446,7 @@ class TestRefusingBadOutput:
         original = module.render_config
 
         def lossy(config: object, **kw: object) -> str:
-            return original(config, **kw).replace("result_limit = 50", "")  # type: ignore[arg-type]
+            return original(config, **kw).replace("result_limit = 137", "")  # type: ignore[arg-type]
 
         module.render_config = lossy
         try:

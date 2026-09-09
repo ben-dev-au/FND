@@ -172,6 +172,9 @@ class IndexerScreen(ModalScreen[None]):
         padding: 1 2;
         background: $surface;
     }
+    /* Text that will not fit at 60 columns: shorten the label, wrap it,
+       or elide it. Shorten first; never elide a count or a name, because
+       a clipped number is a different number. */
     #indexer_history_tree {
         height: auto;
         max-height: 10;

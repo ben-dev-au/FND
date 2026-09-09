@@ -381,6 +381,8 @@ class SearchController:
         # toggle paths pop their key, so the map alone cannot tell them apart.
         cfg = self._app._config
         scopeable = bool(cfg and cfg.collections)
+        from fnd.config import DEFAULT_RESULT_LIMIT
+
         cfg_defaults = self._app._config.defaults if self._app._config else None
 
         try:
@@ -406,11 +408,7 @@ class SearchController:
             collection=list(cols) if cols else (None if (scoped_sources or not scopeable) else []),
             active_sources=scoped_sources or None,
             tag_filter=tag_filter,
-            # Was hardcoded at 50 here while `defaults.result_limit` sat in
-            # Preferences doing nothing: a search over 32 matching files
-            # reported 24, and ticking a tag facet surfaced files the
-            # unfiltered query had hidden.
-            limit=cfg_defaults.result_limit if cfg_defaults else 200,
+            limit=cfg_defaults.result_limit if cfg_defaults else DEFAULT_RESULT_LIMIT,
             sections_per_file=cfg_defaults.sections_per_file_max if cfg_defaults else 200,
             sections_score_threshold=(
                 cfg_defaults.sections_score_threshold if cfg_defaults else 0.5

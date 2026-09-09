@@ -53,8 +53,8 @@ async def _groups(app: FNDApp) -> int:
 async def test_more_than_fifty_files_all_come_back(
     tmp_path: Path, tmp_index_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The cap was 50, so 60 matching files reported 50 and called it the total."""
-    cfg = _corpus(tmp_path, monkeypatch, 60, None)
+    """A limit above 50 has to reach the searcher; the cap used to be hardcoded."""
+    cfg = _corpus(tmp_path, monkeypatch, 60, 100)
     build_index(roots=[tmp_path / "notes"], index_dir=tmp_index_dir, collection="notes")
     app = FNDApp(index_dir=tmp_index_dir, config=cfg, collection="notes", initial_query="saffron")
 
