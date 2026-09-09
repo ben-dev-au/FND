@@ -1423,7 +1423,11 @@ class SettingsScreen(Screen[None]):
             self._render_version_status()
 
     def on_screen_resume(self) -> None:
-        """Refresh items when control returns from a popped child screen.
+        """Refresh items when control returns from a popped child screen."""
+        self.refresh_items()
+
+    def refresh_items(self) -> None:
+        """Re-run the provider and repaint every row's trailing value.
 
         A scalar/picker edit only changes one row's value — re-rendering
         in place is enough since the row's ``value_getter`` lambda reads

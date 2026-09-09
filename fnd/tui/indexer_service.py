@@ -525,6 +525,21 @@ class IndexerService:
 
         self._app.run_worker(_run, thread=True, exclusive=True, group=f"reindex-{name}")
 
+    def _refresh_open_settings(self) -> None:
+        """Repaint any settings screen that was left open across the run.
+
+        Backgrounding the modal resumes the settings screen mid-run, so its
+        rows describe a run still in flight and `on_screen_resume` never fires
+        again: a collection kept `⚠ nothing indexed` after its own modal
+        reported Done.
+        """
+        from fnd.tui.settings_screen import SettingsScreen
+
+        for screen in list(getattr(self._app, "screen_stack", [])):
+            if isinstance(screen, SettingsScreen):
+                with contextlib.suppress(Exception):
+                    screen.refresh_items()
+
     def on_reindex_complete(self) -> None:
         """Swap the in-memory ``Searcher`` for a fresh one after a rebuild.
 
@@ -548,5 +563,6 @@ class IndexerService:
         # gone stays offered, and one the run admitted cannot be reached.
         with contextlib.suppress(Exception):
             self._app._scope.refresh_filters_panel()
+        self._refresh_open_settings()
         if self._app._search.current_query:
             self._app._search.run(self._app._search.current_query)
