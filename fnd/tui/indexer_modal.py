@@ -975,9 +975,15 @@ def _format_indexed_line(newly: int, already: int, failed: int, removed: int = 0
 
 
 def _format_texturising_line(newly: int, already: int, still_flat: int) -> str:
+    """Short for the same reason as :func:`_format_indexed_line`.
+
+    These lines also appear inside the Completed tree, which indents them and
+    CLIPS rather than wrapping — at 80 columns the row lost `⚠ 1 still flat`
+    entirely, and hiding the tree's scrollbar had removed the only sign of it.
+    """
     parts = [
-        f"{newly} newly textured",
-        f"{already} already textured",
+        f"{newly} new",
+        f"{already} already",
     ]
     if still_flat > 0:
         parts.append(f"[yellow]⚠ {still_flat} still flat[/]")

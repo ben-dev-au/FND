@@ -89,3 +89,22 @@ async def test_the_vertical_scrollbar_stays(tmp_index_dir: Path) -> None:
         shown = tree.show_vertical_scrollbar
 
     assert shown, "eighteen rows in a ten-row box with nothing to say so"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("width", [80, 110])
+async def test_a_tree_row_keeps_its_still_flat_chip(width: int, tmp_index_dir: Path) -> None:
+    """Hiding the scrollbar removed the only signal that a row had more.
+
+    A Tree clips its labels rather than wrapping them, so `overflow-x: hidden`
+    took away the indicator without shortening what overflows.
+    """
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(width, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open(app, pilot, ("notes", "papers"))
+        rows = ["".join(s.text for s in strip) for strip in screen._compositor.render_strips()]
+
+    texturising = [r for r in rows if "Texturising" in r]
+    assert texturising, "nothing painted"
+    assert all("still flat" in r for r in texturising), texturising

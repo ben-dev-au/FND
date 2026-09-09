@@ -23,8 +23,10 @@ def test_indexed_line_shows_failed_when_nonzero() -> None:
 
 def test_texturising_line_drops_still_flat_when_zero() -> None:
     out = _format_texturising_line(newly=4, already=2, still_flat=0)
-    assert "4 newly textured" in out
-    assert "2 already textured" in out
+    # Shortened with the Indexed line: the long form clipped inside the
+    # Completed tree, which indents and does not wrap.
+    assert "4 new" in out
+    assert "2 already" in out
     assert "still flat" not in out
     assert "⚠" not in out
 
