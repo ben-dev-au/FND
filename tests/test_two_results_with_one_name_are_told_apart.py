@@ -50,3 +50,32 @@ def test_the_same_path_twice_is_not_its_own_rival() -> None:
     names = disambiguated_names(["/v/a/n.md"])
 
     assert names["/v/a/n.md"] == "n.md"
+
+
+def test_it_does_not_grow_quadratically_with_the_result_count() -> None:
+    """`_refresh_status` reaches this from twenty call sites, so a focus change
+    pays it. Measured before the fix: 4.9 ms at 50 rows, 73.5 ms at 200.
+
+    Asserted as a ratio rather than a wall-clock budget: the shape is what
+    regressed, and a threshold in milliseconds would be a flake on a busy box.
+    """
+    import time
+
+    from fnd.tui.results_labels import disambiguated_names
+
+    def paths(n: int) -> list[str]:
+        return [f"/vault/area{i // 5}/sub{i % 5}/index.md" for i in range(n)]
+
+    def best_of(n: int) -> float:
+        ps = paths(n)
+        return min(_timed(disambiguated_names, ps) for _ in range(5))
+
+    def _timed(fn, arg) -> float:
+        t0 = time.perf_counter()
+        fn(arg)
+        return time.perf_counter() - t0
+
+    small, large = best_of(50), best_of(200)
+
+    # Quadratic would be ~16x for a 4x input; the grouped form is near-linear.
+    assert large < small * 8, f"50 rows {small * 1000:.1f} ms, 200 rows {large * 1000:.1f} ms"
