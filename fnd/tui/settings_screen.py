@@ -1518,6 +1518,16 @@ class SettingsScreen(Screen[None]):
         if 0 <= lst.cursor_index < len(lst._items):
             prev_id = lst._items[lst.cursor_index].id
         self._items = new_items
+        # A repaint that lands mid-search must not widen the list back out:
+        # the box still holds the query, so the rows have to keep matching it.
+        if self._filter_active:
+            query = self.query_one("#settings_search", Input).value.strip().lower()
+            if query:
+                filtered, breadcrumbs = self._filter_items(query)
+                self._search_breadcrumbs = breadcrumbs
+                lst.set_items(filtered, cursor_id=prev_id)
+                self._refresh_hint_bar()
+                return
         lst.set_items(list(new_items), cursor_id=prev_id)
         self._refresh_hint_bar()
 
