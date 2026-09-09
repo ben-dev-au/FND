@@ -1409,8 +1409,6 @@ class SettingsScreen(Screen[None]):
         # immediately. ``None`` falls back to a value-only re-render.
         self._provider = provider
         self._filter_active: bool = False
-        # Populated during cross-section search: maps id(item) → breadcrumb.
-        self._search_breadcrumbs: dict[int, tuple[str, ...]] = {}
 
     # ── Layout ──────────────────────────────────────────────────
 
@@ -1526,13 +1524,9 @@ class SettingsScreen(Screen[None]):
         # A repaint that lands mid-search must not widen the list back out:
         # the box still holds the query, so the rows have to keep matching it.
         if self._filter_active:
-            query = self.query_one("#settings_search", Input).value.strip().lower()
-            if query:
-                filtered, breadcrumbs = self._filter_items(query)
-                # The breadcrumbs are what tell `set_items` it is drawing a
-                # search: without them the rows come back with subsection
-                # borders and trailing values, which is a different screen.
-                lst.set_items(filtered, breadcrumbs=breadcrumbs, cursor_id=prev_id)
+            typed = self.query_one("#settings_search", Input).value
+            if typed.strip():
+                self._apply_filter(typed, cursor_id=prev_id)
                 self._refresh_hint_bar()
                 return
         lst.set_items(list(new_items), cursor_id=prev_id)
@@ -1657,30 +1651,36 @@ class SettingsScreen(Screen[None]):
 
     @on(Input.Changed, "#settings_search")
     def _on_search_changed(self, ev: Input.Changed) -> None:
-        q = ev.value.strip().lower()
+        self._apply_filter(ev.value)
+
+    def _apply_filter(self, raw: str, *, cursor_id: str | None = None) -> None:
+        """Show the rows matching ``raw``, or the whole list when it is empty.
+
+        One implementation for typing and for a repaint: a second copy in
+        `refresh_items` kept the rows and dropped the breadcrumbs, which turns
+        a flat result list back into a bordered menu, and destroyed the
+        no-matches placeholder rather than keeping it.
+        """
+        q = raw.strip().lower()
         lst = self.query_one(SettingsList)
         lst._search_query = q
         if not q:
             self._filter_active = False
-            self._search_breadcrumbs = {}
-            lst.set_items(list(self._items))
+            lst.set_items(list(self._items), cursor_id=cursor_id)
             return
         self._filter_active = True
         filtered, breadcrumbs = self._filter_items(q)
-        self._search_breadcrumbs = breadcrumbs
         if not filtered:
             # Empty-state hint — a non-selectable placeholder row so the
             # cursor-skip rule keeps it inert.
             placeholder = MenuItem(
                 id="search.empty",
-                label=(
-                    f"No matches for '{ev.value.strip()}'. Try shorter terms or press Esc to clear."
-                ),
+                label=(f"No matches for '{raw.strip()}'. Try shorter terms or press Esc to clear."),
                 kind=KIND_HEADER,
             )
             lst.set_items([placeholder])
             return
-        lst.set_items(filtered, breadcrumbs=breadcrumbs)
+        lst.set_items(filtered, breadcrumbs=breadcrumbs, cursor_id=cursor_id)
 
     def _filter_items(self, q: str) -> tuple[list[MenuItem], dict[int, tuple[str, ...]]]:
         """Cross-section: walk every section's leaves, score by substring
@@ -1733,7 +1733,6 @@ class SettingsScreen(Screen[None]):
         if search.value:
             search.value = ""
             self._filter_active = False
-            self._search_breadcrumbs = {}
             return
         import contextlib
 

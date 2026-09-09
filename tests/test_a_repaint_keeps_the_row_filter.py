@@ -97,3 +97,25 @@ async def test_an_unfiltered_screen_still_gets_the_new_rows(tmp_index_dir: Path)
         after = len(screen.query_one(SettingsList)._items)
 
     assert after == before, (before, after)
+
+
+@pytest.mark.asyncio
+async def test_a_repaint_keeps_the_no_matches_placeholder(tmp_index_dir: Path) -> None:
+    """The repaint destroyed the placeholder and left a blank panel.
+
+    `_on_search_changed` substitutes a "No matches" row when nothing matches;
+    the repaint's own copy of the filter did not, so it painted nothing at all
+    with the query still in the box.
+    """
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        screen, before = await _filtered(app, pilot, "zzzzq")
+        assert before == 1, "precondition: the placeholder is the only row"
+
+        screen.refresh_items()
+        for _ in range(6):
+            await pilot.pause()
+        rows = ["".join(s.text for s in strip) for strip in screen._compositor.render_strips()]
+
+    assert any("No matches" in r for r in rows), rows[:12]

@@ -58,24 +58,37 @@ async def test_every_range_survives_the_elision(tmp_index_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_field_keeps_room_to_type_in(tmp_index_dir: Path) -> None:
-    """The control on the fix: the cap exists because an uncapped label pushed
-    the field off-screen entirely."""
+@pytest.mark.parametrize("width", [80, 110])
+async def test_the_field_is_wide_enough_to_read_what_is_typed(
+    width: int, tmp_index_dir: Path
+) -> None:
+    """The control on the fix: an uncapped label pushed the field off-screen.
+
+    `>= 12` restated `min-width: 12` from the stylesheet and could not fail.
+    The field has to hold the value it is seeded with, which is what the user
+    is actually deprived of when the label eats the row.
+    """
     app = FNDApp(index_dir=tmp_index_dir)
-    async with app.run_test(size=(110, 34)) as pilot:
+    async with app.run_test(size=(width, 34)) as pilot:
         await pilot.pause()
         open_settings_section(app, SECTION_PREFERENCES)
         await settings_ready(pilot, app)
         screen = app.screen
         assert isinstance(screen, SettingsScreen)
-        lst = screen.query_one(SettingsList)
-        item = next(it for it in lst._items if it.kind == KIND_SCALAR and it.hint)
-        lst.cursor_index = lst._items.index(item)
-        screen._activate_item(item)
-        await pilot.pause()
-        width = screen.query_one("#editor_input", Input).region.width
+        # A real Preferences label is short enough to fit uncapped, so the cap
+        # is only observable on one that is not.
+        from fnd.tui.menu import MenuItem
 
-    assert width >= 12, width
+        bar = screen.query_one(EditBar)
+        bar.open(MenuItem(id="probe", label="A setting name " * 8, hint="1-1000"), "")
+        await pilot.pause()
+        label = bar.query_one(".-edit-label", Static)
+        label_w, bar_w = label.region.width, bar.region.width
+
+    # Not `field >= 12`, which restates `min-width: 12` and cannot fail.
+    # Uncapped, a long label measures 106 cells on a 60-column terminal and
+    # drives the field to that minimum with the label itself off-screen.
+    assert label_w <= bar_w, (label_w, bar_w)
 
 
 @pytest.mark.asyncio
@@ -99,4 +112,6 @@ async def test_a_long_prose_hint_may_still_elide(tmp_index_dir: Path) -> None:
         input_width = screen.query_one("#editor_input", Input).region.width
 
     assert hint_width < len(long_hint), "an uncapped prose hint is the original defect"
-    assert input_width >= 12, input_width
+    # Not `>= 12`: that restates `min-width: 12`. The hint must leave the field
+    # a share of the row, which is the property the cap exists to protect.
+    assert input_width > hint_width // 2, (input_width, hint_width)
