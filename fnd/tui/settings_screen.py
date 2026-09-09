@@ -4232,7 +4232,8 @@ class UpdateAllConfirm(Screen[None]):
             text.append("Order     ", style="dim")
             text.append("Sequential. Each shows its own progress; queue advances on completion.\n")
             yield Static(text, id="confirm_summary")
-            confirm = f"Yes, update all {len(self._names)} collections"
+            n = len(self._names)
+            confirm = "Yes, update it" if n == 1 else f"Yes, update all {n} collections"
             yield OptionList(
                 Option(Text(confirm, style="bold green"), id="yes"),
                 Option("Cancel", id="no"),
@@ -6179,7 +6180,7 @@ class FilterBrowserScreen(Screen[None]):
         """
         from dataclasses import replace as _replace
 
-        if ev.item_id.startswith("beyond:"):
+        if ev.item_id.startswith(("beyond:", "rule:raw:")):
             # No picker can express these, so the row hands over to the one
             # editor that can rather than being a dead end.
             self.action_edit_text()

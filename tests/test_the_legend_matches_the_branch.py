@@ -14,6 +14,7 @@ import pytest
 from fnd.filters import FilterSpec
 from fnd.filters.scan import SourceSample
 from fnd.filters.tree_model import (
+    BOUND_LEGEND,
     IGNORE_LEGEND,
     KINDS_LEGEND,
     LEGEND,
@@ -35,8 +36,11 @@ def test_only_the_branches_that_read_differently_override_it() -> None:
     # `kinds` earned one: the shared line promises ⊘ and the model has no
     # exclude state for a file type, which blocked two hunters outright.
     assert by_id["kinds"].legend == KINDS_LEGEND
+    # These three asserted they needed no wording of their own. Overturned by
+    # measurement: they are radio, so neither ⊘ nor ◐ can occur on them, and
+    # "index ONLY these" is the wrong sentence for "Up to 1 MB".
     for name in ("size", "modified", "created"):
-        assert not by_id[name].legend, f"{name} needs no wording of its own"
+        assert by_id[name].legend == BOUND_LEGEND
 
 
 def test_the_shared_line_no_longer_speaks_for_the_ignore_branch() -> None:

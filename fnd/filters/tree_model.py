@@ -27,6 +27,7 @@ TAG_SOURCE_LABELS: dict[str, str] = {
 }
 
 __all__ = [
+    "BOUND_LEGEND",
     "BRANCHES",
     "IGNORE_LEGEND",
     "KINDS_LEGEND",
@@ -70,6 +71,10 @@ RULES_LEGEND = "⏎  opens a branch, then the editor for a rule in it"
 #: exist, and allow-listed everything else instead — which also drops every
 #: file type added later.
 KINDS_LEGEND = "●  index ONLY these   ◐  some of these   ○  no rule — ⊘ needs a typed rule (t)"
+#: Size and date branches are radio: one bound is in force or none. Neither ⊘
+#: nor ◐ can occur on them, and "index ONLY these" is the wrong sentence for
+#: "Up to 1 MB".
+BOUND_LEGEND = "●  the bound in force   ○  no bound — one at a time"
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +327,7 @@ def spec_branches(
             elsewhere=_elsewhere_note(
                 spec.min_size is not None, "a minimum is set", "file.size" in free
             ),
+            legend=BOUND_LEGEND,
         )
     )
     for field_name, label in (("modified", "Modified within"), ("created", "Created within")):
@@ -351,6 +357,7 @@ def spec_branches(
                     "an upper bound is set",
                     f"file.{field_name}" in free,
                 ),
+                legend=BOUND_LEGEND,
             )
         )
     beyond = _beyond_the_pickers(spec)
@@ -369,7 +376,16 @@ def spec_branches(
         )
     # An actions branch carries no marker, so a collapsed one has to say in
     # its label whether a rule is set.
+    # Decomposition keeps what no picker owns in `raw`, one entry per clause.
+    # Without a row each, appending a second clause left the branch naming the
+    # first and counting "1 set" over however many were typed.
+    raw_rows = tuple(
+        (f"rule:raw:{i}", _rule_label("Typed rule", text))
+        for i, text in enumerate(spec.raw)
+        if (text or "").strip()
+    )
     set_rules = sum(1 for v in (spec.frontmatter, spec.expression) if (v or "").strip())
+    set_rules += len(raw_rows)
     branches.append(
         Branch(
             "rules",
@@ -378,6 +394,7 @@ def spec_branches(
             (
                 ("rule:frontmatter", _rule_label("Frontmatter rule", spec.frontmatter)),
                 ("rule:expression", _rule_label("Custom rule", spec.expression)),
+                *raw_rows,
             ),
             legend=RULES_LEGEND,
         )

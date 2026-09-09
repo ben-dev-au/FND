@@ -47,7 +47,12 @@ def test_a_branch_that_does_reach_it_keeps_the_shared_line() -> None:
     assert "⊘  never index these" in LEGEND
 
 
-@pytest.mark.parametrize("branch_id", ["kinds", "tags"])
+def _all_branch_ids() -> list[str]:
+    sample = SourceSample(kinds={"md": 2}, tags={"frontmatter": {"keep": 1}})
+    return [b.id for b in spec_branches(FilterSpec(), sample)]
+
+
+@pytest.mark.parametrize("branch_id", _all_branch_ids())
 def test_every_legend_shown_is_true_of_its_branch(branch_id: str) -> None:
     """A branch may only advertise ⊘ where a leaf can hold it."""
     branch = _branch(branch_id)
@@ -55,3 +60,13 @@ def test_every_legend_shown_is_true_of_its_branch(branch_id: str) -> None:
     reaches_exclude = branch.mode == "cycle" or any(g.mode == "cycle" for g in branch.groups)
 
     assert ("never index these" in shown) == reaches_exclude, shown
+
+
+@pytest.mark.parametrize("branch_id", _all_branch_ids())
+def test_no_legend_promises_a_partial_state_a_radio_cannot_hold(branch_id: str) -> None:
+    """`◐` means "some of these", which one-row-at-a-time branches cannot reach."""
+    branch = _branch(branch_id)
+    shown = branch.legend or LEGEND
+    holds_many = branch.mode != "radio" or any(g.mode != "radio" for g in branch.groups)
+
+    assert ("◐" in shown) <= holds_many, shown
