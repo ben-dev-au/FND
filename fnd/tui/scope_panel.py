@@ -1266,6 +1266,11 @@ class ScopeController:
         # toggles.
         self._update_collections_panel_node(ev.node)
         self._refresh_collections_panel_title()
+        # The tag and file-type rows are index-derived and scoped to the active
+        # collections, so a scope change changes which of them exist. Without
+        # this the tags living only in the collection just ticked stayed
+        # unfilterable until a search or a restart rebuilt the panel.
+        self.refresh_filters_panel()
         self._app._refresh_status()
         self.persist()
         # Re-run on the same debounce the filter toggles use, so a scope

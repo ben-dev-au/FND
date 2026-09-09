@@ -713,6 +713,23 @@ def _render_header(item: MenuItem, width: int | None) -> Text:
 # ── Bottom edit bar ──────────────────────────────────────────────────
 
 
+def _coercion_error(coerce: Any, hint: str, err: Exception) -> str:
+    """What a rejected value says back.
+
+    `int` and `float` raise about themselves — "invalid literal for int() with
+    base 10" names the coercion function, not the field. The row already
+    carries the range it wants, so say that instead. Anything else raises for
+    its own reasons and keeps its message.
+    """
+    if coerce is int:
+        want = "a whole number"
+    elif coerce is float:
+        want = "a number"
+    else:
+        return f"invalid: {err}"
+    return f"needs {want}" + (f" ({hint})" if hint else "")
+
+
 class EditBar(Horizontal):
     """One-line scalar editor that mounts above the hint bar.
 
@@ -885,7 +902,7 @@ class EditBar(Horizontal):
             # it posted the literal "" and validation rejected the write.
             value: Any = coerce(raw)
         except (TypeError, ValueError) as e:
-            self.show_error(f"invalid: {e}")
+            self.show_error(_coercion_error(coerce, self._item.hint, e))
             return
         self.post_message(self.EditCommitted(self._item, value))
 
