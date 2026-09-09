@@ -81,6 +81,10 @@ class ResultsView:
         query = (self._app._search.current_query or "").strip()
         lines = [f"No results for {query!r}."]
         scope = self._app._scope
+        # Nothing ticked searches nothing, and the message explained the tag
+        # filters while saying nothing about the emptier reason above them.
+        if not scope.collections and not scope.active_sources:
+            lines.append("No collections are in scope — tick one in the Collections panel.")
         n_filters = scope.active_filter_count if scope.has_active_filters else 0
         if n_filters:
             # A place, not a keystroke. Focus is in the query bar when this
