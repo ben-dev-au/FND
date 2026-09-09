@@ -33,21 +33,55 @@ async def _filtered(app: FNDApp, pilot: Any, query: str) -> tuple[SettingsScreen
 
 
 @pytest.mark.asyncio
-async def test_a_repaint_keeps_the_rows_the_query_narrowed_to(tmp_index_dir: Path) -> None:
-    app = FNDApp(index_dir=tmp_index_dir)
+async def test_a_repaint_keeps_the_rows_the_query_narrowed_to(
+    tmp_path: Path, tmp_index_dir: Path, isolated_config_path: Path
+) -> None:
+    """The repaint has to DO something as well as preserve something.
+
+    Asserting only that the count did not widen is satisfied by
+    `refresh_items` returning immediately — every test in this file passed
+    with it stubbed out. The provider is made to report a NEW row first, so a
+    repaint that does nothing cannot show it.
+    """
+    isolated_config_path.write_text(
+        f'[[collections.alpha.sources]]\npath = "{tmp_path.as_posix()}"\n', encoding="utf-8"
+    )
+    from fnd.config import load
+    from fnd.tui.menu import SECTION_COLLECTIONS
+
+    app = FNDApp(index_dir=tmp_index_dir, config=load())
     async with app.run_test(size=(110, 34)) as pilot:
         await pilot.pause()
-        screen, narrowed = await _filtered(app, pilot, "fuzzy")
+        app._config = load()
+        open_settings_section(app, SECTION_COLLECTIONS)
+        await settings_ready(pilot, app)
+        screen = app.screen
+        assert isinstance(screen, SettingsScreen)
+        box = screen.query_one("#settings_search", Input)
+        box.value = "alpha"
+        for _ in range(6):
+            await pilot.pause()
+        narrowed = len(screen.query_one(SettingsList)._items)
         assert narrowed > 0, "precondition: the query matches something"
+        total = len(screen._items)
 
+        isolated_config_path.write_text(
+            f'[[collections.alpha.sources]]\npath = "{tmp_path.as_posix()}"\n'
+            f'\n[[collections.alphabet.sources]]\npath = "{tmp_path.as_posix()}"\n',
+            encoding="utf-8",
+        )
+        app._config = load()
         screen.refresh_items()
         for _ in range(6):
             await pilot.pause()
         after = len(screen.query_one(SettingsList)._items)
+        labels = " ".join(it.label for it in screen.query_one(SettingsList)._items)
         still_typed = screen.query_one("#settings_search", Input).value
 
-    assert still_typed == "fuzzy", "the box kept the query"
-    assert after == narrowed, f"the repaint widened {narrowed} rows to {after}"
+    assert "alphabet" in labels, f"the repaint did not pick up the new row: {labels}"
+    assert still_typed == "alpha", "the box kept the query"
+    assert after < len(screen._items), f"the repaint widened to the whole list ({after})"
+    assert after == narrowed + 1, (narrowed, after, total)
 
 
 @pytest.mark.asyncio
