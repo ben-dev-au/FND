@@ -13,7 +13,7 @@ import pytest
 from textual.widgets import Input, Static
 
 from fnd.tui import FNDApp
-from fnd.tui.menu import KIND_SCALAR, SECTION_PREFERENCES
+from fnd.tui.menu import SECTION_PREFERENCES
 from fnd.tui.settings_screen import (
     EditBar,
     SettingsList,
@@ -63,15 +63,31 @@ async def test_a_valid_number_is_still_accepted(tmp_index_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_non_numeric_row_keeps_its_own_message(tmp_index_dir: Path) -> None:
-    """The control on scope: only int/float rows get the reworded message."""
-    app = FNDApp(index_dir=tmp_index_dir)
-    async with app.run_test(size=(110, 34)) as pilot:
-        await pilot.pause()
-        open_settings_section(app, SECTION_PREFERENCES)
-        await settings_ready(pilot, app)
-        screen = app.screen
-        assert isinstance(screen, SettingsScreen)
-        rows = [it for it in screen.query_one(SettingsList)._items if it.kind == KIND_SCALAR]
+def test_a_non_numeric_row_keeps_its_own_message() -> None:
+    """The control on scope: only int/float rows get the reworded message.
 
-    assert any(it.coerce is int for it in rows), "no int row to speak for"
+    This asserted that an int row exists, which is true whether or not
+    `_coercion_error` does anything — deleting the function left it green.
+    It now puts a non-numeric coercion through the same call.
+    """
+    from fnd.tui.menu import MenuItem
+    from fnd.tui.settings_screen import _coercion_error
+
+    def _picky(_raw: str) -> object:
+        raise ValueError("that is not a colour")
+
+    row = MenuItem(id="probe", label="Accent", hint="a colour name", coerce=_picky)
+    said = _coercion_error(_picky, row.hint, ValueError("that is not a colour"))
+
+    assert "that is not a colour" in said, said
+    assert "whole number" not in said, said
+
+
+def test_a_numeric_row_does_not_keep_pythons_message() -> None:
+    """The other half, so the pair discriminates in both directions."""
+    from fnd.tui.settings_screen import _coercion_error
+
+    said = _coercion_error(int, "1-1000", ValueError("invalid literal for int() with base 10"))
+
+    assert "invalid literal" not in said, said
+    assert "1-1000" in said, said

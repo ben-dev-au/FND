@@ -8,6 +8,10 @@ date.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from fnd.filters import FilterSpec
 from fnd.filters.scan import SourceSample
 from fnd.filters.tree_model import spec_branches
@@ -63,3 +67,38 @@ def test_a_spec_with_no_raw_clause_says_nothing_extra() -> None:
     rows = _rows(FilterSpec(expression="file.size < 500000"))
 
     assert "Set in the text form" not in rows, rows
+
+
+@pytest.mark.asyncio
+async def test_enter_on_a_typed_rule_opens_the_text_form() -> None:
+    """The routing, driven rather than asserted on an id prefix.
+
+    `62a9144` widened `_on_action`'s prefix tuple to admit `rule:raw:`. Revert
+    that tuple and every test still passed while Enter on a Typed rule became a
+    dead key — the row's id was checked, the behaviour was not.
+    """
+    from fnd.tui import FNDApp
+    from fnd.tui.settings_screen import FilterBrowserScreen, FilterTextScreen
+    from fnd.tui.widgets.toggle_tree import ToggleTree
+
+    app = FNDApp(index_dir=Path("/nonexistent-index"))
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        screen = FilterBrowserScreen(
+            title="Index filters",
+            spec=FilterSpec(expression="file.size < 500000", raw=("file.size > 10",)),
+            gitignore=True,
+            fndignore=True,
+            sample_provider=lambda: _SAMPLE,
+            on_save=lambda *_a: None,
+        )
+        app.push_screen(screen)
+        for _ in range(25):
+            await pilot.pause()
+        tree = screen.query_one("#filter_tree", ToggleTree)
+        screen.post_message(ToggleTree.ActionSelected(tree, "rule:raw:0"))
+        for _ in range(10):
+            await pilot.pause()
+        landed = app.screen
+
+    assert isinstance(landed, FilterTextScreen), type(landed).__name__
