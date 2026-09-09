@@ -480,6 +480,10 @@ def unreadable_roots(roots: Iterable[Path]) -> list[Path]:
     out: list[Path] = []
     for root in roots:
         try:
+            # `walk` yields a file root directly (see fnd/walk.py), so there is
+            # nothing to list and stat'ing it is the whole question.
+            if root.is_file():
+                continue
             with os.scandir(root) as entries:
                 next(iter(entries), None)
         except OSError:

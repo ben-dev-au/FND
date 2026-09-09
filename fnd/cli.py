@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
 
@@ -821,13 +821,26 @@ def collection_reindex(
         typer.echo(f"indexing {len(targets)} collections: {', '.join(targets)}")
     total = 0
     for target in targets:
+        # A run that could not read a source KEPT its files rather than
+        # pruning them, and saying nothing about that reads like a healthy run.
+        blocked: list[str] = []
+
+        def _watch(ev: Any, blocked: list[str] = blocked) -> None:
+            if ev.kind == "done" and ev.unreadable_sources:
+                blocked.extend(ev.unreadable_sources)
+
         written = run_sync(
             config=cfg.collection(target),
             collection=target,
             index_dir=default_index_dir(),
             rebuild=rebuild,
+            progress_callback=_watch,
         )
         typer.echo(f"indexed {written} chunks for collection {target}")
+        for root in blocked:
+            typer.echo(
+                f"warning: could not read {root}; kept existing chunks for {target}", err=True
+            )
         total += written
     if len(targets) > 1:
         typer.echo(f"indexed {total} chunks across {len(targets)} collections")

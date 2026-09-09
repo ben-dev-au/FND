@@ -15,6 +15,7 @@ import os
 import stat
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -77,51 +78,100 @@ def _indexed_paths(index_dir: Path, collection: str) -> set[str]:
     return indexed_parent_ids(index, collection)
 
 
-def test_a_run_over_an_unreadable_source_keeps_the_index(
-    tmp_path: Path, tmp_index_dir: Path
-) -> None:
-    """The hunter's scenario end to end: 2 documents in, mode 000, run again,
-    2 documents still there. The guard is only worth having if the run obeys it.
-    """
+def _seed(tmp_path: Path, index_dir: Path, name: str) -> tuple[Any, Path]:
     from fnd.config import CollectionConfig, SourceConfig
-    from fnd.index import build_index_from_config
+    from fnd.index_runner import run_sync
 
-    root = tmp_path / "vault"
+    root = tmp_path / name
     root.mkdir()
-    for name in ("a.md", "b.md"):
-        (root / name).write_text(f"# {name}\n\nhaystack\n", encoding="utf-8")
+    for leaf in ("a.md", "b.md"):
+        (root / leaf).write_text(f"# {leaf}\n\nhaystack\n", encoding="utf-8")
     config = CollectionConfig(sources=[SourceConfig(path=root)])
-    build_index_from_config(config=config, collection="vault", index_dir=tmp_index_dir)
-    before = _indexed_paths(tmp_index_dir, "vault")
-    assert len(before) == 2, before
+    run_sync(config=config, collection=name, index_dir=index_dir)
+    assert len(_indexed_paths(index_dir, name)) == 2
+    return config, root
+
+
+@pytest.mark.parametrize("rebuild", [False, True])
+def test_a_run_over_an_unreadable_source_keeps_the_index(
+    rebuild: bool, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """Through `run_sync`, the path the TUI and the CLI take.
+
+    Both routes, because a rebuild never reaches the prune: it wipes up front
+    and re-adds whatever the walk yields, so an unreadable source empties the
+    collection by a different door. Adding or editing a source rebuilds.
+    """
+    from fnd.index_runner import run_sync
+
+    name = f"vault_{int(rebuild)}"
+    config, root = _seed(tmp_path, tmp_index_dir, name)
+    before = _indexed_paths(tmp_index_dir, name)
 
     os.chmod(root, 0o000)
     try:
         if os.access(root, os.R_OK):
             pytest.skip("running as a user that bypasses directory permissions")
-        build_index_from_config(config=config, collection="vault", index_dir=tmp_index_dir)
-        after = _indexed_paths(tmp_index_dir, "vault")
+        run_sync(config=config, collection=name, index_dir=tmp_index_dir, rebuild=rebuild)
+        after = _indexed_paths(tmp_index_dir, name)
     finally:
         os.chmod(root, stat.S_IRWXU)
 
     assert after == before, f"the run emptied the collection: {before} -> {after}"
 
 
-def test_a_run_over_a_readable_source_still_prunes(tmp_path: Path, tmp_index_dir: Path) -> None:
-    """The control: a guard that never lets the prune run would leave deleted
-    files searchable forever."""
-    from fnd.config import CollectionConfig, SourceConfig
-    from fnd.index import build_index_from_config
+@pytest.mark.parametrize("rebuild", [False, True])
+def test_the_run_says_which_source_it_could_not_read(
+    rebuild: bool, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """Keeping the files silently reads exactly like a healthy run."""
+    from fnd.index_runner import ProgressEvent, run_sync
 
-    root = tmp_path / "vault2"
-    root.mkdir()
-    for name in ("a.md", "b.md"):
-        (root / name).write_text(f"# {name}\n\nhaystack\n", encoding="utf-8")
-    config = CollectionConfig(sources=[SourceConfig(path=root)])
-    build_index_from_config(config=config, collection="vault2", index_dir=tmp_index_dir)
-    assert len(_indexed_paths(tmp_index_dir, "vault2")) == 2
+    name = f"spoken_{int(rebuild)}"
+    config, root = _seed(tmp_path, tmp_index_dir, name)
+    seen: list[ProgressEvent] = []
+
+    os.chmod(root, 0o000)
+    try:
+        if os.access(root, os.R_OK):
+            pytest.skip("running as a user that bypasses directory permissions")
+        run_sync(
+            config=config,
+            collection=name,
+            index_dir=tmp_index_dir,
+            rebuild=rebuild,
+            progress_callback=seen.append,
+        )
+    finally:
+        os.chmod(root, stat.S_IRWXU)
+
+    done = [e for e in seen if e.kind == "done"]
+    assert done, [e.kind for e in seen]
+    assert done[-1].unreadable_sources == (str(root),), done[-1].unreadable_sources
+
+
+@pytest.mark.parametrize("rebuild", [False, True])
+def test_a_healthy_run_still_prunes_and_stays_quiet(
+    rebuild: bool, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """The control, and the one that matters most: a guard that never lets the
+    prune run leaves deleted files searchable for ever, and a warning on every
+    run is one nobody reads."""
+    from fnd.index_runner import ProgressEvent, run_sync
+
+    name = f"healthy_{int(rebuild)}"
+    config, root = _seed(tmp_path, tmp_index_dir, name)
+    seen: list[ProgressEvent] = []
 
     (root / "b.md").unlink()
-    build_index_from_config(config=config, collection="vault2", index_dir=tmp_index_dir)
+    run_sync(
+        config=config,
+        collection=name,
+        index_dir=tmp_index_dir,
+        rebuild=rebuild,
+        progress_callback=seen.append,
+    )
 
-    assert len(_indexed_paths(tmp_index_dir, "vault2")) == 1
+    assert len(_indexed_paths(tmp_index_dir, name)) == 1
+    done = [e for e in seen if e.kind == "done"]
+    assert done[-1].unreadable_sources == (), done[-1].unreadable_sources

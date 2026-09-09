@@ -678,6 +678,7 @@ class IndexerScreen(ModalScreen[None]):
             failed=ev.failed_total,
             removed=ev.removed_total,
             still_in=ev.removed_still_in,
+            unreadable=ev.unreadable_sources,
         )
         self._sync_action_options(self._fnd_app())
 
@@ -693,6 +694,7 @@ class IndexerScreen(ModalScreen[None]):
         failed: int,
         removed: int = 0,
         still_in: tuple[str, ...] = (),
+        unreadable: tuple[str, ...] = (),
     ) -> None:
         try:
             indexed_line = self.query_one("#indexer_indexed_line", Static)
@@ -700,7 +702,9 @@ class IndexerScreen(ModalScreen[None]):
         except Exception:
             return
         indexed_line.update(
-            _format_indexed_line(indexed_newly, indexed_already, failed, removed, still_in)
+            _format_indexed_line(
+                indexed_newly, indexed_already, failed, removed, still_in, unreadable
+            )
         )
         if pdfs_total > 0:
             texture_line.remove_class("hidden")
@@ -754,6 +758,7 @@ class IndexerScreen(ModalScreen[None]):
                     snap.failed,
                     snap.removed,
                     snap.still_in,
+                    snap.unreadable,
                     compact=True,
                 )
             )
@@ -976,6 +981,7 @@ class ChainStepSummary:
     removed: int
     elapsed_s: float
     still_in: tuple[str, ...] = ()
+    unreadable: tuple[str, ...] = ()
 
 
 def _short_name(path: str) -> str:
@@ -991,6 +997,7 @@ def _format_indexed_line(
     failed: int,
     removed: int = 0,
     still_in: tuple[str, ...] = (),
+    unreadable: tuple[str, ...] = (),
     *,
     compact: bool = False,
 ) -> str:
@@ -1001,6 +1008,11 @@ def _format_indexed_line(
     index. A non-breaking space does not help: Rich wraps on it too.
     """
     warnings = []
+    # First, because it changes what every other number on the line means: a
+    # source the run could not list contributed nothing and was NOT pruned.
+    if unreadable:
+        n = len(unreadable)
+        warnings.append(f"[yellow]⚠ {n} source{'s' if n != 1 else ''} unreadable[/]")
     if failed > 0:
         warnings.append(f"[yellow]⚠ {failed} failed[/]")
     # `N removed` is true of this collection and false of the corpus while a
@@ -1111,6 +1123,7 @@ async def drive_indexer(
                 failed=final_event.failed_total,
                 removed=final_event.removed_total,
                 still_in=final_event.removed_still_in,
+                unreadable=final_event.unreadable_sources,
                 elapsed_s=final_event.elapsed_s,
             )
         )

@@ -59,7 +59,7 @@ from fnd.index import (
     indexed_parent_ids,
     prune_removed_files,
     read_file_metadata,
-    sources_are_enumerable,
+    unreadable_roots,
 )
 from fnd.schema import F_COLLECTION
 from fnd.walk import walk_sources
@@ -116,6 +116,9 @@ class ProgressEvent:
     # Collections that still index a file this run removed. `N removed` is
     # true of the collection and false of the corpus without it.
     removed_still_in: tuple[str, ...] = ()
+    # Sources the run could not list. Their files were KEPT rather than pruned,
+    # and a run that stayed silent about it read like a healthy one.
+    unreadable_sources: tuple[str, ...] = ()
     textured_newly_total: int = 0
     textured_already_total: int = 0
     still_flat_total: int = 0
@@ -865,7 +868,7 @@ async def run_indexer(
     _walked = {p for p, _src in paths}
     scan_blocked = [(p, reason) for p, reason in scan_blocked if p not in _walked]
 
-    def _prepare() -> tuple[dict[str, int], int, int, Any, Any, Any, set[str]]:
+    def _prepare() -> tuple[dict[str, int], int, int, Any, Any, Any, set[str], list[Path]]:
         local_paths = paths
         local_sizes: dict[str, int] = {}
         for p, _src in local_paths:
@@ -875,10 +878,15 @@ async def run_indexer(
                 local_sizes[str(p)] = 0
         local_pdfs_total = sum(1 for p, _src in local_paths if p.suffix.lower() == ".pdf")
         local_bytes_total = sum(local_sizes.values())
-        local_index = _ensure_index(index_dir, force=rebuild)
+        # A rebuild that cannot read its sources must not wipe: the walk would
+        # bring nothing back and the collection would be emptied by a route
+        # the prune guard never sees. Asked BEFORE `_ensure_index(force=)`,
+        # which is itself the wipe for a whole-index rebuild.
+        local_blocked = unreadable_roots(Path(s.path).expanduser() for s in config.sources)
+        local_index = _ensure_index(index_dir, force=rebuild and not local_blocked)
         local_writer = local_index.writer(heap_size=_WRITER_HEAP)
         local_held: set[str] = set()
-        if rebuild:
+        if rebuild and not local_blocked:
             # What the collection held before the wipe. A rebuild deletes and
             # re-adds, so the prune pass never runs and nothing counted what
             # left: removing a source reported its departures as arrivals.
@@ -891,7 +899,7 @@ async def run_indexer(
         # process this run are deleted+re-added, never skipped later, so the
         # start-of-run snapshot is the correct "already indexed?" oracle.
         local_prior_searcher = None
-        if not rebuild:
+        if not rebuild or local_blocked:
             with contextlib.suppress(Exception):
                 local_prior_searcher = local_index.searcher()
         return (
@@ -902,6 +910,7 @@ async def run_indexer(
             local_writer,
             local_prior_searcher,
             local_held,
+            local_blocked,
         )
 
     try:
@@ -913,6 +922,7 @@ async def run_indexer(
             writer,
             prior_searcher,
             held_before,
+            blocked_roots,
         ) = await asyncio.to_thread(_prepare)
     except Exception as e:
         # Without this backstop a LockBusy (concurrent indexer on the
@@ -1148,6 +1158,7 @@ async def run_indexer(
         removed = 0
         pruned: set[str] = set()
         still_in: tuple[str, ...] = ()
+        unreadable: tuple[str, ...] = ()
         if not (cancel is not None and cancel.is_set()):
             live_parent_ids = {_path_parent_id(p) for p, _src in paths}
             live_parent_ids.update(_path_parent_id(p) for p, _reason in scan_blocked)
@@ -1155,11 +1166,14 @@ async def run_indexer(
                 # The wipe already removed them; this is the count of the ones
                 # the walk did not bring back.
                 pruned = held_before - live_parent_ids
-            elif sources_are_enumerable(Path(s.path).expanduser() for s in config.sources):
+            elif not blocked_roots:
                 pruned = prune_removed_files(
                     index, writer, collection=collection, live_parent_ids=live_parent_ids
                 )
             removed = len(pruned)
+            if blocked_roots:
+                # True of a refused wipe and a refused prune alike.
+                unreadable = tuple(sorted(str(r) for r in blocked_roots))
             # A file leaving this collection has not left the corpus. Asked
             # before the commit, while the other collections' chunks are still
             # there to answer.
@@ -1198,7 +1212,13 @@ async def run_indexer(
     if cancel is not None and cancel.is_set():
         yield _emit("cancelled")
         return
-    yield _emit("done", chunks_written=written, removed_total=removed, removed_still_in=still_in)
+    yield _emit(
+        "done",
+        chunks_written=written,
+        removed_total=removed,
+        removed_still_in=still_in,
+        unreadable_sources=unreadable,
+    )
 
 
 def run_sync(

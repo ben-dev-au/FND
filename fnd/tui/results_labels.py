@@ -7,6 +7,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from rich.cells import cell_len
+
 from fnd.display_text import sanitise_display_text
 
 if TYPE_CHECKING:
@@ -373,17 +375,26 @@ def disambiguated_names(paths: Sequence[str]) -> dict[str, str]:
 
 
 def is_stale(g: FileGroup) -> bool:
-    """Whether the index's copy of this file still matches the disk.
+    """Whether the index's copy of this file no longer matches the disk.
 
-    Gone or edited since it was indexed. `read_file_times` returns zeros for a
-    file that has vanished, which is the same answer either way: what the
-    preview would show is not what the file says.
+    Three answers, not two. Gone and edited both mean the preview would show
+    something the file does not say. A file we cannot STAT is unknown, and
+    marking unknown as changed is the same conflation that let an unreadable
+    source read as an empty one.
+
+    ``!=``, not ``>``: a file restored from a backup carries an older mtime and
+    is just as stale. Matches `index_runner._should_reprocess`, which is what
+    decides whether the indexer would re-read it.
     """
-    from fnd.fsmeta import read_file_times
-
     indexed = max((h.mtime for h in g.hits), default=0)
-    on_disk = read_file_times(Path(g.path)).mtime
-    return on_disk == 0 or (indexed > 0 and on_disk > indexed)
+    try:
+        on_disk = int(Path(g.path).stat().st_mtime)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        # Cannot look. Saying nothing beats saying the wrong thing.
+        return False
+    return indexed > 0 and on_disk != indexed
 
 
 def _format_file_label(
@@ -395,8 +406,9 @@ def _format_file_label(
     stale: bool = False,
 ) -> Any:
     name = display_name or Path(g.path).name
+    # Charged BEFORE eliding: added afterwards it pushed the row 2 cells past
+    # its budget, and the cells it took were the suffix the elision keeps.
+    marker = f"{_STALE_GLYPH} " if stale else ""
     if name_budget > 0:
-        name = _elide_middle_keep_suffix(name, name_budget)
-    if stale:
-        name = f"{_STALE_GLYPH} {name}"
-    return _build_label(name, g.top_score, max_score)
+        name = _elide_middle_keep_suffix(name, max(1, name_budget - cell_len(marker)))
+    return _build_label(f"{marker}{name}", g.top_score, max_score)

@@ -21,6 +21,7 @@ from fnd.index import build_index
 from fnd.query import FileGroup, Hit
 from fnd.tui import FNDApp
 from fnd.tui.results_labels import is_stale
+from tests._pilot_wait import wait_until
 
 
 def _group(path: Path, indexed_mtime: int) -> FileGroup:
@@ -67,7 +68,9 @@ def test_an_unchanged_file_is_not_stale(tmp_path: Path) -> None:
     """The control: marking a live row would train the user to ignore it."""
     live = tmp_path / "same.md"
     live.write_text("now\n", encoding="utf-8")
-    indexed_now = int(live.stat().st_mtime) + 5
+    # The mtime the indexer would have stored, which is the file's own. A
+    # future value only read as "unchanged" while the comparison was `>`.
+    indexed_now = int(live.stat().st_mtime)
 
     assert is_stale(_group(live, indexed_now)) is False
 
@@ -102,8 +105,14 @@ async def test_the_row_of_a_deleted_file_is_marked(
         index_dir=tmp_index_dir, config=indexed, collection="notes", initial_query="snickersnee"
     )
     async with app.run_test(size=(110, 30)) as pilot:
-        for _ in range(30):
-            await pilot.pause()
+        # Gated on the rows, not a tick count: counted pauses degrade to no-ops
+        # under load and the assertion then passes on an empty tree.
+        await wait_until(
+            pilot,
+            lambda: len(app.query_one("#results_pane", Tree).root.children) == 2,
+            timeout=30.0,
+            message="the search never produced both rows",
+        )
         tree = app.query_one("#results_pane", Tree)
         labels = {str(node.label) for node in tree.root.children}
 
@@ -113,3 +122,39 @@ async def test_the_row_of_a_deleted_file_is_marked(
     assert kept, labels
     assert all("⚠" in label for label in gone), gone
     assert not any("⚠" in label for label in kept), kept
+
+
+def test_a_file_we_cannot_stat_is_not_claimed_stale(tmp_path: Path) -> None:
+    """Unknown is not changed. An intact file under an unreadable directory was
+    marked "gone or edited", which is the conflation this batch removed from
+    the prune guard."""
+    import os
+    import stat as stat_mod
+
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    live = locked / "note.md"
+    live.write_text("now\n", encoding="utf-8")
+    indexed = int(live.stat().st_mtime)
+    os.chmod(locked, 0o000)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("running as a user that bypasses directory permissions")
+        answer = is_stale(_group(live, indexed))
+    finally:
+        os.chmod(locked, stat_mod.S_IRWXU)
+
+    assert answer is False
+
+
+def test_a_file_restored_from_backup_is_stale(tmp_path: Path) -> None:
+    """An OLDER mtime is just as stale as a newer one, and `>` missed it.
+    `index_runner._should_reprocess` uses `!=` for the same reason."""
+    import os
+
+    live = tmp_path / "restored.md"
+    live.write_text("old content\n", encoding="utf-8")
+    indexed = int(live.stat().st_mtime) + 3600
+    os.utime(live, (indexed - 7200, indexed - 7200))
+
+    assert is_stale(_group(live, indexed)) is True
