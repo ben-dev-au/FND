@@ -29,7 +29,7 @@ _CONTEXTUAL = (
     ("c", "Clear"),
     ("^s", "Save"),
     ("y", "Copy"),
-    ("Esc/←", "Discard"),
+    ("Esc/←", "Leave"),
 )
 
 
@@ -42,7 +42,7 @@ def test_a_trimmed_bar_keeps_the_way_out() -> None:
     bar = _HintBar((), _CONTEXTUAL)
     trimmed = bar.fitted(60).plain
 
-    assert "Discard" in trimmed, trimmed
+    assert "Leave" in trimmed, trimmed
     assert "Save" in trimmed, trimmed
     assert "Copy" not in trimmed, "something optional had to go instead"
 
@@ -82,7 +82,7 @@ async def test_the_summary_stops_repeating_the_row_above(tmp_index_dir: Path) ->
     summary = next(line for line in rows if "skipping hidden files" in line)
     assert ".gitignore, .fndignore" in branch, branch
     assert ".gitignore" not in summary, summary
-    assert "Discard" in rows[-1], rows[-1]
+    assert "Esc" in rows[-1], rows[-1]
 
 
 class TestTheHeadNamesWhatTheExpressionCannot:
@@ -175,7 +175,7 @@ class TestTheElisionMarksWhereTheCutIs:
         trimmed = _HintBar((), _CONTEXTUAL).fitted(50).plain
 
         assert "Save" in trimmed, trimmed
-        assert "Discard" in trimmed, trimmed
+        assert "Leave" in trimmed, trimmed
         assert "Copy" not in trimmed, trimmed
 
 

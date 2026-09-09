@@ -108,8 +108,10 @@ async def test_a_form_that_can_save_still_offers_it(
         ids = _option_ids(prompt)
         highlighted = prompt.query_one("#confirm_list", OptionList).highlighted
 
-    assert ids[0] == "save"
-    assert highlighted == 0
+    assert ids[0] == "save", "the save must still be OFFERED, which is the point"
+    # `7b3c59e` moved the landing off Save: this prompt is reached by a key the
+    # footer offers as a way out, so Enter must not write.
+    assert ids[highlighted or 0] == "stay", ids
 
 
 @pytest.mark.asyncio

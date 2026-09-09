@@ -102,7 +102,16 @@ async def test_discard_leaves_and_drops_the_edit(tmp_path: Path) -> None:
         form._fields["excludes_custom"] = "build/**"
         await pilot.press("escape")
         await pilot.pause()
-        await pilot.press("down", "enter")  # Discard changes
+        # Reach Discard from wherever the prompt lands, and say so: `7b3c59e`
+        # moved the landing to the row that changes nothing, and a relative
+        # `down` from the old landing silently stopped reaching Discard.
+        from textual.widgets import OptionList
+
+        prompt = app.screen
+        assert isinstance(prompt, UnsavedChangesScreen)
+        options = prompt.query_one("#confirm_list", OptionList)
+        options.highlighted = next(i for i, o in enumerate(options._options) if o.id == "discard")
+        await pilot.press("enter")
         for _ in range(4):
             await pilot.pause()
         gone = not isinstance(app.screen, (SourceFormScreen, UnsavedChangesScreen))
