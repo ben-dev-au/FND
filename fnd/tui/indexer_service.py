@@ -543,5 +543,10 @@ class IndexerService:
         # A rebuild may have added a new file-type kind — drop the present-kinds
         # cache so the file-type filter recomputes on the next panel refresh.
         self._app._scope.invalidate_present_kinds_cache()
+        # And take that refresh now. The facets are index-derived, so without
+        # this the pane keeps the launch snapshot: a tag whose files have all
+        # gone stays offered, and one the run admitted cannot be reached.
+        with contextlib.suppress(Exception):
+            self._app._scope.refresh_filters_panel()
         if self._app._search.current_query:
             self._app._search.run(self._app._search.current_query)
