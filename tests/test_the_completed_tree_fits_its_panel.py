@@ -27,7 +27,7 @@ def _summary(collection: str) -> ChainStepSummary:
         textured_newly=2,
         textured_already=1,
         still_flat=1,
-        failed=0,
+        failed=1,
         removed=3,
         elapsed_s=1.0,
     )
@@ -55,9 +55,13 @@ async def test_a_long_row_is_not_cut_mid_word(tmp_index_dir: Path) -> None:
         screen = await _open(app, pilot, ("notes", "papers", "research", "wine", "archive", "dpc"))
         rows = ["".join(s.text for s in strip) for strip in screen._compositor.render_strips()]
 
-    texturising = [r for r in rows if "Texturising" in r]
+    # The tree row is compact: nested under the collection it names, it drops
+    # the heading the modal's own line carries.
+    texturising = [r for r in rows if "still flat" in r or ("already" in r and "new" in r)]
     assert texturising, "nothing painted"
-    assert all("still flat" in r for r in texturising), texturising
+    assert all("still flat" in r for r in texturising if "flat" in r or "1 already" in r), (
+        texturising
+    )
 
 
 @pytest.mark.asyncio
@@ -105,6 +109,28 @@ async def test_a_tree_row_keeps_its_still_flat_chip(width: int, tmp_index_dir: P
         screen = await _open(app, pilot, ("notes", "papers"))
         rows = ["".join(s.text for s in strip) for strip in screen._compositor.render_strips()]
 
-    texturising = [r for r in rows if "Texturising" in r]
+    # The tree row is compact: nested under the collection it names, it drops
+    # the heading the modal's own line carries.
+    texturising = [r for r in rows if "still flat" in r or ("already" in r and "new" in r)]
     assert texturising, "nothing painted"
-    assert all("still flat" in r for r in texturising), texturising
+    assert all("still flat" in r for r in texturising if "flat" in r or "1 already" in r), (
+        texturising
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("width", [60, 80, 110])
+async def test_a_tree_row_keeps_its_failed_chip(width: int, tmp_index_dir: Path) -> None:
+    """`16e2f6a` fixed the live status line, which wraps, and left the archived
+    copy in the tree, which clips. A failure count is the last thing that may
+    silently vanish.
+    """
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(width, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open(app, pilot, ("notes", "papers"))
+        rows = ["".join(s.text for s in strip) for strip in screen._compositor.render_strips()]
+
+    indexed = [r for r in rows if "340 already" in r]
+    assert indexed, "nothing painted"
+    assert all("1 failed" in r for r in indexed), indexed

@@ -742,13 +742,20 @@ class IndexerScreen(ModalScreen[None]):
             collection_node = tree.root.add(snap.collection, data=snap.collection)
             collection_node.add_leaf(
                 _format_indexed_line(
-                    snap.indexed_newly, snap.indexed_already, snap.failed, snap.removed
+                    snap.indexed_newly,
+                    snap.indexed_already,
+                    snap.failed,
+                    snap.removed,
+                    compact=True,
                 )
             )
             if snap.pdfs_total > 0:
                 collection_node.add_leaf(
                     _format_texturising_line(
-                        snap.textured_newly, snap.textured_already, snap.still_flat
+                        snap.textured_newly,
+                        snap.textured_already,
+                        snap.still_flat,
+                        compact=True,
                     )
                 )
             collection_node.expand()
@@ -958,7 +965,9 @@ def _short_name(path: str) -> str:
     return name if len(name) <= 68 else name[:65] + "…"
 
 
-def _format_indexed_line(newly: int, already: int, failed: int, removed: int = 0) -> str:
+def _format_indexed_line(
+    newly: int, already: int, failed: int, removed: int = 0, *, compact: bool = False
+) -> str:
     """Short enough to survive a 75%-wide modal at 80 columns.
 
     `12 newly indexed    340 already indexed    2 removed` overflowed and
@@ -971,10 +980,17 @@ def _format_indexed_line(newly: int, already: int, failed: int, removed: int = 0
         parts.append(f"{removed} removed")
     if failed > 0:
         parts.append(f"[yellow]⚠ {failed} failed[/]")
+    if compact:
+        # The Completed tree indents its rows and CLIPS them, so the full form
+        # lost `⚠ N failed` at 60 and 80 columns. Nested under the collection
+        # it names, the row does not need the heading as well.
+        return " · ".join(parts)
     return "[dim]Indexed:[/]     " + "    ".join(parts)
 
 
-def _format_texturising_line(newly: int, already: int, still_flat: int) -> str:
+def _format_texturising_line(
+    newly: int, already: int, still_flat: int, *, compact: bool = False
+) -> str:
     """Short for the same reason as :func:`_format_indexed_line`.
 
     These lines also appear inside the Completed tree, which indents them and
@@ -987,6 +1003,8 @@ def _format_texturising_line(newly: int, already: int, still_flat: int) -> str:
     ]
     if still_flat > 0:
         parts.append(f"[yellow]⚠ {still_flat} still flat[/]")
+    if compact:
+        return " · ".join(parts)
     return "[dim]Texturising:[/] " + "    ".join(parts)
 
 
