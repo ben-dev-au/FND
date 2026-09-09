@@ -67,8 +67,38 @@ FULL = _FullScope()
 # source ids (partial / granular). Absence from the map = out of scope.
 
 
+_FILTER_LABEL_COLUMN = 17
+
+
+def _branch_row(label: str, value: str, compact: str, budget: int) -> str:
+    """A filter branch row, collapsing toward the VALUE as room runs out.
+
+    At 62 columns the padded form does not fit and the pane dropped the value,
+    so an inert `Tags (none indexed)` painted identically to a live filter.
+    """
+    padded = f"{label:<{_FILTER_LABEL_COLUMN}}({value})"
+    if budget <= 0 or len(padded) <= budget:
+        return padded
+    for text in (f"{label} ({value})", f"{label} ({compact})"):
+        if len(text) <= budget:
+            return text
+    keep = budget - len(compact) - 4
+    if keep >= 1:
+        return f"{label[:keep]}\u2026 ({compact})"
+    # Neither half fits whole. Elide the value rather than drop it, and never
+    # drop the label: it is what the row is found by, and a row that silently
+    # loses its value paints identically to a different state.
+    room = budget - len(label) - 4
+    return f"{label} ({compact[:room]}\u2026)" if room >= 1 else f"{label} ({compact})"
+
+
 def _tags_summary(
-    n_selected: int, n_available: int, *, sources_on: bool, n_missing: int = 0
+    n_selected: int,
+    n_available: int,
+    *,
+    sources_on: bool,
+    n_missing: int = 0,
+    compact: bool = False,
 ) -> str:
     """What the Tags branch is doing, without claiming more than it knows.
 
@@ -78,12 +108,24 @@ def _tags_summary(
     live tag filter kept narrowing the search with no row to show for it.
     """
     if n_available:
+        if compact:
+            return (
+                f"{n_selected}/{n_available}, {n_missing} missing"
+                if n_missing
+                else f"{n_selected}/{n_available}"
+            )
         if n_missing:
             return f"{n_selected} of {n_available}, {n_missing} not in the index"
         return f"{n_selected} of {n_available}"
     if n_selected:
-        return f"{n_selected} still filtering, no rows to show"
-    return "none indexed" if sources_on else "tag sources off"
+        return (
+            f"{n_selected} filtering, no rows"
+            if compact
+            else f"{n_selected} still filtering, no rows to show"
+        )
+    if not sources_on:
+        return "sources off" if compact else "tag sources off"
+    return "0 tags" if compact else "none indexed"
 
 
 class ScopeController:
@@ -546,16 +588,14 @@ class ScopeController:
         keep = self._row_key(tree.cursor_node.data) if tree.cursor_node is not None else None
         tree.show_root = False
         tree.clear()
+        budget = self._branch_budget(tree)
 
         # Prune the file-type filter to kinds actually present in scope, like
         # the Tags filter (None = couldn't determine → show all).
         self._present_kinds = self._present_kinds_for_scope()
         active_kinds = set(self.filter_kinds)
-        visible = [k for cat in CATEGORIES for k in self._visible_members(cat.id)]
-        n_active = len(active_kinds.intersection(visible))
-        kind_summary = f"{n_active} of {len(visible)}" if n_active else "any"
         kind_node = tree.root.add(
-            _styled_parent_label(f"File type        ({kind_summary})"),
+            self._filetype_summary_label(budget),
             data={"kind": "filter_category", "category": "kinds"},
             expand="kinds" in self.expanded_filter_branches,
         )
@@ -583,7 +623,7 @@ class ScopeController:
 
         date_summary = self.filter_date or "any"
         date_node = tree.root.add(
-            _styled_parent_label(f"Modified         ({date_summary})"),
+            _styled_parent_label(_branch_row("Modified", date_summary, date_summary, budget)),
             data={"kind": "filter_category", "category": "date"},
             expand="date" in self.expanded_filter_branches,
         )
@@ -596,7 +636,7 @@ class ScopeController:
 
         created_summary = self.filter_created or "any"
         created_node = tree.root.add(
-            _styled_parent_label(f"Created          ({created_summary})"),
+            _styled_parent_label(_branch_row("Created", created_summary, created_summary, budget)),
             data={"kind": "filter_category", "category": "created"},
             expand="created" in self.expanded_filter_branches,
         )
@@ -644,12 +684,19 @@ class ScopeController:
 
     # ── File-type in-place repaint (no rebuild → cursor never jumps) ───────
 
-    def _filetype_summary_label(self) -> Any:
+    @staticmethod
+    def _branch_budget(tree: Tree[Any]) -> int:
+        """Char budget for a branch row: content width less the 2-cell arrow
+        prefix. 0 before layout, which the row helper reads as "no limit"."""
+        return max(0, tree.scrollable_content_region.width - 2)
+
+    def _filetype_summary_label(self, budget: int = 0) -> Any:
         active = set(self.filter_kinds)
         visible = [k for cat in CATEGORIES for k in self._visible_members(cat.id)]
         n = len(active.intersection(visible))
         summary = f"{n} of {len(visible)}" if n else "any"
-        return _styled_parent_label(f"File type        ({summary})")
+        compact = f"{n}/{len(visible)}" if n else "any"
+        return _styled_parent_label(_branch_row("File type", summary, compact, budget))
 
     def _repaint_filetype_leaf(self, leaf: Any) -> None:
         kid = str((leaf.data or {}).get("value") or "")
@@ -674,7 +721,7 @@ class ScopeController:
         for node in tree.root.children:
             data = node.data if isinstance(node.data, dict) else {}
             if data.get("kind") == "filter_category" and data.get("category") == "kinds":
-                node.set_label(self._filetype_summary_label())
+                node.set_label(self._filetype_summary_label(self._branch_budget(tree)))
                 return
 
     def defer_next_search(self) -> None:
@@ -1029,14 +1076,15 @@ class ScopeController:
         )
         n_available = sum(len(v) for v in catalogue.values())
         ghosts = self._ghost_tag_values(catalogue) if n_available else []
+        sources_on = bool(self._tag_source_ids())
         summary = _tags_summary(
-            n_selected,
-            n_available,
-            sources_on=bool(self._tag_source_ids()),
-            n_missing=len(ghosts),
+            n_selected, n_available, sources_on=sources_on, n_missing=len(ghosts)
+        )
+        compact = _tags_summary(
+            n_selected, n_available, sources_on=sources_on, n_missing=len(ghosts), compact=True
         )
         tags_node = tree.root.add(
-            _styled_parent_label(f"Tags             ({summary})"),
+            _styled_parent_label(_branch_row("Tags", summary, compact, self._branch_budget(tree))),
             data={"kind": "filter_category", "category": "tags"},
             expand="tags" in self.expanded_filter_branches,
         )

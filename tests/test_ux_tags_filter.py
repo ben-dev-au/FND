@@ -530,7 +530,11 @@ class TestATagThatOutlivedItsCollection:
 
             tree = app.query_one("#filters_panel_tree", Tree)
             tags = _branch(tree, "Tags")
-            assert "not in the index" in str(tags.label), str(tags.label)
+            # Wording narrows with the pane ("3 not in the index" / "3 missing");
+            # the count of lost tags is the fact, and it survives either way.
+            assert "1 missing" in str(tags.label) or "1 not in the index" in str(tags.label), str(
+                tags.label
+            )
             tags.expand()
             await pilot.pause()
             missing = _descend(tags, "No longer in the index")
@@ -570,6 +574,7 @@ class TestATagThatOutlivedItsCollection:
             app._scope.refresh_filters_panel()
             await pilot.pause()
             tags = _branch(app.query_one("#filters_panel_tree", Tree), "Tags")
+            assert "missing" not in str(tags.label), str(tags.label)
             assert "not in the index" not in str(tags.label), str(tags.label)
-            assert "still filtering" in str(tags.label), str(tags.label)
+            assert "filtering" in str(tags.label), str(tags.label)
             assert "No longer in the index" not in " ".join(_all_labels(tags))
