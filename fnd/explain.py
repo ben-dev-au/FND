@@ -104,6 +104,11 @@ class SearchTrace:
     fusion: FusionTrace | None
     cascade: CascadeTrace | None
     elapsed_ms: int
+    # The display cut something the pipeline had already found, so the count
+    # on screen is a floor. Files fall to `limit`; sections to the per-file
+    # cap and the relative score threshold.
+    files_truncated: bool = False
+    sections_truncated: bool = False
 
     def to_json(self) -> dict[str, object]:
         return {
@@ -114,6 +119,8 @@ class SearchTrace:
             "fusion": _fusion_to_json(self.fusion) if self.fusion else None,
             "cascade": _cascade_to_json(self.cascade) if self.cascade else None,
             "elapsed_ms": self.elapsed_ms,
+            "files_truncated": self.files_truncated,
+            "sections_truncated": self.sections_truncated,
         }
 
 

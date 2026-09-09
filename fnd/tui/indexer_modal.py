@@ -767,6 +767,17 @@ class IndexerScreen(ModalScreen[None]):
 
     # ---- bindings ----
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Post-run, cancel/pause/skip are meaningless; the rule
+        `_sync_action_options` already applies to the option list. The keys
+        were never gated, so `c` wrote "Cancelling… waiting for current file
+        to abort." over a finished run and left it there. `background` stays
+        live: Esc is how the modal is left."""
+        if action in ("cancel", "pause", "skip_cloud"):
+            with contextlib.suppress(Exception):
+                return not self._chain_finished(self._fnd_app())
+        return True
+
     async def action_background(self) -> None:
         """Dismiss the modal; task keeps running on the app."""
         self.dismiss(None)

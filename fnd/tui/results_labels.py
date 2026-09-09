@@ -283,7 +283,9 @@ def _elide_middle_keep_suffix(name: str, max_width: int) -> str:
     return stem[:head] + "…" + (stem[-tail:] if tail else "") + suffix
 
 
-def _format_hit_label(h: Hit, *, max_score: float = 0.0, match_visible: bool = True) -> Any:
+def _format_hit_label(
+    h: Hit, *, max_score: float = 0.0, match_visible: bool = True, body_budget: int = 0
+) -> Any:
     """Result-tree row label: short locator left, snippet right.
 
     Locator is a few chars (page / slide / trimmed heading / chunk N)
@@ -304,6 +306,11 @@ def _format_hit_label(h: Hit, *, max_score: float = 0.0, match_visible: bool = T
         loc = _shorten(trimmed, 18) if trimmed else f"§{h.chunk_seq + 1}"
     snippet = _shorten(h.snippet, 80) if h.snippet else ""
     body = f"{loc}  {snippet}" if snippet else loc
+    if body_budget > 0 and len(body) > body_budget:
+        # Out of width this row kept the label and dropped the value: 24
+        # siblings all painted `section`, one string, one score. The locator's
+        # tail is what tells them apart; the snippet is the expendable half.
+        body = _elide_middle_keep_suffix(loc, body_budget)
     glyph = _PASS_GLYPHS.get(h.pass_index, "")
     pass_marker = f" {glyph}" if h.pass_index > 0 else ""
     # Leading, not trailing: locator + 80-char snippet routinely overruns the

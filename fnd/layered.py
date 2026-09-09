@@ -215,10 +215,15 @@ def search_layered(
     )
 
     if with_trace:
+        shown = {g.parent_id for g in groups}
         trace = SearchTrace(
             query=query,
             intent=intent,
             regime=regime,
+            files_truncated=len({h.parent_id for h in hits}) > len(groups),
+            sections_truncated=(
+                sum(len(g.hits) for g in groups) < sum(1 for h in hits if h.parent_id in shown)
+            ),
             strong_signal=ss_trace,
             fusion=fusion_trace,
             cascade=cascade_trace,

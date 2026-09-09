@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 __all__ = ["ResultsView"]
 
 
+def _count(n: int, mark: str, noun: str) -> str:
+    """`1 file`, `2 files`, `50+ files`. A floor is never singular."""
+    return f"{n}{mark} {noun}" if n == 1 and not mark else f"{n}{mark} {noun}s"
+
+
 class ResultsView:
     """Renders the results tree; stateless beyond the app reference."""
 
@@ -66,7 +71,16 @@ class ResultsView:
             # "Results" alone is what an untouched app shows, so a search that
             # matched nothing was indistinguishable from never having run.
             return "Results" if not self._searched() else "Results — nothing matched"
-        return f"Results — {n_files} files / {n_sections} sections"
+        # A capped list read as a fact about the corpus: at limit 50 over 290
+        # matches the title said `50 files`, identical to a search that really
+        # matched 50. `+` marks a floor.
+        trace = self._app._search.latest_trace
+        files_mark = "+" if trace is not None and trace.files_truncated else ""
+        sections_mark = "+" if trace is not None and trace.sections_truncated else ""
+        return (
+            f"Results — {_count(n_files, files_mark, 'file')}"
+            f" / {_count(n_sections, sections_mark, 'section')}"
+        )
 
     def _searched(self) -> bool:
         return bool((self._app._search.current_query or "").strip())
@@ -127,7 +141,7 @@ class ResultsView:
                 (g.parent_id for g in self._app._search.groups), WarmState.COLD
             )
         max_score = max((g.top_score for g in self._app._search.groups), default=0.0)
-        budget = self.file_label_budget(tree)
+        budget = self.label_budget(tree)
         # Two files can share a basename; the row is the only thing the user
         # has to tell them apart.
         names = disambiguated_names([g.path for g in self._app._search.groups])
@@ -155,7 +169,9 @@ class ResultsView:
                 )
                 unlocatable += not visible
                 file_node.add_leaf(
-                    _format_hit_label(h, max_score=max_score, match_visible=visible),
+                    _format_hit_label(
+                        h, max_score=max_score, match_visible=visible, body_budget=budget
+                    ),
                     data={"kind": "section", "hit": h},
                 )
         if unlocatable:
@@ -197,20 +213,22 @@ class ResultsView:
         return focused is not None and focused.id in self._SIDEBAR_TREE_IDS
 
     @staticmethod
-    def file_label_budget(tree: Tree[Any]) -> int:
-        """Char budget for a file row's name: the visible content width
+    def label_budget(tree: Tree[Any]) -> int:
+        """Char budget for a row's text: the visible content width
         (border + scrollbar excluded) minus the tree's 2-cell row prefix
         (toggle/guide, measured) and the 7-cell score column. 0 before layout."""
         return max(0, tree.scrollable_content_region.width - 2 - 7)
 
-    def relabel_file_rows(self) -> None:
-        """Re-elide file-row labels in place (no tree rebuild, so the cursor
-        and preview are untouched) — used on resize when the budget changes."""
+    def relabel_rows(self) -> None:
+        """Re-elide every row in place (no tree rebuild, so the cursor and
+        preview are untouched), used on resize when the budget changes.
+        Match rows too: they are most of the tree, and they were the rows
+        that lost their identity when the pane narrowed."""
         try:
             tree = self._app.query_one("#results_pane", Tree)
         except Exception:
             return
-        budget = self.file_label_budget(tree)
+        budget = self.label_budget(tree)
         max_score = max((g.top_score for g in self._app._search.groups), default=0.0)
         names = disambiguated_names([g.path for g in self._app._search.groups])
         for node in tree.root.children:
@@ -227,6 +245,26 @@ class ResultsView:
                         )
                     )
                 )
+                strict = self._app._effective_evidence_spec
+                painting = self._app._effective_match_spec
+                for leaf in node.children:
+                    leaf_data = leaf.data
+                    if not isinstance(leaf_data, dict) or leaf_data.get("kind") != "section":
+                        continue
+                    hit = leaf_data["hit"]
+                    leaf.set_label(
+                        _format_hit_label(
+                            hit,
+                            max_score=max_score,
+                            match_visible=has_paintable_match(
+                                hit,
+                                evidence_spec_for_pass(
+                                    hit.pass_index, strict=strict, painting=painting
+                                ),
+                            ),
+                            body_budget=budget,
+                        )
+                    )
 
     def refresh_warmth(self) -> bool:
         """Repaint any file row whose readiness changed.

@@ -362,7 +362,7 @@ class ResultsTree(ArrowsExpand, HomeToFirstRow, StateMarkerLabel, Tree[dict[str,
         ``set_label`` with the node's own label is how a row is invalidated:
         it bumps the node's update counter, which is part of the line-cache
         key, so the next paint re-runs ``render_label``. Same mechanism
-        ``ResultsView.relabel_file_rows`` already relies on.
+        ``ResultsView.relabel_rows`` already relies on.
         """
         if states == self.warm_states:
             return False

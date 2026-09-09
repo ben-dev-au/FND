@@ -1885,7 +1885,7 @@ class FNDApp(App[None]):
     @on(ResultsTree.GeometryChanged)
     def _on_results_geometry_changed(self, _ev: ResultsTree.GeometryChanged) -> None:
         """Re-elide the file rows against the width the tree has settled at."""
-        self._results.relabel_file_rows()
+        self._results.relabel_rows()
 
     @on(ResultsTree.ReopenRequested)
     def _on_results_reopen_requested(self, ev: ResultsTree.ReopenRequested) -> None:
