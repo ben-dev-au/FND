@@ -181,3 +181,46 @@ async def test_an_empty_snapshot_does_not_wave_the_guard_through(
             await pilot.pause()
 
     assert two_sources.read_text(encoding="utf-8") == before, "it wrote onto the wrong source"
+
+
+@pytest.mark.asyncio
+async def test_the_refusal_advice_actually_works(
+    two_sources: Path, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """ "Press Esc and reopen" re-read the same stale model and refused again.
+
+    The refusal returned before `app._config = cfg`, and `_load_snapshot` reads
+    `app._config` — so the reopened form was seeded from the model that was
+    already wrong, and the loop only broke on restart.
+    """
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open_form(app, pilot, 0)
+
+        two_sources.write_text(
+            textwrap.dedent(f"""
+                [[collections.vault.sources]]
+                path = "{(tmp_path / "two").as_posix()}"
+
+                [[collections.vault.sources]]
+                path = "{(tmp_path / "one").as_posix()}"
+            """),
+            encoding="utf-8",
+        )
+        screen._fields["follow_symlinks"] = True
+        screen.action_save_close()
+        for _ in range(15):
+            await pilot.pause()
+
+        # Take the advice: leave and open the same row again.
+        app.pop_screen()
+        for _ in range(10):
+            await pilot.pause()
+        reopened = SourceFormScreen(collection_name="vault", source_index=0)
+        app.push_screen(reopened)
+        for _ in range(20):
+            await pilot.pause()
+        seeded = str(reopened._snapshot.get("path") or "")
+
+    assert "two" in seeded, f"the reopened form was seeded from the stale model: {seeded}"

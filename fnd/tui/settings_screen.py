@@ -1529,8 +1529,10 @@ class SettingsScreen(Screen[None]):
             query = self.query_one("#settings_search", Input).value.strip().lower()
             if query:
                 filtered, breadcrumbs = self._filter_items(query)
-                self._search_breadcrumbs = breadcrumbs
-                lst.set_items(filtered, cursor_id=prev_id)
+                # The breadcrumbs are what tell `set_items` it is drawing a
+                # search: without them the rows come back with subsection
+                # borders and trailing values, which is a different screen.
+                lst.set_items(filtered, breadcrumbs=breadcrumbs, cursor_id=prev_id)
                 self._refresh_hint_bar()
                 return
         lst.set_items(list(new_items), cursor_id=prev_id)
@@ -3121,9 +3123,13 @@ class SourceFormScreen(Screen[None]):
         # A fresh read makes the row index mean whatever now sits there, so an
         # edit could land on a different source. Refuse rather than guess.
         if self._source_index is not None and not self._still_the_same_source(col):
+            # Adopt the fresh read even though the write is refused: the form
+            # reseeds from `app._config`, so returning without this made
+            # "reopen it" advice that could never succeed.
+            app._config = cfg  # type: ignore[attr-defined]
             self._show_error(
-                "The config changed on disk since this form opened. "
-                "Press Esc and reopen it so the edit lands on the right source."
+                "This row is not the source it was when the form opened — the "
+                "config changed on disk. Press Esc and reopen it."
             )
             return
         app._config = cfg  # type: ignore[attr-defined]
