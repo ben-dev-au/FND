@@ -121,3 +121,63 @@ async def test_a_reordered_file_is_refused_rather_than_guessed(
             await pilot.pause()
 
     assert two_sources.read_text(encoding="utf-8") == before, "it wrote onto the wrong source"
+
+
+@pytest.mark.asyncio
+async def test_a_config_that_will_not_load_refuses_rather_than_falling_back(
+    two_sources: Path, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """The fallback made the guard vacuous and did the write it exists to stop.
+
+    `load()` raising sent it back to `app._config` — the very model
+    `_snapshot` came from — so the identity check could never disagree, and the
+    stale write went ahead. A validation failure, not just malformed TOML.
+    """
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open_form(app, pilot, 0)
+
+        two_sources.write_text(
+            two_sources.read_text(encoding="utf-8")
+            + f'\n[[collections.vault.sources]]\npath = "{(tmp_path / "three").as_posix()}"\n'
+            + 'follow_symlinks = "maybe"\n',
+            encoding="utf-8",
+        )
+        before = two_sources.read_text(encoding="utf-8")
+        screen._fields["follow_symlinks"] = True
+        screen.action_save_close()
+        for _ in range(20):
+            await pilot.pause()
+
+    assert two_sources.read_text(encoding="utf-8") == before, "it wrote from the stale model"
+
+
+@pytest.mark.asyncio
+async def test_an_empty_snapshot_does_not_wave_the_guard_through(
+    two_sources: Path, tmp_path: Path, tmp_index_dir: Path
+) -> None:
+    """`not opened` short-circuited the identity check to True."""
+    app = FNDApp(index_dir=tmp_index_dir)
+    async with app.run_test(size=(110, 34)) as pilot:
+        await pilot.pause()
+        screen = await _open_form(app, pilot, 0)
+        screen._snapshot = {}
+
+        two_sources.write_text(
+            textwrap.dedent(f"""
+                [[collections.vault.sources]]
+                path = "{(tmp_path / "two").as_posix()}"
+
+                [[collections.vault.sources]]
+                path = "{(tmp_path / "one").as_posix()}"
+            """),
+            encoding="utf-8",
+        )
+        before = two_sources.read_text(encoding="utf-8")
+        screen._fields["follow_symlinks"] = True
+        screen.action_save_close()
+        for _ in range(20):
+            await pilot.pause()
+
+    assert two_sources.read_text(encoding="utf-8") == before, "it wrote onto the wrong source"

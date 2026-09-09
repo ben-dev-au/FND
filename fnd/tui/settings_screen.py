@@ -3009,7 +3009,11 @@ class SourceFormScreen(Screen[None]):
         if index is None or index >= len(col.sources):
             return False
         opened = str(self._snapshot.get("path") or "")
-        return not opened or str(col.sources[index].path) == opened
+        if not opened:
+            # No snapshot means nothing to compare, which is not the same as
+            # agreement: three early returns leave `_snapshot` empty.
+            return False
+        return str(col.sources[index].path) == opened
 
     def _render_footer(self) -> None:
         app: FNDApp = self.app  # type: ignore[assignment]
@@ -3083,10 +3087,18 @@ class SourceFormScreen(Screen[None]):
         # Read the file, not the snapshot taken at launch. `write_collection`
         # replaces the collection table wholesale, so writing from a stale
         # model deleted any source added to it by hand in the meantime.
+        # Falling back to `app._config` here made the guard below vacuous: it
+        # compares the snapshot against the model the snapshot came from, so it
+        # could never disagree, and the stale write went ahead — the exact
+        # deletion this reload exists to stop.
         try:
             cfg = load()
-        except Exception:
-            cfg = app._config  # type: ignore[attr-defined]
+        except Exception as e:
+            self._show_error(
+                f"The config on disk cannot be read, so this save would overwrite it: "
+                f"{_summarise(e)}"
+            )
+            return
         if cfg is None or self._collection_name not in cfg.collections:
             self._show_error("Collection vanished. Please reopen the menu.")
             return
