@@ -38,6 +38,10 @@ _PASS_GLYPHS = {0: "●", 1: "~", 2: "⊕", 3: "❝"}
 # quietly disappearing. See :mod:`fnd.tui.match_evidence`.
 _UNLOCATABLE_GLYPH = "◌"
 
+# The index's copy no longer matches the disk. One glyph for gone and for
+# edited, because the user's move is the same either way: reindex.
+_STALE_GLYPH = "⚠"
+
 _MARKER_STYLES: dict[str, Any] = {}
 
 
@@ -368,10 +372,31 @@ def disambiguated_names(paths: Sequence[str]) -> dict[str, str]:
     return out
 
 
+def is_stale(g: FileGroup) -> bool:
+    """Whether the index's copy of this file still matches the disk.
+
+    Gone or edited since it was indexed. `read_file_times` returns zeros for a
+    file that has vanished, which is the same answer either way: what the
+    preview would show is not what the file says.
+    """
+    from fnd.fsmeta import read_file_times
+
+    indexed = max((h.mtime for h in g.hits), default=0)
+    on_disk = read_file_times(Path(g.path)).mtime
+    return on_disk == 0 or (indexed > 0 and on_disk > indexed)
+
+
 def _format_file_label(
-    g: FileGroup, *, max_score: float = 0.0, name_budget: int = 0, display_name: str = ""
+    g: FileGroup,
+    *,
+    max_score: float = 0.0,
+    name_budget: int = 0,
+    display_name: str = "",
+    stale: bool = False,
 ) -> Any:
     name = display_name or Path(g.path).name
     if name_budget > 0:
         name = _elide_middle_keep_suffix(name, name_budget)
+    if stale:
+        name = f"{_STALE_GLYPH} {name}"
     return _build_label(name, g.top_score, max_score)

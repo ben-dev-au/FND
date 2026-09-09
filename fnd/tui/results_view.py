@@ -17,6 +17,7 @@ from fnd.tui.results_labels import (
     _format_hit_label,
     _styled_parent_label,
     disambiguated_names,
+    is_stale,
 )
 from fnd.tui.widgets.results_tree import ResultsTree
 
@@ -39,6 +40,10 @@ class ResultsView:
 
     def __init__(self, app: FNDApp) -> None:
         self._app = app
+        # Paths whose indexed copy no longer matches the disk. Filled by
+        # `rebuild`; `relabel_rows` reads it on a resize, which can land
+        # before any search has run.
+        self._stale: set[str] = set()
 
     def title(self) -> str:
         """Border title for the results pane — counts live next to the data
@@ -145,6 +150,10 @@ class ResultsView:
         # Two files can share a basename; the row is the only thing the user
         # has to tell them apart.
         names = disambiguated_names([g.path for g in self._app._search.groups])
+        # Statted once per rebuild, not per repaint: a resize must not re-walk
+        # the disk. The preview renders the INDEX's copy, so a row whose file
+        # has gone or moved on needs to say so before the user trusts it.
+        self._stale = {g.path for g in self._app._search.groups if is_stale(g)}
         # Rows are never filtered on paintability — see fnd.tui.match_evidence.
         # A row the preview can't highlight is marked, not withheld.
         strict = self._app._effective_evidence_spec
@@ -158,6 +167,7 @@ class ResultsView:
                         max_score=max_score,
                         name_budget=budget,
                         display_name=names.get(g.path, ""),
+                        stale=g.path in self._stale,
                     )
                 ),
                 data={"kind": "file", "group": g},
@@ -242,6 +252,7 @@ class ResultsView:
                             max_score=max_score,
                             name_budget=budget,
                             display_name=names.get(group.path, ""),
+                            stale=group.path in self._stale,
                         )
                     )
                 )

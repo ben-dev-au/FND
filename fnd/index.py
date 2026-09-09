@@ -431,9 +431,9 @@ def build_index_from_config(
             )
             commit(writer)
         else:
-            missing = ", ".join(str(r) for r in roots if not r.exists())
+            blocked = ", ".join(str(r) for r in unreadable_roots(roots))
             print(
-                f"[fnd skip {_skip_stamp()}] source unavailable ({missing}); "
+                f"[fnd skip {_skip_stamp()}] source unreadable ({blocked}); "
                 f"kept existing chunks for collection {collection}",
                 file=sys.stderr,
             )
@@ -455,15 +455,36 @@ _MAX_INDEXED_FILE_BUCKETS = 200_000
 
 
 def sources_are_enumerable(roots: Iterable[Path]) -> bool:
-    """True when every root exists, so an empty walk means "no files" rather
-    than "the volume went away".
+    """True when every root can be LISTED, so an empty walk means "no files"
+    rather than "could not look".
 
-    :func:`fnd.walk.walk` yields nothing for a missing root instead of
-    raising, so an unguarded prune would erase a whole collection the first
-    time an external drive or an iCloud folder was offline. Callers must gate
+    :func:`fnd.walk.walk` yields nothing for a root it cannot read instead of
+    raising, so an unguarded prune erases the collection. Callers must gate
     :func:`prune_removed_files` on this.
+
+    Listing, not ``exists()``: a directory with mode 000 exists, and reading
+    the walk's silence as "every file was deleted" took a collection from 48
+    documents to 0 in one keypress, reported as `Done.`
     """
-    return all(root.exists() for root in roots)
+    return not unreadable_roots(roots)
+
+
+def unreadable_roots(roots: Iterable[Path]) -> list[Path]:
+    """The roots that cannot be listed, in order, with the reason implicit.
+
+    Shared with the gate so a skip message can never name a different root
+    from the one that stopped the prune.
+    """
+    import os
+
+    out: list[Path] = []
+    for root in roots:
+        try:
+            with os.scandir(root) as entries:
+                next(iter(entries), None)
+        except OSError:
+            out.append(root)
+    return out
 
 
 def collection_is_empty(index: Index, collection: str) -> bool:
