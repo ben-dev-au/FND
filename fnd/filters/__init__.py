@@ -1,7 +1,7 @@
 """Unified filtering: one vocabulary, one model, one compiled gate."""
 
 from fnd.filters.dimensions import DIMENSIONS, Dimension, note_kinds, rule_from_text
-from fnd.filters.model import FileGate, FilterSpec, Rule, Unknown
+from fnd.filters.model import FileGate, FilterSpec, Rule, Unknown, spec_from_resolved
 from fnd.filters.text import build_gate
 
 __all__ = [
@@ -14,4 +14,5 @@ __all__ = [
     "build_gate",
     "note_kinds",
     "rule_from_text",
+    "spec_from_resolved",
 ]

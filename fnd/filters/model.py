@@ -98,6 +98,30 @@ class FileGate:
         return cls(tuple(rules))
 
 
+def spec_from_resolved(resolved: object) -> FilterSpec:
+    """The canonical spec for a source's resolved filters.
+
+    `FilterSpec` reclassifies an expression naming only frontmatter fields as
+    `frontmatter`, so reading the config's own value instead of building this
+    dropped such a rule from both paths and it filtered nothing at all.
+    """
+    from fnd.filters.dimensions import tag_selection
+
+    return FilterSpec(
+        kinds=tuple(resolved.kinds),  # type: ignore[attr-defined]
+        include_tags=tag_selection(resolved.include_tags),  # type: ignore[attr-defined]
+        exclude_tags=tag_selection(resolved.exclude_tags),  # type: ignore[attr-defined]
+        min_size=resolved.min_size,  # type: ignore[attr-defined]
+        max_size=resolved.max_size,  # type: ignore[attr-defined]
+        created_after=resolved.created_after,  # type: ignore[attr-defined]
+        created_before=resolved.created_before,  # type: ignore[attr-defined]
+        modified_after=resolved.modified_after,  # type: ignore[attr-defined]
+        modified_before=resolved.modified_before,  # type: ignore[attr-defined]
+        expression=resolved.expression or "",  # type: ignore[attr-defined]
+        frontmatter=resolved.frontmatter or "",  # type: ignore[attr-defined]
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class FilterSpec:
     """The canonical filter set: what the UI edits, the config stores and the

@@ -15,6 +15,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from fnd.filters.model import FileGate
 from fnd.kinds import kind_for_suffix
 from fnd.tags import TAG_PROVIDERS, TagContext, read_tags
 
@@ -31,6 +32,10 @@ class SourceSample:
     """Values seen while sampling, with counts so a picker can rank them."""
 
     kinds: dict[str, int] = field(default_factory=dict)
+    # Of those, the ones this source's OTHER rules admit. The picker offers
+    # every kind present; the count beside a kind must agree with the rule
+    # printed under it, which said `no_index excluded` beside a raw `3`.
+    kinds_kept: dict[str, int] = field(default_factory=dict)
     tags: dict[str, dict[str, int]] = field(default_factory=dict)
     frontmatter_keys: dict[str, int] = field(default_factory=dict)
     files_seen: int = 0
@@ -63,6 +68,7 @@ def sample_source(
     max_files: int = _DEFAULT_MAX_FILES,
     walk: Iterator[Path] | None = None,
     ignore_names: Sequence[str] | None = None,
+    gate: FileGate | None = None,
 ) -> SourceSample:
     """Sample ``root`` for the values its filter pickers should offer.
 
@@ -74,6 +80,7 @@ def sample_source(
     indexed: without them a `.fndignore`-d folder still contributed its types
     and tags, and the picker offered a file type the walk could never yield.
     """
+    from fnd.file_facts import FileFacts
     from fnd.frontmatter import FrontmatterParseError, read_frontmatter_from_file
     from fnd.walk import walk as walk_files
 
@@ -109,4 +116,16 @@ def sample_source(
             bucket = sample.tags.setdefault(source, {})
             for value in values:
                 bucket[value] = bucket.get(value, 0) + 1
+
+        if kind and gate is not None:
+            # The frontmatter is already in hand; injecting it keeps the gate
+            # from reading the file a second time.
+            facts = FileFacts(
+                path,
+                root=root,
+                read_frontmatter=lambda _p, fm=frontmatter: fm,
+                tag_providers=providers,
+            )
+            if gate.passes(facts):
+                sample.kinds_kept[kind] = sample.kinds_kept.get(kind, 0) + 1
     return sample

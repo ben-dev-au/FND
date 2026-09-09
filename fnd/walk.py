@@ -321,31 +321,15 @@ def walk_sources(
     """
     from fnd.config import SourceConfig  # local import: avoid cycle
     from fnd.file_facts import FileFacts
-    from fnd.filters import FileGate, FilterSpec, build_gate
-    from fnd.filters.dimensions import dimension, tag_selection
+    from fnd.filters import FileGate, build_gate, spec_from_resolved
+    from fnd.filters.dimensions import dimension
     from fnd.ignore_files import IGNORE_FILENAMES
     from fnd.tags import TAG_PROVIDERS
 
     for source in sources:
         assert isinstance(source, SourceConfig)
         resolved = source.effective_filters
-        # Built once and then read back: `FilterSpec` reclassifies an
-        # expression naming only frontmatter fields into `frontmatter`, so
-        # reading the config's own value here dropped such a rule from both
-        # paths and it filtered nothing at all.
-        spec = FilterSpec(
-            kinds=tuple(resolved.kinds),
-            include_tags=tag_selection(resolved.include_tags),
-            exclude_tags=tag_selection(resolved.exclude_tags),
-            min_size=resolved.min_size,
-            max_size=resolved.max_size,
-            created_after=resolved.created_after,
-            created_before=resolved.created_before,
-            modified_after=resolved.modified_after,
-            modified_before=resolved.modified_before,
-            expression=resolved.expression or "",
-            frontmatter=resolved.frontmatter or "",
-        )
+        spec = spec_from_resolved(resolved)
         gate = build_gate(spec)
         # Scoped through the dimension rather than by hand: strict null would
         # otherwise fail a frontmatter comparison on every PDF and drop the

@@ -2138,7 +2138,10 @@ def open_source_filter_browser(
     change something and it becomes an override, put it back and it stops
     being one.
     """
+    import dataclasses
+
     from fnd.config import DefaultFilters, SourceFilters, resolve_filters
+    from fnd.filters import build_gate, spec_from_resolved
     from fnd.filters.scan import sample_source
 
     cfg = app._config  # type: ignore[attr-defined]
@@ -2158,7 +2161,15 @@ def open_source_filter_browser(
             )
             if on
         )
-        return sample_source(root, budget_s=0.8, ignore_names=names)
+        # The source's own rules MINUS the kind rule: a kind the user has
+        # not ticked would otherwise read `· 0` and tell them nothing about
+        # what ticking it would bring in.
+        return sample_source(
+            root,
+            budget_s=0.8,
+            ignore_names=names,
+            gate=build_gate(dataclasses.replace(spec_from_resolved(resolved), kinds=())),
+        )
 
     def _save(spec: Any, gitignore: bool, fndignore: bool) -> None:
         values = _spec_to_mapping(spec)
