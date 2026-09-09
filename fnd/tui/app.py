@@ -949,16 +949,8 @@ class FNDApp(App[None]):
             # result they picked looks unrelated — and so a highlighting
             # regression is visible on screen. See fnd.tui.match_evidence.
             pane.border_subtitle = " [$warning]◌ match not shown here[/] "
-        elif (
-            nav is not None and not self._reading_mode and (nav.above or nav.below or nav.count > 1)
-        ):
+        elif nav is not None and not self._reading_mode and (nav.above or nav.below):
             parts: list[str] = []
-            # `n` steps between VIEWS, not matches, so on a dense chunk it
-            # cycles two screenfuls and looks like a two-position toggle: a
-            # hunter read sixteen matches in a table as "n reaches 2 of 16".
-            # The count is what makes the cycling legible.
-            if nav.count > 1:
-                parts.append(f"[$text-muted]{nav.count} matches[/]")
             if nav.above:
                 parts.append(f"[$accent]▲{nav.above}[/]")
             if nav.below:
