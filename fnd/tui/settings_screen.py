@@ -1681,22 +1681,32 @@ class SettingsScreen(Screen[None]):
         surface in the detail strip on focus, and indexing them muddies
         the search results.
         """
-        matches: list[tuple[int, MenuItem, tuple[str, ...]]] = []
+        matches: list[tuple[int, int, MenuItem, tuple[str, ...]]] = []
         app: FNDApp = self.app  # type: ignore[assignment]
-        for path, item in walk_all_sections(app):
-            if item.kind == KIND_HEADER:
-                continue
-            haystack = " ".join((item.label, item.key, *item.keywords, *path)).lower()
-            idx = haystack.find(q)
-            if idx == -1:
-                continue
-            # Earlier match in the label scores higher (smaller idx first).
-            label_idx = item.label.lower().find(q)
-            score = label_idx if label_idx != -1 else 1000 + idx
-            matches.append((score, item, path))
-        matches.sort(key=lambda m: (m[0], len(m[1].label)))
-        breadcrumbs = {id(item): path for _, item, path in matches}
-        return [item for _, item, _ in matches], breadcrumbs
+        seen: set[str] = set()
+        # This page's own rows first. `walk_all_sections` deliberately does not
+        # descend per-collection sub-screens, so the filter searched everywhere
+        # EXCEPT the page in front of you: `Delete coll` on a collection page
+        # answered "No matches" for a row visible a keystroke earlier.
+        here: list[tuple[tuple[str, ...], MenuItem]] = [
+            (self._breadcrumb, it) for it in self._items
+        ]
+        for local, source in ((0, iter(here)), (1, walk_all_sections(app))):
+            for path, item in source:
+                if item.kind == KIND_HEADER or item.id in seen:
+                    continue
+                seen.add(item.id)
+                haystack = " ".join((item.label, item.key, *item.keywords, *path)).lower()
+                idx = haystack.find(q)
+                if idx == -1:
+                    continue
+                # Earlier match in the label scores higher (smaller idx first).
+                label_idx = item.label.lower().find(q)
+                score = label_idx if label_idx != -1 else 1000 + idx
+                matches.append((local, score, item, path))
+        matches.sort(key=lambda m: (m[0], m[1], len(m[2].label)))
+        breadcrumbs = {id(item): path for _, _, item, path in matches}
+        return [item for _, _, item, _ in matches], breadcrumbs
 
     @on(Input.Submitted, "#settings_search")
     def _on_search_submitted(self, _ev: Input.Submitted) -> None:
