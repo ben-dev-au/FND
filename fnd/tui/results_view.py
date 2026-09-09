@@ -104,6 +104,11 @@ class ResultsView:
         # filters while saying nothing about the emptier reason above them.
         if not scope.collections and not scope.active_sources:
             lines.append("No collections are in scope — tick one in the Collections panel.")
+        elif scope.present_kinds_for_scope() == set():
+            # An index holding nothing reads exactly like a query matching
+            # nothing, and only one of those is about the query. `None` is
+            # "could not tell", which is not the same and stays silent.
+            lines.append("Nothing is indexed in this scope yet — run Update index from the menu.")
         n_filters = scope.active_filter_count if scope.has_active_filters else 0
         if n_filters:
             # A place, not a keystroke. Focus is in the query bar when this

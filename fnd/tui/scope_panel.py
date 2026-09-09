@@ -565,6 +565,14 @@ class ScopeController:
 
     # ── Filters panel (UX-F) ──────────────────────────────────────
 
+    def present_kinds_for_scope(self) -> set[str] | None:
+        """Public name for the cached scope aggregation.
+
+        An empty set means the scope holds no indexed file; ``None`` means the
+        aggregation could not run, which is not the same answer.
+        """
+        return self._present_kinds_for_scope()
+
     def _present_kinds_for_scope(self) -> set[str] | None:
         """Kind ids present in the active collections, or ``None`` when the
         index isn't open / the aggregation fails (caller then shows all kinds).
