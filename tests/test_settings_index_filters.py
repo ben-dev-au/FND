@@ -852,8 +852,12 @@ def test_the_sources_row_names_every_dimension_that_narrows_it() -> None:
         },
     )
     inheriting, bounded = config.collections["c"].sources
-    assert "rule" in _other_filters(inheriting), "an inherited rule still narrows the source"
-    assert "size" in _other_filters(bounded)
+    # The contract is that the row cannot read as unfiltered while an
+    # inherited rule narrows it. It named the dimension until `12cd8bb`, which
+    # collects the defaults' dimensions under one `inherited` chip so a source
+    # stops advertising them as its own — the detail screen names which.
+    assert _other_filters(inheriting) == ["inherited"], "it reads as unfiltered"
+    assert "size" in _other_filters(bounded), "its own bound is still named"
     assert "size" not in _other_filters(inheriting)
 
 

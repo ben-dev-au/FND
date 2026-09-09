@@ -4672,8 +4672,10 @@ class UnsavedChangesScreen(Screen[None]):
         yield Static("", id="footer_hints")
 
     def on_mount(self) -> None:
-        # With no save on offer the first row is the destructive one.
-        open_confirm_list(self, land_on="" if self._on_save else "stay")
+        # Always the row that changes nothing. This dialog is reached by Esc,
+        # which the editor's footer offers as a way OUT, so landing on "Save
+        # changes" put a write one Enter from a key that means the opposite.
+        open_confirm_list(self, land_on="stay")
         app: FNDApp = self.app  # type: ignore[assignment]
         self.query_one("#footer_hints", Static).update(
             _hint_bar(app, (("↑↓", "Choose"), ("⏎", "Select"), ("Esc", "Keep editing")))
@@ -6399,7 +6401,10 @@ class FilterBrowserScreen(Screen[None]):
                 ),
                 (COMMIT_KEY, self._commit_label),
                 ("y", "Copy"),
-                ("Esc/←", "Discard"),
+                # Esc asks; it does not discard. Naming one of the answers on
+                # the key that opens the question is how a hunter lost a
+                # filter set to Esc followed by Enter.
+                ("Esc/←", "Leave"),
             )
         )
         bar = _editor_hint_bar(cluster) if typing else _hint_bar(app, cluster)
