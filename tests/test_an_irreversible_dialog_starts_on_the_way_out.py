@@ -167,17 +167,18 @@ async def _footer_and_cursor(app: FNDApp, pilot: Any, screen: Any) -> tuple[str,
 async def test_the_footer_says_what_enter_will_do(
     config: Config, tmp_index_dir: Path, make: Any
 ) -> None:
-    """The invariant, across every confirm screen: `Confirm` may only be
-    advertised where Enter on arrival actually confirms."""
+    """The invariant, across every confirm screen: the footer never promises
+    `Confirm`.
+
+    It used to allow it where Enter confirmed ON ARRIVAL, which is the only
+    moment the hint is computed — one `Down` then left the promise standing on
+    three dialogs while Enter cancelled. A screen that cannot recompute the
+    hint cannot make the promise.
+    """
     app = FNDApp(index_dir=tmp_index_dir, config=config)
     async with app.run_test(size=(120, 34)) as pilot:
         await pilot.pause()
-        footer, landed = await _footer_and_cursor(app, pilot, make())
+        footer, _landed = await _footer_and_cursor(app, pilot, make())
 
-    if landed == "yes":
-        assert "Confirm" in footer, footer
-    else:
-        assert "Confirm" not in footer, (
-            f"Enter cancels here, and the footer promises otherwise: {footer}"
-        )
-        assert "Select" in footer, footer
+    assert "Confirm" not in footer, footer
+    assert "Select" in footer, footer

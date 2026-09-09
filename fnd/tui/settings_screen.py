@@ -256,16 +256,20 @@ def open_confirm_list(screen: Screen[Any], *, land_on: str = "") -> tuple[str, s
 
     Irreversible dialogs start on the way out — Enter is one keypress from a
     delete otherwise, and Enter is how every one of these screens is reached.
-    The hint comes back from the same call because the two disagreed the moment
-    the cursor moved: four screens went on reading `⏎ Confirm` while Enter
-    cancelled.
+
+    The hint is `Select` from every row, because it is computed once at mount
+    and nothing recomputes it on a move: returning `Confirm` for a screen that
+    LANDS on the affirmative left that promise on screen after one `Down`, on
+    three dialogs. A hint that follows the highlight would say more, and would
+    need a handler on each of the seven screens; this one is true from all of
+    them.
     """
     options = screen.query_one("#confirm_list", OptionList)
     if land_on:
         with contextlib.suppress(OptionDoesNotExist):
             options.highlighted = options.get_option_index(land_on)
     options.focus()
-    return ("⏎", "Select") if land_on else ("⏎", "Confirm")
+    return ("⏎", "Select")
 
 
 def confirm_yes_option(label: str, severity: str = "safe") -> Option:
