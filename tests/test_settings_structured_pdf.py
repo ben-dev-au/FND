@@ -145,7 +145,9 @@ async def test_install_confirm_chrome_when_not_installed(built_index: Path, cfg:
         assert opts.option_count == 2
         hint = str(screen.query_one("#footer_hints", Static).content)
         assert "Nav" in hint
-        assert "Confirm" in hint
+        # `6911740`: the hint is computed at mount and nothing recomputes it on
+        # a move, so no confirm screen may promise `Confirm` any more.
+        assert "Select" in hint
         assert "Cancel" in hint
 
 
