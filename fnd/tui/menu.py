@@ -1874,7 +1874,15 @@ def _source_labels(paths: list[str]) -> list[str]:
         deeper = [
             i
             for i, label in enumerate(labels)
-            if counts[label] > 1 and at(i, depths[i] + 1) != label
+            if counts[label] > 1
+            and at(i, depths[i] + 1) != label
+            # Two rows on the SAME path never separate, so growing them buys
+            # nothing and costs the summary column: a duplicated source
+            # rendered as two identical full paths with no room for what
+            # either one filters. The row number tells those apart.
+            and any(
+                parts[j] != parts[i] for j, other in enumerate(labels) if other == label and j != i
+            )
         ]
         if not deeper:
             break
