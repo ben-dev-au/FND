@@ -1816,30 +1816,49 @@ def _folder_glob(root: Path, globs: list[str]) -> str | None:
     return None
 
 
-def _other_filters(src: Any) -> list[str]:
-    """Dimensions narrowing this source besides file type and include path.
+_DATE_BOUNDS = ("created_after", "created_before", "modified_after", "modified_before")
 
-    The row named only types, so a source an inherited rule had cut to one
-    file in sixteen still read "All types".
-    """
-    f = src.effective_filters
+
+def _narrowing_dimensions(f: Any) -> list[str]:
+    """Which dimensions of a filter set narrow anything."""
     named = []
-    # Excludes drop files before any other rule runs, so a source cut to a
-    # third of itself by one `build/**` read as unfiltered.
-    if getattr(src, "excludes", None):
-        named.append("excludes")
     if f.include_tags or f.exclude_tags:
         named.append("tags")
     if f.min_size is not None or f.max_size is not None:
         named.append("size")
-    if any(
-        getattr(f, n) is not None
-        for n in ("created_after", "created_before", "modified_after", "modified_before")
-    ):
+    if any(getattr(f, n, None) is not None for n in _DATE_BOUNDS):
         named.append("dates")
     if (f.frontmatter or "").strip() or (f.expression or "").strip():
         named.append("rule")
     return named
+
+
+def _other_filters(src: Any) -> list[str]:
+    """Dimensions narrowing this source: its own by name, the defaults' as one.
+
+    Reading `effective_filters` alone put `tags` on every row in the app — the
+    shipped `no_index` exclusion is a default — while the same source's detail
+    screen said `inherited`. Dropping them instead is the opposite lie: an
+    inherited rule can cut a source to one file in sixteen.
+    """
+    own = src.filters
+    named = []
+    # Excludes drop files before any other rule runs, and are the source's own
+    # field, never inherited.
+    if getattr(src, "excludes", None):
+        named.append("excludes")
+    if own is not None:
+        named.extend(_narrowing_dimensions(own))
+    inherited = set(_narrowing_dimensions(src.effective_filters)) - set(named)
+    if inherited or _inherits_kinds(src):
+        named.append("inherited")
+    return named
+
+
+def _inherits_kinds(src: Any) -> bool:
+    """Whether a file-type restriction on this source comes from the defaults."""
+    own = getattr(src, "filters", None)
+    return bool(src.effective_filters.kinds) and (own is None or own.kinds is None)
 
 
 def _make_open_clone_source(name: str) -> Callable[[FNDApp], None]:
