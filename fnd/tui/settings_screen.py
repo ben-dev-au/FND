@@ -6361,11 +6361,22 @@ class FilterBrowserScreen(Screen[None]):
 
     @on(ToggleTree.SelectionChanged, "#filter_tree")
     def _on_selection(self, ev: ToggleTree.SelectionChanged) -> None:
-        from fnd.filters.tree_model import apply_selection
+        from fnd.filters.tree_model import apply_selection, selection_for
 
         self._spec, self._gitignore, self._fndignore = apply_selection(
             self._spec, ev.selected, ev.excluded, self._offered_kind_ids()
         )
+        # Ticking every file type IS "no rule", and the model says so by
+        # collapsing `kinds` to empty. The tree went on showing every box
+        # ticked, so `● File types (every type)` sat there as a state that
+        # compiles identically to `○ no rule`, saves nothing, and comes back
+        # as `○`. Re-derive from the spec whenever the two disagree.
+        settled, settled_out = selection_for(
+            self._spec, gitignore=self._gitignore, fndignore=self._fndignore
+        )
+        if settled != set(ev.selected) or settled_out != set(ev.excluded):
+            self._rebuild(focus_tree=False)
+            return
         self._refresh_summary()
 
     def _say_when_nothing_matches(self, any_rows: bool) -> None:
