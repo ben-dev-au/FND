@@ -2174,6 +2174,8 @@ def open_source_filter_browser(
             root,
             budget_s=0.8,
             ignore_names=names,
+            # The pane names these in its own footer as paths it is skipping.
+            excludes=list(excludes or ()),
             gate=build_gate(dataclasses.replace(spec_from_resolved(resolved), kinds=())),
         )
 

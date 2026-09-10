@@ -72,6 +72,7 @@ def sample_source(
     max_files: int = _DEFAULT_MAX_FILES,
     walk: Iterator[Path] | None = None,
     ignore_names: Sequence[str] | None = None,
+    excludes: Sequence[str] | None = None,
     gate: FileGate | None = None,
 ) -> SourceSample:
     """Sample ``root`` for the values its filter pickers should offer.
@@ -80,9 +81,10 @@ def sample_source(
     the result ``truncated`` so callers can say the list is partial rather
     than presenting it as complete.
 
-    Ignore files are honoured, so the pickers offer what would actually be
-    indexed: without them a `.fndignore`-d folder still contributed its types
-    and tags, and the picker offered a file type the walk could never yield.
+    Ignore files and ``excludes`` are honoured, so the pickers offer what would
+    actually be indexed: without them a `.fndignore`-d folder still contributed
+    its types and tags, and a source naming `Archive/**` in its own excludes
+    counted the files in it.
     """
     from fnd.file_facts import FileFacts
     from fnd.frontmatter import FrontmatterParseError, read_frontmatter_from_file
@@ -93,7 +95,11 @@ def sample_source(
     providers = [p for p in TAG_PROVIDERS.values() if p.available_on(sys.platform)]
     deadline = time.monotonic() + budget_s
     names = _DEFAULT_IGNORE_NAMES if ignore_names is None else tuple(ignore_names)
-    paths = walk if walk is not None else walk_files(roots=[root], ignore_names=names)
+    paths = (
+        walk
+        if walk is not None
+        else walk_files(roots=[root], ignore_names=names, excludes=list(excludes or ()) or None)
+    )
 
     for path in paths:
         if sample.files_seen >= max_files or time.monotonic() > deadline:

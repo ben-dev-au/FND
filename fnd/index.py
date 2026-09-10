@@ -236,12 +236,17 @@ def read_file_metadata(
     """
     import sys as _sys
 
+    from fnd.file_facts import frontmatter_kinds
     from fnd.frontmatter import FrontmatterParseError, read_frontmatter_from_file
+    from fnd.kinds import kind_for_suffix
     from fnd.tags import TagContext, providers_for, read_tags
 
     meta_blob_bytes = b""
     frontmatter: dict[str, object] | None = None
-    if path.suffix.lower() == ".md":
+    # The registry's word, not the suffix: `carries_frontmatter` is the single
+    # answer precisely so this cannot drift, and asking for `.md` here dropped
+    # the tags off every other Markdown variant as well as off `.txt`.
+    if kind_for_suffix(path.suffix) in frontmatter_kinds():
         try:
             frontmatter = read_frontmatter_from_file(path)
         except FrontmatterParseError:
