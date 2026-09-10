@@ -1431,7 +1431,7 @@ class SettingsScreen(Screen[None]):
             # Naming the key, as the filter browser's box does: these screens
             # can open with the LIST focused, where a typed letter runs its
             # command — `q` on the Keybindings sheet quit the app.
-            yield Input(placeholder="Filter rows…  (/)", id="settings_search")
+            yield Input(placeholder=_SEARCH_PLACEHOLDER_WITH_KEY, id="settings_search")
             yield SettingsList()
             yield DetailStrip()
             if not self._breadcrumb:
@@ -1591,7 +1591,7 @@ class SettingsScreen(Screen[None]):
         # Search input focused: hand-off / clear cluster.
         focused = self.focused
         if isinstance(focused, Input) and getattr(focused, "id", None) == "settings_search":
-            return (("↓", "Results"), ("⏎", "Open first"), ("Esc", "Clear"))
+            return (("↓", "Results"), ("⏎", "Go to first"), ("Esc", "Clear"))
 
         # Keybindings sub-screen: ⏎ Run · [key] Run directly · Esc Back.
         if self._breadcrumb[-1:] == ("Keybindings",):
@@ -1771,9 +1771,11 @@ class SettingsScreen(Screen[None]):
     def on_descendant_focus(self, _ev: events.DescendantFocus) -> None:
         """Re-render the hint bar when focus moves (search ↔ list)."""
         self._refresh_hint_bar()
+        refresh_search_placeholder(self, "#settings_search")
 
     def on_descendant_blur(self, _ev: events.DescendantBlur) -> None:
         self._refresh_hint_bar()
+        refresh_search_placeholder(self, "#settings_search")
 
     def _row_metadata(self, item: MenuItem) -> str:
         """Build the 2nd-line metadata for the detail strip — storage path,
@@ -5271,6 +5273,23 @@ def open_settings(app: FNDApp) -> None:
     )
 
 
+SEARCH_PLACEHOLDER = "Filter rows…"
+_SEARCH_PLACEHOLDER_WITH_KEY = f"{SEARCH_PLACEHOLDER}  (/)"
+
+
+def refresh_search_placeholder(screen: Screen[None], selector: str) -> None:
+    """Offer `(/)` only where `/` reaches the binding.
+
+    The box opens WITH focus, so the advertised key goes in as text and the
+    empty state then blames the terms: `No matches for '/collect'`.
+    """
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        box = screen.query_one(selector, Input)
+        box.placeholder = SEARCH_PLACEHOLDER if box.has_focus else _SEARCH_PLACEHOLDER_WITH_KEY
+
+
 def open_settings_section(
     app: FNDApp,
     section_id: str,
@@ -6318,7 +6337,7 @@ class FilterBrowserScreen(Screen[None]):
         with Vertical(id="settings_box") as box:
             box.border_title = self._title
             yield Static(LEGEND, id="filter_legend")
-            yield Input(placeholder="Filter rows…  (/)", id="filter_search")
+            yield Input(placeholder=_SEARCH_PLACEHOLDER_WITH_KEY, id="filter_search")
             yield ClearFiltersBar(
                 "", id="clear_filters_bar", on_clear=self.action_clear_all, focus_id="filter_tree"
             )
@@ -6460,9 +6479,11 @@ class FilterBrowserScreen(Screen[None]):
 
     def on_descendant_focus(self, _ev: events.DescendantFocus) -> None:
         self._render_footer()
+        refresh_search_placeholder(self, "#filter_search")
 
     def on_descendant_blur(self, _ev: events.DescendantBlur) -> None:
         self._render_footer()
+        refresh_search_placeholder(self, "#filter_search")
 
     def _load_sample(self) -> None:
         """Sampling opens files, so it cannot run on the event loop: the scan's
