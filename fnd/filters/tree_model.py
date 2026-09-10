@@ -132,13 +132,17 @@ def _kind_items(sample: SourceSample | None) -> list[tuple[str, str, str]]:
             # What the source's other rules admit, not the raw disk tally:
             # `Markdown · 3` sat four lines above `Tags (no_index excluded)`
             # and the index held 2.
-            counts = (
-                sample.kinds_kept if sample and sample.gated else (sample.kinds if sample else {})
-            )
+            raw = sample.kinds if sample else {}
+            counts = sample.kinds_kept if sample and sample.gated else raw
             count = counts.get(kind, 0) or 0
+            # `· 0` where the source HAS files of this kind and the rules keep
+            # none: that is the loudest thing the pane can say, and it said it
+            # by falling silent. A kind the source has none of stays bare,
+            # because every kind is offered and forty zeros say nothing.
+            counted = count > 0 or (raw.get(kind, 0) or 0) > 0
             suffixes = "/".join(spec.suffixes)
             label = f"{spec.label} ({suffixes})"
-            out.append((cat.id, f"kind:{kind}", f"{label}  ·  {count}" if count else label))
+            out.append((cat.id, f"kind:{kind}", f"{label}  ·  {count}" if counted else label))
     return out
 
 
