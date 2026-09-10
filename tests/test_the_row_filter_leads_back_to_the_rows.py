@@ -28,7 +28,7 @@ async def _browser(app: FNDApp, pilot: object) -> FilterBrowserScreen:
             spec=FilterSpec(),
             gitignore=True,
             fndignore=True,
-            sample_provider=lambda: _SAMPLE,
+            sample_provider=lambda _spec: _SAMPLE,
             on_save=lambda *_a: None,
         )
     )

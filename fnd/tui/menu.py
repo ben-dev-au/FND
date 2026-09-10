@@ -2467,7 +2467,7 @@ def _open_filter_browser(app: FNDApp) -> None:
             spec=_spec_from_filters(current),
             gitignore=current.respect_gitignore,
             fndignore=current.respect_fndignore,
-            sample_provider=lambda: _indexed_tags(app),
+            sample_provider=lambda _spec: _indexed_tags(app),
             no_tags_note="no tags in what is indexed",
             unindexed_note="tags are offered once a collection is indexed",
             on_save=_save,

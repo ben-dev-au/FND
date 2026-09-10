@@ -19,7 +19,7 @@ from fnd.tui.settings_screen import FilterBrowserScreen
 from fnd.tui.widgets.toggle_tree import ToggleTree
 
 
-def _sample() -> SourceSample:
+def _sample(_spec: object = None) -> SourceSample:
     return SourceSample(
         kinds={"md": 40, "pdf": 3},
         tags={"frontmatter": {"alpha": 2, "beta": 3, "zeta": 1}, "os": {"alpine": 1}},

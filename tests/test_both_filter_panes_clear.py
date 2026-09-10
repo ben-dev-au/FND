@@ -46,7 +46,7 @@ async def _browser(
         gitignore=True,
         fndignore=True,
         inherited=inherited,
-        sample_provider=lambda: _SAMPLE,
+        sample_provider=lambda _spec: _SAMPLE,
         on_save=lambda *_a: None,
     )
     app.push_screen(screen)
@@ -263,7 +263,7 @@ class TestSavingNothingSaysNothingWasSaved:
                 spec=_DEFAULTS[0],
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *a: saved.append(a),
             )
             app.push_screen(screen)
@@ -288,7 +288,7 @@ class TestSavingNothingSaysNothingWasSaved:
                 spec=_DEFAULTS[0],
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *a: saved.append(a),
             )
             app.push_screen(screen)

@@ -2160,8 +2160,8 @@ def open_source_filter_browser(
     defaults = cfg.defaults.filters if cfg else DefaultFilters()
     resolved = resolve_filters(SourceFilters.model_validate(overrides or {}), defaults)
 
-    def _sample() -> Any:
-        if root is None or not root.exists():
+    def _sample(spec: Any = None) -> Any:
+        if root is None or path_is_absent(root):
             return None
         # The source's own ignore settings, so the offered types and tags are
         # the ones this source would actually index.
@@ -2173,16 +2173,17 @@ def open_source_filter_browser(
             )
             if on
         )
-        # The source's own rules MINUS the kind rule: a kind the user has
-        # not ticked would otherwise read `· 0` and tell them nothing about
-        # what ticking it would bring in.
+        # The rules the screen is SHOWING, not the ones it opened with, minus
+        # the kind rule: a kind the user has not ticked would otherwise read
+        # `· 0` and tell them nothing about what ticking it would bring in.
+        gating = spec if spec is not None else spec_from_resolved(resolved)
         return sample_source(
             root,
             budget_s=0.8,
             ignore_names=names,
             # The pane names these in its own footer as paths it is skipping.
             excludes=list(excludes or ()),
-            gate=build_gate(dataclasses.replace(spec_from_resolved(resolved), kinds=())),
+            gate=build_gate(dataclasses.replace(gating, kinds=())),
         )
 
     def _save(spec: Any, gitignore: bool, fndignore: bool) -> None:
@@ -6289,7 +6290,7 @@ class FilterBrowserScreen(Screen[None]):
         spec: Any,
         gitignore: bool,
         fndignore: bool,
-        sample_provider: Callable[[], Any] | None = None,
+        sample_provider: Callable[[Any], Any] | None = None,
         globs: list[str] | None = None,
         excludes: list[str] | None = None,
         inherited: tuple[Any, bool, bool] | None = None,
@@ -6327,6 +6328,10 @@ class FilterBrowserScreen(Screen[None]):
         self._gitignore = gitignore
         self._fndignore = fndignore
         self._sample: Any = None
+        # Which spec the current sample was gated with. The counts are only
+        # true of that one, and the screen edits the spec under them.
+        self._sampled_spec: Any = None
+        self._resample_timer: Any = None
         # What the screen opened with, so leaving can say whether anything is
         # being thrown away.
         self._opened_with = (spec, gitignore, fndignore)
@@ -6335,6 +6340,9 @@ class FilterBrowserScreen(Screen[None]):
         # would otherwise discard the value with no way back to it.
         self._kept_custom: dict[str, str] = {}
         self._sample_provider = sample_provider
+        # Nothing has been sampled yet, and `_spec` is not `None`, so the
+        # first `_rebuild` would schedule a scan on top of the mount one.
+        self._sampled_spec = spec
         self._scanning = sample_provider is not None
         self._query = ""
         self._on_save = on_save
@@ -6497,18 +6505,40 @@ class FilterBrowserScreen(Screen[None]):
         """Sampling opens files, so it cannot run on the event loop: the scan's
         budget is only checked between files, and one cloud-evicted note
         overruns it by as long as the provider takes to deliver."""
+        wanted = self._spec
         try:
-            sample = self._sample_provider() if self._sample_provider is not None else None
+            sample = self._sample_provider(wanted) if self._sample_provider is not None else None
         except Exception:
             sample = None
-        self.app.call_from_thread(self._sample_arrived, sample)
+        self.app.call_from_thread(self._sample_arrived, sample, wanted)
 
-    def _sample_arrived(self, sample: Any) -> None:
+    def _sample_arrived(self, sample: Any, spec: Any = None) -> None:
         """The scan lands on a worker's schedule, so it must not move focus:
         the user may be mid-word in the row filter."""
         self._scanning = False
         self._sample = sample
+        self._sampled_spec = spec
         self._rebuild(focus_tree=False)
+
+    def _resample_if_stale(self) -> None:
+        """Re-scan when the spec on screen is not the one the counts describe.
+
+        Debounced, because ticking through a branch changes the spec once per
+        keypress and each scan walks the source. The timer is the only thing
+        that starts a scan after mount, so the two cannot race.
+        """
+        if self._sample_provider is None or self._spec == self._sampled_spec:
+            return
+        if self._resample_timer is not None:
+            self._resample_timer.stop()
+        self._resample_timer = self.set_timer(0.3, self._start_resample)
+
+    def _start_resample(self) -> None:
+        self._resample_timer = None
+        if self._spec == self._sampled_spec:
+            return
+        self._scanning = True
+        self.run_worker(self._load_sample, thread=True)
 
     def _rebuild(self, *, focus_tree: bool = True) -> None:
         """``focus_tree`` False where the user is typing or a worker landed.
@@ -6521,6 +6551,7 @@ class FilterBrowserScreen(Screen[None]):
 
         from fnd.filters.tree_model import custom_ids, selection_for, spec_branches
 
+        self._resample_if_stale()
         tree = self.query_one("#filter_tree", ToggleTree)
         keep = tree.expanded_group_ids if tree.root.children else set()
         line = tree.cursor_line

@@ -73,7 +73,7 @@ async def test_the_screen_does_not_contradict_itself(tmp_index_dir: Path) -> Non
             spec=FilterSpec(kinds=("python",)),
             gitignore=True,
             fndignore=True,
-            sample_provider=lambda: _SAMPLE,
+            sample_provider=lambda _spec: _SAMPLE,
             on_save=lambda *_a: None,
         )
         app.push_screen(screen)

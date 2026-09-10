@@ -56,7 +56,7 @@ async def test_pressing_the_menu_key_twice_leaves_one_guard(built_index: Path) -
             gitignore=True,
             fndignore=True,
             inherited=_INHERITED,
-            sample_provider=lambda: _SAMPLE,
+            sample_provider=lambda _spec: _SAMPLE,
             on_save=lambda *_a: None,
         )
         app.push_screen(screen)

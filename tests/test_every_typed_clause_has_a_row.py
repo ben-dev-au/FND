@@ -89,7 +89,7 @@ async def test_enter_on_a_typed_rule_opens_the_text_form() -> None:
             spec=FilterSpec(expression="file.size < 500000", raw=("file.size > 10",)),
             gitignore=True,
             fndignore=True,
-            sample_provider=lambda: _SAMPLE,
+            sample_provider=lambda _spec: _SAMPLE,
             on_save=lambda *_a: None,
         )
         app.push_screen(screen)

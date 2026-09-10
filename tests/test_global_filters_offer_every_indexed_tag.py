@@ -139,7 +139,7 @@ async def test_the_screen_says_why_it_offers_none(tmp_index_dir: Path) -> None:
                 spec=FilterSpec(),
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: None,
+                sample_provider=lambda _spec: None,
                 no_tags_note="tags are offered once a collection is indexed",
                 on_save=lambda *_a: None,
             )
@@ -226,8 +226,16 @@ async def test_the_two_states_say_different_things(tmp_index_dir: Path) -> None:
     async with app.run_test(size=(110, 30)) as pilot:
         await pilot.pause()
         for provider, expected, forbidden in (
-            (lambda: None, "tags are offered once a collection is indexed", "no tags in what"),
-            (lambda: SourceSample(), "no tags in what is indexed", "once a collection is indexed"),
+            (
+                lambda _spec: None,
+                "tags are offered once a collection is indexed",
+                "no tags in what",
+            ),
+            (
+                lambda _spec: SourceSample(),
+                "no tags in what is indexed",
+                "once a collection is indexed",
+            ),
         ):
             app.push_screen(
                 FilterBrowserScreen(

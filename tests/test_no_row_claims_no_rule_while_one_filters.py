@@ -50,7 +50,7 @@ async def test_the_row_stops_reading_no_rule(tmp_index_dir: Path) -> None:
                 spec=FilterSpec(min_size=5_000_000),
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *_a: None,
             )
         )

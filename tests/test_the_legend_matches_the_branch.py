@@ -63,7 +63,7 @@ async def test_the_painted_legend_follows_the_cursor(tmp_index_dir: Path) -> Non
                 spec=FilterSpec(),
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *_a: None,
             )
         )
@@ -100,7 +100,7 @@ async def test_enter_on_a_rules_branch_does_something(tmp_index_dir: Path) -> No
                 spec=FilterSpec(),
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *_a: None,
             )
         )

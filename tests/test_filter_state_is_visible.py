@@ -59,7 +59,7 @@ async def _tree(app: FNDApp, pilot: object, spec: FilterSpec) -> ToggleTree:
             spec=spec,
             gitignore=True,
             fndignore=True,
-            sample_provider=lambda: _SAMPLE,
+            sample_provider=lambda _spec: _SAMPLE,
             on_save=lambda *_a: None,
         )
     )
@@ -243,7 +243,7 @@ async def test_a_collapsed_screen_shows_colour(tmp_index_dir: Path) -> None:
                 fndignore=True,
                 # One tag, wholly excluded, so the branch rolls up to ⊘
                 # rather than the ◐ that a partial one earns.
-                sample_provider=lambda: SourceSample(
+                sample_provider=lambda _spec: SourceSample(
                     kinds={"md": 3}, tags={"frontmatter": {"no_index": 1}}
                 ),
                 on_save=lambda *_a: None,

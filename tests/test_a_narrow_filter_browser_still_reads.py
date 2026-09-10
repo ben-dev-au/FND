@@ -67,7 +67,7 @@ async def test_the_summary_stops_repeating_the_row_above(tmp_index_dir: Path) ->
                 spec=FilterSpec(exclude_tags={"frontmatter": ("no_index",)}),
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *_a: None,
             )
         )
@@ -106,7 +106,7 @@ class TestTheHeadNamesWhatTheExpressionCannot:
                     spec=FilterSpec(),
                     gitignore=True,
                     fndignore=True,
-                    sample_provider=lambda: _SAMPLE,
+                    sample_provider=lambda _spec: _SAMPLE,
                     on_save=lambda *_a: None,
                 )
             )
@@ -136,7 +136,7 @@ class TestTheHeadNamesWhatTheExpressionCannot:
                     spec=FilterSpec(),
                     gitignore=False,
                     fndignore=False,
-                    sample_provider=lambda: _SAMPLE,
+                    sample_provider=lambda _spec: _SAMPLE,
                     on_save=lambda *_a: None,
                 )
             )

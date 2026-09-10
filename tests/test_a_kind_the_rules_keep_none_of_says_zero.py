@@ -79,7 +79,7 @@ async def test_a_truncated_scan_says_so_even_on_a_tagless_source(
             gitignore=True,
             fndignore=True,
             no_tags_note="no tags found in this source",
-            sample_provider=lambda: SourceSample(kinds={"md": 3}, truncated=True),
+            sample_provider=lambda _spec: SourceSample(kinds={"md": 3}, truncated=True),
             on_save=lambda *_a: None,
         )
         app.push_screen(screen)

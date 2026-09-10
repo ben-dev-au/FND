@@ -80,7 +80,7 @@ async def test_the_footer_does_not_promise_a_discard_it_only_offers(
             spec=FilterSpec(),
             gitignore=True,
             fndignore=True,
-            sample_provider=lambda: _SAMPLE,
+            sample_provider=lambda _spec: _SAMPLE,
             on_save=lambda *_a: None,
         )
         app.push_screen(screen)

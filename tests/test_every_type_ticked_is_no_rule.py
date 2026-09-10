@@ -56,7 +56,7 @@ async def test_ticking_them_all_leaves_the_tree_showing_no_rule(tmp_index_dir: P
                 spec=FilterSpec(),
                 gitignore=True,
                 fndignore=True,
-                sample_provider=lambda: _SAMPLE,
+                sample_provider=lambda _spec: _SAMPLE,
                 on_save=lambda *_a: None,
             )
         )

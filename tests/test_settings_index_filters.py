@@ -292,7 +292,7 @@ async def test_the_source_scan_does_not_block_the_screen(built_index: Path) -> N
 
     release = threading.Event()
 
-    def provider() -> SourceSample:
+    def provider(_spec: object = None) -> SourceSample:
         release.wait(timeout=10)
         return SourceSample(kinds={"md": 42}, tags={"os": {"slowtag": 7}})
 

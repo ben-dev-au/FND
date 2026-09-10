@@ -32,7 +32,7 @@ async def _browser_with_a_bar(app: FNDApp, pilot: object) -> FilterBrowserScreen
         gitignore=True,
         fndignore=True,
         inherited=_DEFAULTS,
-        sample_provider=lambda: _SAMPLE,
+        sample_provider=lambda _spec: _SAMPLE,
         on_save=lambda *_a: None,
     )
     app.push_screen(screen)
