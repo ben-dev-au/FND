@@ -944,6 +944,15 @@ class FNDApp(App[None]):
         with contextlib.suppress(Exception):
             self.query_one("#results_pane", Tree).border_title = self._results.title()
 
+    def _refresh_panel_titles(self) -> None:
+        """All three collapsible panels, because the gesture that closes one
+        can be aimed at any of them and the marker is what says which."""
+        self._refresh_results_title()
+        with contextlib.suppress(Exception):
+            self._scope._refresh_collections_panel_title()
+        with contextlib.suppress(Exception):
+            self._scope.refresh_filters_panel_title()
+
     def _refresh_status(self) -> None:
         try:
             self.query_one("#results_pane", Tree).border_title = self._results.title()
@@ -1463,9 +1472,13 @@ class FNDApp(App[None]):
 
         The index keeps serving a deleted file's stored body, so the row and
         the preview look ordinary. A keypress that cannot work must not look
-        like one that worked.
+        like one that worked. Only a path that is PROVABLY gone earns the
+        notice: `exists()` raises on an unreadable parent, and that took the
+        app down on the keypress meant to explain itself.
         """
-        if path.exists():
+        from fnd.fsmeta import path_is_absent
+
+        if not path_is_absent(path):
             return False
         self.notify(
             f"{path.name} is no longer on disk. Update the index to drop it.",
@@ -1825,7 +1838,7 @@ class FNDApp(App[None]):
                     self._scope.collapsed_panels.add(frame.id)
                     self._scope.persist()
                     self._reflow_sidebar(immediate=True)  # collapse in one frame
-                    self._refresh_results_title()
+                    self._refresh_panel_titles()
                 return
             parent.collapse()
             tree.move_cursor(parent)
@@ -1856,7 +1869,7 @@ class FNDApp(App[None]):
                 self._scope.collapsed_panels.discard(frame.id)
                 self._scope.persist()
             self._reflow_sidebar(immediate=True)  # expand in one frame
-            self._refresh_results_title()
+            self._refresh_panel_titles()
             return
         node = tree.cursor_node
         if node is None or not node.children:
@@ -1969,6 +1982,7 @@ class FNDApp(App[None]):
             self._scope.collapsed_panels.discard(frame.id)
             self._scope.persist()
         self._reflow_sidebar(immediate=True)  # reopen in one frame
+        self._refresh_panel_titles()
         return True
 
     @on(events.Click, "#filters_pane")

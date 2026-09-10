@@ -16,6 +16,7 @@ from rich.cells import cell_len
 from textual.widgets import Tree
 
 from fnd.config import is_all_collections
+from fnd.fsmeta import path_is_absent
 from fnd.kinds import CATEGORIES, CATEGORY_BY_ID, KIND_BY_ID, KINDS_IN_CATEGORY
 from fnd.launch_command import LaunchScope, SearchSnapshot
 from fnd.tui.results_labels import (
@@ -29,6 +30,7 @@ from fnd.tui.widgets.clear_bar import clear_label
 if TYPE_CHECKING:
     from textual.timer import Timer
 
+    from fnd.config import CollectionConfig
     from fnd.tui.app import FNDApp
 
 __all__ = ["ScopeController"]
@@ -71,17 +73,16 @@ FULL = _FullScope()
 _FILTER_LABEL_COLUMN = 17
 
 
-def _missing_sources(col: object | None) -> int:
-    """How many of a collection's source paths are not on disk.
+def _missing_sources(col: CollectionConfig | None) -> int:
+    """How many of a collection's source paths are provably not on disk.
 
-    `exists()`, not a listing: the sidebar rebuilds on every scope toggle, and
-    a folder that has GONE is what a stale config points at. Present-but-
+    One stat each, not a listing: the sidebar rebuilds on every scope toggle,
+    and a folder that has GONE is what a stale config points at. Present-but-
     unreadable is rarer, and the index run reports that one itself.
     """
     if col is None:
         return 0
-    sources = getattr(col, "sources", []) or []
-    return sum(1 for s in sources if not Path(str(s.path)).expanduser().exists())
+    return sum(1 for s in col.sources if path_is_absent(Path(str(s.path)).expanduser()))
 
 
 def _branch_row(
@@ -217,6 +218,9 @@ class ScopeController:
             "filters_pane" if p == "filters_panel_tree" else p for p in saved.collapsed_panels
         }
         self.expanded_collections: set[str] = set(saved.expanded_collections)
+        # What the Filters title says without its collapse marker, so the
+        # collapse gesture can restyle it without recomputing the counts.
+        self._filters_title: str = "Filters"
         # Prune unknown branch names so a renamed branch doesn't get
         # stuck "expanded" forever.
         self.expanded_filter_branches: set[str] = {
@@ -784,16 +788,24 @@ class ScopeController:
             active_bits.append(f"{n_inc} tag{'s' if n_inc != 1 else ''}")
         if n_exc:
             active_bits.append(f"−{n_exc} tag{'s' if n_exc != 1 else ''}")
-        title = "Filters" if not active_bits else f"Filters — {', '.join(active_bits)}"
+        self._filters_title = (
+            "Filters" if not active_bits else f"Filters — {', '.join(active_bits)}"
+        )
+        self.refresh_filters_panel_title()
+        self._update_clear_bar()
+        # Clear-bar showing/hiding (and a rebuilt tag list) change the pane's
+        # row demand — reflow the sidebar heights.
+        self._app._reflow_sidebar()
+
+    def refresh_filters_panel_title(self) -> None:
+        """Just the title, for the collapse gesture: `_update_filters_chrome`
+        also queues a sidebar reflow, and that gesture reflows synchronously."""
+        title = self.collapsed_marker("filters_pane") + self._filters_title
         try:
             self._app.query_one("#filters_pane").border_title = title
         except Exception:
             with contextlib.suppress(Exception):
                 self._app.query_one("#filters_panel_tree", Tree).border_title = title
-        self._update_clear_bar()
-        # Clear-bar showing/hiding (and a rebuilt tag list) change the pane's
-        # row demand — reflow the sidebar heights.
-        self._app._reflow_sidebar()
 
     # ── File-type in-place repaint (no rebuild → cursor never jumps) ───────
 
@@ -1532,6 +1544,14 @@ class ScopeController:
         else:
             node.set_label(current_label)
 
+    def collapsed_marker(self, panel_id: str) -> str:
+        """``▶ `` when that panel is collapsed to its two border rows.
+
+        Read from the persisted set rather than the DOM class, so the three
+        panels and the restore at mount all answer from one place.
+        """
+        return "▶ " if panel_id in self.collapsed_panels else ""
+
     def _panel_title(self, names: list[str]) -> str:
         """Border-title string from the selection map. Source counts use
         ``_source_active`` — the same rule the row markers use — so the
@@ -1556,7 +1576,7 @@ class ScopeController:
         title = f"Collections · {n_full}/{len(names)} active"
         if total and active:
             title += f", {active}/{total} sources"
-        return title
+        return self.collapsed_marker("collections_panel_tree") + title
 
     def _refresh_collections_panel_title(self) -> None:
         """Recompute the panel's border-title after a toggle without the

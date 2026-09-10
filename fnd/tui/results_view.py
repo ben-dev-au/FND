@@ -57,13 +57,7 @@ class ResultsView:
         return f"{self._collapsed_marker()}{self._title_text()}"
 
     def _collapsed_marker(self) -> str:
-        import contextlib
-
-        with contextlib.suppress(Exception):
-            pane = self._app.query_one("#results_pane")
-            if "collapsed" in pane.classes:
-                return "▶ "
-        return ""
+        return self._app._scope.collapsed_marker("results_pane")
 
     def _title_text(self) -> str:
         if not self._app._search.idle:
