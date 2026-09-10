@@ -221,10 +221,13 @@ def _fuzzy_pass(
     # prefix rides on the searcher; ``query`` is the bare lexical string.
     from fnd.query_filters import extract_filters
 
-    prefix = searcher.filter_prefix
-    filter_source = f"{prefix} {query}" if prefix else query
-    for filt in extract_filters(filter_source, schema, searcher._index).filters:
-        subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(filt, 0.0)))
+    # One clause at a time. Joined into `kind:(md txt) AND mtime:week zephyr`
+    # neither survives: `extract_filters` will not lift a clause adjacent to a
+    # boolean operator, so two filters leaked where one held.
+    sources = [*getattr(searcher, "filter_clauses", ()), query]
+    for source in sources:
+        for filt in extract_filters(source, schema, searcher._index).filters:
+            subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(filt, 0.0)))
     # Tags are typed state rather than query text, so extract_filters can't
     # see them; without this the fuzzy pass re-admits tag-excluded files.
     if tag_filter is not None and not tag_filter.is_empty():

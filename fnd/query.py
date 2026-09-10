@@ -398,10 +398,13 @@ def _parse_query(index: Index, query: str, **kwargs: object) -> Query:
 class Searcher:
     """Single-pass searcher against an existing fnd index."""
 
-    # Hard-filter clauses every pass must honour, as query text. Wrappers that
-    # scope a search set it; passes building their own boolean query read it
-    # rather than the lexical string, which carries no qualifiers.
+    # Hard-filter clauses every pass must honour. Wrappers that scope a search
+    # set both: `filter_prefix` is the joined string the tantivy parser sees,
+    # and `filter_clauses` is the same clauses UNJOINED, for passes that build
+    # their own boolean query. Re-splitting the joined form loses them, because
+    # a clause adjacent to `AND` is not lifted (see fnd/query_filters.py).
     filter_prefix: str = ""
+    filter_clauses: tuple[str, ...] = ()
 
     def __init__(self, *, index_dir: Path) -> None:
         self._index = _open_index(index_dir)

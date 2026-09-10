@@ -31,7 +31,7 @@ def _index_two_kinds(tmp_path: Path, index_dir: Path) -> Path:
 def test_fuzzy_pass_honours_kind_filter(tmp_path: Path, tmp_index_dir: Path) -> None:
     """``kind:md`` in the prefix must not be dropped by the fuzzy pass."""
     _index_two_kinds(tmp_path, tmp_index_dir)
-    searcher = _PrefixingSearcher(Searcher(index_dir=tmp_index_dir), prefix="kind:md")
+    searcher = _PrefixingSearcher(Searcher(index_dir=tmp_index_dir), clauses=["kind:md"])
 
     hits = cascade_search(
         searcher,  # type: ignore[arg-type]
@@ -67,7 +67,7 @@ def test_fuzzy_pass_honours_date_filter(tmp_path: Path, tmp_index_dir: Path) -> 
     os.utime(stale, (old, old))
     build_index(roots=[root], index_dir=tmp_index_dir, collection="c")
 
-    searcher = _PrefixingSearcher(Searcher(index_dir=tmp_index_dir), prefix="mtime:week")
+    searcher = _PrefixingSearcher(Searcher(index_dir=tmp_index_dir), clauses=["mtime:week"])
     hits = cascade_search(
         searcher,  # type: ignore[arg-type]
         query="glimer",
@@ -78,3 +78,38 @@ def test_fuzzy_pass_honours_date_filter(tmp_path: Path, tmp_index_dir: Path) -> 
 
     names = {Path(h.path).name for h in hits}
     assert names == {"fresh.md"}, f"mtime filter leaked: {sorted(names)}"
+
+
+def test_fuzzy_pass_honours_two_filters_at_once(tmp_path: Path, tmp_index_dir: Path) -> None:
+    """Two clauses joined for the parser must not read as none to the pass.
+
+    `extract_filters` will not lift a `field:value` adjacent to a boolean
+    operator, so re-deriving filters from `kind:md AND mtime:week glimer`
+    yielded nothing and BOTH filters leaked. One filter alone kept working,
+    which is why every test above passed while a real pane setting two of them
+    returned files that violate one.
+    """
+    root = tmp_path / "corpus"
+    root.mkdir()
+    keep = root / "keep.md"
+    old_md = root / "old.md"
+    other = root / "keep.txt"
+    for f in (keep, old_md, other):
+        f.write_text("the glimmer pattern is shown here.\n", encoding="utf-8")
+    old = time.time() - 400 * 86400
+    os.utime(old_md, (old, old))
+    build_index(roots=[root], index_dir=tmp_index_dir, collection="c")
+
+    searcher = _PrefixingSearcher(
+        Searcher(index_dir=tmp_index_dir), clauses=["kind:md", "mtime:week"]
+    )
+    hits = cascade_search(
+        searcher,  # type: ignore[arg-type]
+        query="glimer",
+        threshold=50,
+        limit=50,
+        collection="c",
+    )
+
+    names = {Path(h.path).name for h in hits}
+    assert names == {"keep.md"}, f"a conjunction leaked: {sorted(names)}"

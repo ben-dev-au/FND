@@ -26,6 +26,7 @@ that keeps a stale result out, not a belt-and-braces extra.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -60,7 +61,7 @@ class _SearchRequest:
     generation: int
     query: str
     lexical: str
-    filter_prefix: str
+    filter_clauses: tuple[str, ...]
     metadata_filter: str | None
     collection: str | list[str] | None
     source_scope: SourceScope | None
@@ -88,11 +89,15 @@ class _PrefixingSearcher:
     behaviour without changing their public signatures.
     """
 
-    def __init__(self, inner: Searcher, *, prefix: str) -> None:
+    def __init__(self, inner: Searcher, *, clauses: Sequence[str]) -> None:
         self._inner = inner
-        self._prefix = prefix.strip()
-        # Passes that build their own boolean query (cascade's fuzzy pass)
-        # read this instead of the lexical string, which carries no prefix.
+        # One input, so the two forms cannot disagree. The join must be AND:
+        # the parser is OR-default, and space-joining made a second filter
+        # WIDEN the results. Passes that build their own boolean query read
+        # the clauses, because `extract_filters` will not lift one adjacent
+        # to `AND`.
+        self.filter_clauses = tuple(c for c in (c.strip() for c in clauses) if c)
+        self._prefix = " AND ".join(self.filter_clauses)
         self.filter_prefix = self._prefix
 
     def _wrap(self, query: str) -> str:
@@ -396,11 +401,9 @@ class SearchController:
             generation=generation,
             query=query,
             lexical=lexical,
-            # Joined with AND, not a space: the parser is OR-default, so
-            # space-joining made a second filter WIDEN the results — picking a
-            # file type and then a date returned files matching either. Values
-            # inside one clause, `kind:(md pdf)`, stay a deliberate OR.
-            filter_prefix=" AND ".join(filter_clauses),
+            # One clause per dimension. Values inside one clause,
+            # `kind:(md pdf)`, stay a deliberate OR.
+            filter_clauses=tuple(filter_clauses),
             metadata_filter=plan.metadata_filter,
             # A partly-ticked collection contributes no name and is scoped by
             # its own sources, so the channel stays open. An empty list means
@@ -476,8 +479,8 @@ class SearchController:
         from fnd.layered import search_layered
 
         searcher = (
-            _PrefixingSearcher(handle, prefix=request.filter_prefix)
-            if request.filter_prefix
+            _PrefixingSearcher(handle, clauses=request.filter_clauses)
+            if request.filter_clauses
             else handle
         )
         groups, trace = search_layered(
