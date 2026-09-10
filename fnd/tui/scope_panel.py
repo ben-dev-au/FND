@@ -71,6 +71,19 @@ FULL = _FullScope()
 _FILTER_LABEL_COLUMN = 17
 
 
+def _missing_sources(col: object | None) -> int:
+    """How many of a collection's source paths are not on disk.
+
+    `exists()`, not a listing: the sidebar rebuilds on every scope toggle, and
+    a folder that has GONE is what a stale config points at. Present-but-
+    unreadable is rarer, and the index run reports that one itself.
+    """
+    if col is None:
+        return 0
+    sources = getattr(col, "sources", []) or []
+    return sum(1 for s in sources if not Path(str(s.path)).expanduser().exists())
+
+
 def _branch_row(
     label: str, value: str, compact: str, budget: int, *, column: int = _FILTER_LABEL_COLUMN
 ) -> str:
@@ -528,15 +541,24 @@ class ScopeController:
             marker = self.collection_marker(name)
             n_sources = len(col.sources) if col else 0
             plural = "s" if n_sources != 1 else ""
+            # A source that is not there indexes nothing, and every other column
+            # on this row reads perfectly healthy while it does. One stat each,
+            # because this rebuilds on every scope toggle.
+            gone = _missing_sources(col)
             # The NAME was cut with no ellipsis, so `research-notes` painted as
             # `research-note`: a collection that does not exist, and
             # indistinguishable from one that could. The marker keeps its place
             # at the front; the row elides from the name inwards.
             prefix = f"{marker}  "
+            value = f"{n_sources} source{plural}"
+            compact = f"{n_sources} src"
+            if gone:
+                value = f"⚠ {gone} of {n_sources} missing"
+                compact = f"⚠ {gone} missing"
             label = prefix + _branch_row(
                 name,
-                f"{n_sources} source{plural}",
-                f"{n_sources} src",
+                value,
+                compact,
                 max(0, budget - len(prefix)),
                 column=0,
             )
