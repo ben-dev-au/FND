@@ -2295,6 +2295,12 @@ class FNDApp(App[None]):
             unsaved_on_stack,
         )
 
+        if isinstance(self.screen, UnsavedChangesScreen):
+            # The question is already on screen and waiting for an answer.
+            # Asking it again stacked a second guard that had dropped its own
+            # Save option, because the screen holding the work was then two
+            # deep, and the layers render identically.
+            return
         if isinstance(self.screen, SettingsScreen):
             self._close_settings_stack()
             return
@@ -2333,6 +2339,8 @@ class FNDApp(App[None]):
             unsaved_on_stack,
         )
 
+        if isinstance(self.screen, UnsavedChangesScreen):
+            return
         pending = unsaved_on_stack(self.screen_stack) if ask else None
         if pending is not None:
             what, save, blocked = pending
