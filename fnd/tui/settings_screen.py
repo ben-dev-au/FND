@@ -46,6 +46,7 @@ from textual.widgets import Input, OptionList, Static, TextArea
 from textual.widgets.option_list import Option, OptionDoesNotExist
 
 from fnd.display_text import sanitise_display_text
+from fnd.fsmeta import path_is_absent
 from fnd.tui.actions import load_keymap
 from fnd.tui.menu import (
     KIND_ACTION,
@@ -903,10 +904,15 @@ class EditBar(Horizontal):
             self._set_status("", tone="error")
             return
         p = _Path(raw).expanduser()
-        if not p.exists():
+        if path_is_absent(p):
             self._set_status("✗ does not exist", tone="error")
             return
-        if not p.is_dir():
+        try:
+            is_dir = p.is_dir()
+        except OSError:
+            self._set_status("⚠ unreadable", tone="warn")
+            return
+        if not is_dir:
             self._set_status("⚠ not a directory", tone="warn")
             return
         try:
@@ -3251,7 +3257,7 @@ class SourceFormScreen(Screen[None]):
         path = str(self._fields["path"] or "").strip().strip("'\"")
         if not path:
             return "Path is required."
-        if not Path(path).expanduser().exists():
+        if path_is_absent(Path(path).expanduser()):
             return f"Path does not exist: {path}"
         return ""
 
@@ -3683,7 +3689,7 @@ class AddCollectionWizard(Screen[None]):
         if not path:
             return "Source path is required."
         expanded = Path(path).expanduser()
-        if not expanded.exists():
+        if path_is_absent(expanded):
             return f"Path does not exist: {expanded}"
         return ""
 
@@ -6661,9 +6667,11 @@ class FilterBrowserScreen(Screen[None]):
             head.append(self._unindexed_note)
         elif self._no_tags_note and not _any_tag(self._sample):
             head.append(self._no_tags_note)
-        elif getattr(self._sample, "truncated", False):
-            # The scan stopped at its time budget, so the branches below list
-            # some of the source's types and tags rather than all of them.
+        if self._sample is not None and self._sample.truncated:
+            # Its own line, not the last arm of the chain above: the per-source
+            # browser always passes a tags note, so a tagless source could
+            # never reach this, and a bare row now positively means "none
+            # here" rather than "not counted".
             head.append("partial scan — this source has more types and tags")
         # Named separately because neither is a predicate over a file, so
         # neither can appear in the expression below.

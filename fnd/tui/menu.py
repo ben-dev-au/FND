@@ -38,6 +38,7 @@ from fnd.config import (
     DEFAULT_RESULT_LIMIT,
     is_all_collections,
 )
+from fnd.fsmeta import path_is_absent
 from fnd.tui.widgets import COMMIT_KEY
 
 if TYPE_CHECKING:
@@ -1803,7 +1804,7 @@ def _source_trailing(collection_name: str, idx: int) -> Callable[[FNDApp], str]:
         suffix = ""
         try:
             p = Path(src.path)
-            if not p.exists():
+            if path_is_absent(p):
                 suffix = " · ⚠ path not found"
             elif p.is_symlink() and not src.follow_symlinks:
                 # A symlinked root is refused unless the user opts in, so this
@@ -1815,7 +1816,10 @@ def _source_trailing(collection_name: str, idx: int) -> Callable[[FNDApp], str]:
                 if folder:
                     suffix = f" · ⚠ {folder!r} names a folder — use {folder.rstrip('/') + '/**'!r}"
         except Exception:
-            suffix = " · ⚠ path not found"
+            # Not "not found": the probes below raise on a path we cannot
+            # SEARCH, and naming a folder that is there as missing is the
+            # answer this batch removed from the prune guard and the opener.
+            suffix = ""
         return f"{types}{suffix}"
 
     return _summary

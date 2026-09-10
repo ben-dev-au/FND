@@ -224,7 +224,7 @@ def _fuzzy_pass(
     # One clause at a time. Joined into `kind:(md txt) AND mtime:week zephyr`
     # neither survives: `extract_filters` will not lift a clause adjacent to a
     # boolean operator, so two filters leaked where one held.
-    sources = [*getattr(searcher, "filter_clauses", ()), query]
+    sources = [*searcher.filter_clauses, query]
     for source in sources:
         for filt in extract_filters(source, schema, searcher._index).filters:
             subqueries.append((tantivy.Occur.Must, tantivy.Query.const_score_query(filt, 0.0)))

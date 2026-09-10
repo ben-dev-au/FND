@@ -15,10 +15,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from textual.pilot import Pilot
 from textual.widgets import Input
 
 from fnd.index import build_index
 from fnd.tui import FNDApp
+from fnd.tui.settings_screen import SettingsScreen
 from tests._pilot_wait import settings_ready
 
 
@@ -28,10 +30,12 @@ def built_index(fixtures_dir: Path, tmp_index_dir: Path) -> Path:
     return tmp_index_dir
 
 
-async def _palette(pilot: object, app: FNDApp) -> object:
+async def _palette(pilot: Pilot[None], app: FNDApp) -> SettingsScreen:
     app.action_open_command_palette()
     await settings_ready(pilot, app)
-    return app.screen
+    screen = app.screen
+    assert isinstance(screen, SettingsScreen), type(screen).__name__
+    return screen
 
 
 @pytest.mark.asyncio

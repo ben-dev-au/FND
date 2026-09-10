@@ -139,7 +139,7 @@ def _kind_items(sample: SourceSample | None) -> list[tuple[str, str, str]]:
             # none: that is the loudest thing the pane can say, and it said it
             # by falling silent. A kind the source has none of stays bare,
             # because every kind is offered and forty zeros say nothing.
-            counted = count > 0 or (raw.get(kind, 0) or 0) > 0
+            counted = (raw.get(kind, 0) or 0) > 0
             suffixes = "/".join(spec.suffixes)
             label = f"{spec.label} ({suffixes})"
             out.append((cat.id, f"kind:{kind}", f"{label}  ·  {count}" if counted else label))

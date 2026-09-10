@@ -36,6 +36,11 @@ batch-close:
 	@if [ -f dev/tools/workflow_audit_tmux.py ]; then \
 		uv run python dev/tools/workflow_audit_tmux.py $(HARNESS_SCENARIOS); \
 	else echo "skip: dev/tools/workflow_audit_tmux.py absent"; fi
+	@# Records that THIS tree passed. `green_gate` refuses a commit whose tree
+	@# has changed since, because pyright is a pre-push hook and a loop that
+	@# never pushes never runs it.
+	@mkdir -p .claude && python3 ~/.claude/hooks/green_gate.py --record > .claude/batch-close.ok \
+		&& echo "batch-close: recorded green"
 
 # Detector A: the suite with `_wait_for_screen`'s bound shrunk to 1ms. Produces
 # false positives by design, so it is a round-close instrument, not a gate.
