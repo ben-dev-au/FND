@@ -488,7 +488,9 @@ class TestTheTagsBranchDoesNotOverclaim:
         from fnd.tui.scope_panel import _tags_summary
 
         assert _tags_summary(0, 0, sources_on=False) == "tag sources off"
-        assert _tags_summary(0, 0, sources_on=True) == "none indexed"
+        # Scope, not index: narrowing the collections to empty leaves the tags
+        # indexed and unreachable, and this row is scoped to what is reachable.
+        assert _tags_summary(0, 0, sources_on=True) == "none in scope"
 
     def test_a_live_filter_with_no_rows_says_it_is_still_filtering(self) -> None:
         from fnd.tui.scope_panel import _tags_summary

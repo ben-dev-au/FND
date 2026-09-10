@@ -162,7 +162,41 @@ def _tags_summary(
         )
     if not sources_on:
         return "sources off" if compact else "tag sources off"
-    return "0 tags" if compact else "none indexed"
+    # Scope, not index: narrowing the collections to an empty set left ten
+    # tags indexed and none reachable, and this row called that "none indexed".
+    # The File type branch says `(1 of 1)` in the same situation.
+    return "0 tags" if compact else "none in scope"
+
+
+def filters_title(
+    *,
+    n_kinds: int,
+    date: str,
+    created: str,
+    n_included_tags: int,
+    n_excluded_tags: int,
+    match_all: bool,
+) -> str:
+    """The pane's border title: what is narrowing the search, in a phrase.
+
+    The match mode is named because it is the difference between 16 files and
+    53, and its own row lives inside the Tags branch, invisible exactly when
+    that branch is collapsed and the title is all there is. One tag is not
+    matched any way, so it is not said there.
+    """
+    bits: list[str] = []
+    if n_kinds:
+        bits.append(f"{n_kinds} kind{'s' if n_kinds != 1 else ''}")
+    if date and date != "any":
+        bits.append(date)
+    if created and created != "any":
+        bits.append(f"created {created}")
+    if n_included_tags:
+        mode = "" if n_included_tags == 1 else (" all" if match_all else " any")
+        bits.append(f"{n_included_tags} tag{'s' if n_included_tags != 1 else ''}{mode}")
+    if n_excluded_tags:
+        bits.append(f"−{n_excluded_tags} tag{'s' if n_excluded_tags != 1 else ''}")
+    return "Filters" if not bits else f"Filters — {', '.join(bits)}"
 
 
 class ScopeController:
@@ -774,22 +808,13 @@ class ScopeController:
         """Pane border title + clear bar + sidebar reflow. Shared by the full
         filters rebuild and the in-place file-type repaint so both keep the
         header, the clear-bar visibility, and the pane sizing in sync."""
-        active_bits: list[str] = []
-        n_kinds = len(self.filter_kinds)
-        if n_kinds:
-            active_bits.append(f"{n_kinds} kind{'s' if n_kinds != 1 else ''}")
-        if self.filter_date and self.filter_date != "any":
-            active_bits.append(self.filter_date)
-        if self.filter_created and self.filter_created != "any":
-            active_bits.append(f"created {self.filter_created}")
-        n_inc = len(self._distinct_tag_values(self.tag_include))
-        n_exc = len(self._distinct_tag_values(self.tag_exclude))
-        if n_inc:
-            active_bits.append(f"{n_inc} tag{'s' if n_inc != 1 else ''}")
-        if n_exc:
-            active_bits.append(f"−{n_exc} tag{'s' if n_exc != 1 else ''}")
-        self._filters_title = (
-            "Filters" if not active_bits else f"Filters — {', '.join(active_bits)}"
+        self._filters_title = filters_title(
+            n_kinds=len(self.filter_kinds),
+            date=self.filter_date,
+            created=self.filter_created,
+            n_included_tags=len(self._distinct_tag_values(self.tag_include)),
+            n_excluded_tags=len(self._distinct_tag_values(self.tag_exclude)),
+            match_all=self.tag_match_all,
         )
         self.refresh_filters_panel_title()
         self._update_clear_bar()
@@ -951,14 +976,18 @@ class ScopeController:
 
     @property
     def active_filter_count(self) -> int:
-        """How many individual filter selections are active — the number shown
-        on the Clear bar (kinds + date + created + each included/excluded tag)."""
+        """How many FILTERS are active, as the pane title counts them.
+
+        Counting selections instead read `Clear 4 filters` one row under
+        `Filters — 2 kinds, month, 1 tag`: two ticks inside one facet are not
+        two filters, and the two lines disagreed about the same state.
+        """
         return (
-            len(self.filter_kinds)
+            (1 if self.filter_kinds else 0)
             + (1 if self.filter_date not in ("", "any") else 0)
             + (1 if self.filter_created not in ("", "any") else 0)
-            + len(self._distinct_tag_values(self.tag_include))
-            + len(self._distinct_tag_values(self.tag_exclude))
+            + (1 if self._distinct_tag_values(self.tag_include) else 0)
+            + (1 if self._distinct_tag_values(self.tag_exclude) else 0)
         )
 
     @property
