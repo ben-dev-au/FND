@@ -11,7 +11,7 @@ import pytest
 from fnd.tui import FNDApp
 from fnd.tui.settings_screen import UnsavedChangesScreen
 from fnd.tui.widgets import COMMIT_KEY
-from tests._pilot_wait import settings_ready
+from tests._pilot_wait import screen_ready, settings_ready, wait_until
 
 
 def _walk_nodes(node: Any) -> list[Any]:
@@ -70,7 +70,7 @@ async def test_source_form_exposes_a_filters_drill(built_index: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(SourceFormScreen(collection_name="default", source_index=None))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         form = app.screen
         assert isinstance(form, SourceFormScreen)
         items = form.query_one(SettingsList)._items
@@ -88,15 +88,20 @@ async def test_filters_drill_opens_override_rows(built_index: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(SourceFormScreen(collection_name="default", source_index=None))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         form = app.screen
         assert isinstance(form, SourceFormScreen)
         lst = form.query_one(SettingsList)
         lst.cursor_index = next(i for i, it in enumerate(lst._items) if it.id == "form.filters")
         await pilot.press("enter")
-        await pilot.pause()
         from fnd.tui.settings_screen import FilterBrowserScreen
 
+        await wait_until(
+            pilot,
+            lambda: isinstance(app.screen, FilterBrowserScreen),
+            timeout=30.0,
+            message="the filter browser never opened",
+        )
         assert isinstance(app.screen, FilterBrowserScreen), (
             "the source filters row must open the visual browser"
         )
@@ -117,7 +122,7 @@ async def test_an_override_marks_the_form_dirty_and_an_unchanged_one_does_not(
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(SourceFormScreen(collection_name="default", source_index=None))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         form = app.screen
         assert isinstance(form, SourceFormScreen)
         form._snapshot = dict(form._fields)
@@ -336,7 +341,7 @@ async def test_the_frontmatter_rule_lives_with_the_other_filters(built_index: Pa
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(SourceFormScreen(collection_name="default", source_index=None))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         lst = app.screen.query_one(SettingsList)
         ids = [it.id for it in lst._items]
         assert "form.filter" not in ids, "a second frontmatter input beside Index filters"
@@ -344,10 +349,14 @@ async def test_the_frontmatter_rule_lives_with_the_other_filters(built_index: Pa
         lst.cursor_index = ids.index("form.filters")
         await pilot.pause()
         await pilot.press("right")
-        for _ in range(400):
-            await pilot.pause()
-            if isinstance(app.screen, FilterBrowserScreen):
-                break
+        # Gated, not counted: 400 ticks is a budget that degrades to nothing
+        # under load, and the assertion below then reads the screen it left.
+        await wait_until(
+            pilot,
+            lambda: isinstance(app.screen, FilterBrowserScreen),
+            timeout=30.0,
+            message="the filter browser never opened",
+        )
         browser = app.screen
         assert isinstance(browser, FilterBrowserScreen)
         while browser._scanning:

@@ -16,6 +16,7 @@ from textual.widgets import Static
 from fnd.config import CollectionConfig, SourceConfig, load, write_collection
 from fnd.tui import FNDApp
 from fnd.tui.settings_screen import EditBar, SourceFormScreen
+from tests._pilot_wait import screen_ready
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def probe_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 async def _open_glob_editor(app: FNDApp, pilot: Any) -> SourceFormScreen:
     app._config = load()
     app.push_screen(SourceFormScreen(collection_name="probe", source_index=0))
-    await pilot.pause()
+    await screen_ready(pilot, app, SourceFormScreen)
     screen = app.screen
     assert isinstance(screen, SourceFormScreen)
     screen._set_excludes(["__custom__"])

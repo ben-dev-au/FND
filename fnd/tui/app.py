@@ -469,7 +469,15 @@ class FNDApp(App[None]):
        Zero the pane's own scrollbar too: for flat-buffer previews the
        inner LineBufferPreview already shows the match-marker bar, so the
        pane's bar is a bare duplicate. */
-    #preview_pane.-reading { border: none; padding: 0; scrollbar-size-vertical: 0; }
+    /* Top edge only. The border went entirely so the frame would not be
+       copied with the text, and a top edge is not inside a selection —
+       while nothing else on screen said which document this was. */
+    #preview_pane.-reading {
+        border: none;
+        border-top: round $accent;
+        padding: 0;
+        scrollbar-size-vertical: 0;
+    }
     /* While a partial mount is in flight we hide the scrollbar (its
        virtual size keeps growing as chunks land, so the thumb would
        jitter). Programmatic ``scroll_to_widget`` calls during the hidden
@@ -949,9 +957,11 @@ class FNDApp(App[None]):
         self._reflow_sidebar()
 
     def _refresh_preview_match_indicator(self) -> None:
-        """Show ``▲a ▼b`` on the preview's BOTTOM border (in the active-pane
-        accent) counting how many screenfuls ("views") of the CURRENT result
-        hold a match above / below the viewport. The results-pane arrows step
+        """Show ``▲a screens ▼b screens`` on the preview's BOTTOM border, in
+        the active-pane accent, counting how many screenfuls of the CURRENT
+        result hold a match above / below the viewport. The unit is on screen
+        because a bare number read as a match count and was off by four where
+        one screenful held five occurrences. The results-pane arrows step
         between results and skip matches lower in the same chunk; this is the
         signal that such hidden matches exist, so the user knows to press n/b.
         Blank when the current result's matches all fit on screen, or in Reading
@@ -960,6 +970,8 @@ class FNDApp(App[None]):
             pane = self.query_one("#preview_pane", MatchAwareScroll)
         except Exception:
             return
+        from fnd.tui.results_view import _count
+
         nav = getattr(self, "_match_nav", None)
         if self._current_match_unlocatable() and not self._reading_mode:
             # The engine matched this chunk but the preview has nothing to
@@ -968,11 +980,15 @@ class FNDApp(App[None]):
             # regression is visible on screen. See fnd.tui.match_evidence.
             pane.border_subtitle = " [$warning]◌ match not shown here[/] "
         elif nav is not None and not self._reading_mode and (nav.above or nav.below):
+            # Named, because a bare `▼1` reads as one more MATCH: a section
+            # with five occurrences, four of them below the fold, showed `▼1`
+            # because they share one screenful. The unit also explains why the
+            # number changes when the terminal is resized.
             parts: list[str] = []
             if nav.above:
-                parts.append(f"[$accent]▲{nav.above}[/]")
+                parts.append(f"[$accent]▲{_count(nav.above, '', 'screen')}[/]")
             if nav.below:
-                parts.append(f"[$accent]▼{nav.below}[/]")
+                parts.append(f"[$accent]▼{_count(nav.below, '', 'screen')}[/]")
             pane.border_subtitle = f" {'  '.join(parts)} "
         else:
             pane.border_subtitle = ""

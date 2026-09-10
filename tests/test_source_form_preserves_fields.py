@@ -23,6 +23,7 @@ from fnd.config import (
 from fnd.index import build_index
 from fnd.tui import FNDApp
 from fnd.tui.settings_screen import SourceFormScreen
+from tests._pilot_wait import screen_ready
 
 # Rewritten by design, with the reason. Everything else must survive.
 _REWRITTEN = {"frontmatter_filter": "absorbed into filters.frontmatter on save"}
@@ -123,7 +124,7 @@ async def test_clearing_the_vault_leaves_the_other_params(
         await pilot.pause()
         app._config = load()
         app.push_screen(SourceFormScreen(collection_name="probe", source_index=0))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         form = app.screen
         assert isinstance(form, SourceFormScreen)
         form._fields["app_params_vault"] = ""

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 from fnd.tui import FNDApp
 from fnd.tui.indexer_service import IndexerService
-from tests._pilot_wait import settings_ready, wait_until
+from tests._pilot_wait import screen_ready, settings_ready, wait_until
 
 
 @pytest.fixture
@@ -99,7 +99,7 @@ async def test_includes_field_opens_filetypes_picker(built_index: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(AddCollectionWizard())
-        await pilot.pause()
+        await screen_ready(pilot, app, AddCollectionWizard)
         wiz = app.screen
         assert isinstance(wiz, AddCollectionWizard)
         lst = wiz.query_one(SettingsList)
@@ -125,7 +125,7 @@ async def test_excludes_field_opens_presets_picker_with_defaults(built_index: Pa
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(AddCollectionWizard())
-        await pilot.pause()
+        await screen_ready(pilot, app, AddCollectionWizard)
         wiz = app.screen
         assert isinstance(wiz, AddCollectionWizard)
         lst = wiz.query_one(SettingsList)
@@ -157,7 +157,7 @@ async def test_path_validation_inline(tmp_path: Path, built_index: Path) -> None
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(AddCollectionWizard())
-        await pilot.pause()
+        await screen_ready(pilot, app, AddCollectionWizard)
         wiz = app.screen
         assert isinstance(wiz, AddCollectionWizard)
         lst = wiz.query_one(SettingsList)
@@ -312,7 +312,7 @@ async def test_excludes_picker_includes_custom_entry(built_index: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.pause()
         app.push_screen(AddCollectionWizard())
-        await pilot.pause()
+        await screen_ready(pilot, app, AddCollectionWizard)
         wiz = app.screen
         assert isinstance(wiz, AddCollectionWizard)
         lst = wiz.query_one(SettingsList)
@@ -389,7 +389,7 @@ async def test_source_form_shows_include_globs_as_ticked_file_types(
 
         app._config = load()
         app.push_screen(SourceFormScreen(collection_name="probe2", source_index=0))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         form = app.screen
         assert isinstance(form, SourceFormScreen)
         lst = form.query_one(SettingsList)
@@ -462,7 +462,7 @@ async def test_source_form_excludes_picker_round_trips_hidden_preset(
 
         app._config = load()
         app.push_screen(SourceFormScreen(collection_name="probe3", source_index=0))
-        await pilot.pause()
+        await screen_ready(pilot, app, SourceFormScreen)
         form = app.screen
         assert isinstance(form, SourceFormScreen)
         lst = form.query_one(SettingsList)
